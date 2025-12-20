@@ -16,7 +16,7 @@ if ! command -v uv >/dev/null 2>&1; then
 fi
 
 echo "Installing ipmg from GitHub..."
-uv tool install git+https://github.com/sameeralam3127/IP_Management.git
+uv tool install git+https://github.com/sameeralam3127/ipmg.git
 
 echo "✅ Installation complete!"
 echo "You can now run: ipmg --help"

@@ -103,7 +103,7 @@ Runs every 5 minutes.
 ## Option 1 — Install via uv (recommended)
 
 ```
-uv tool install git+https://github.com/sameeralam3127/IP_Management.git
+uv tool install git+https://github.com/sameeralam3127/ipmg.git
 ```
 
 Test:
@@ -117,7 +117,7 @@ ipmg --help
 ## Option 2 — Install via pip (editable, dev mode)
 
 ```bash
-git clone https://github.com/sameeralam3127/IP_Management.git
+git clone https://github.com/sameeralam3127/ipmg.git
 cd IP_Management
 
 pip install -e .
@@ -134,7 +134,7 @@ ipmg --help
 ## Option 3 — Install using curl installer
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/sameeralam3127/IP_Management/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/sameeralam3127/ipmg/main/install.sh | bash
 ```
 
 This script:
