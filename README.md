@@ -204,30 +204,6 @@ ipmg --interval 10
 
 ---
 
-# File Structure (Modular Architecture)
-
-```
-IP_Management/
-├── install.sh
-├── pyproject.toml
-├── src/
-│   └── ipmg/
-│       ├── cli.py
-│       ├── ping.py
-│       ├── discover.py
-│       ├── io_handlers.py
-│       ├── reporting.py
-│       ├── utils.py
-│       ├── security.py
-│       └── __init__.py
-└── tests/
-    ├── test_ping.py
-    ├── test_utils.py
-    └── test_discover.py
-```
-
----
-
 # Testing
 
 Run all tests:
