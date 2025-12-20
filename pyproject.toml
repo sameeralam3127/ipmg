@@ -2,15 +2,15 @@
 name = "ipmg"
 version = "1.0.0"
 description = "IP Management & Ping Monitoring CLI Tool"
-authors = [{ name="Sameer Alam" }]
+authors = [{ name = "Sameer Alam" }]
 readme = "README.md"
 requires-python = ">=3.8"
 
 dependencies = [
     "pandas",
     "tqdm",
-    "colorama",
-    "openpyxl"
+    "openpyxl",
+    "rich",
 ]
 
 [project.optional-dependencies]
@@ -23,26 +23,31 @@ dev = [
 [project.scripts]
 ipmg = "ipmg.cli:cli"
 
+# ---------- PYTEST ----------
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
 
-# ---------- RUFF CONFIG ----------
+# ---------- RUFF (MODERN CONFIG) ----------
 [tool.ruff]
 line-length = 100
-select = ["E", "F", "W", "I", "C90"]
-ignore = ["E501"]  # ignore long lines (black handles line wrapping)
 target-version = "py310"
 
-[tool.ruff.isort]
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "C90"]
+ignore = ["E501"]  # Black handles line wrapping
+
+[tool.ruff.lint.isort]
 combine-as-imports = true
 force-single-line = false
+known-first-party = ["ipmg"]
 
-# ---------- BLACK CONFIG ----------
+# ---------- BLACK ----------
 [tool.black]
 line-length = 100
 target-version = ["py310"]
 
+# ---------- DEV TOOLING ----------
 [dependency-groups]
 dev = [
     "pre-commit>=3.5.0",
