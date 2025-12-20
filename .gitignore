@@ -19,7 +19,6 @@ uv.lock
 
 # ignore uv tool environment cache
 .uv-cache/
-.uv/
 
 # ---------------------------------------
 # Logs & Runtime Files
