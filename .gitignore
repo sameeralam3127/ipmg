@@ -72,3 +72,8 @@ ping_results_*
 .pre-commit-config.yaml~
 
 src/ipmg.egg-info
+
+# Python build artifacts
+dist/
+build/
+*.egg-info/
