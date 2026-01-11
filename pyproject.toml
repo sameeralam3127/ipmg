@@ -1,6 +1,6 @@
 [project]
 name = "ipmg"
-version = "1.0.0"
+version = "1.0.2"
 description = "IP Management & Ping Monitoring CLI Tool"
 authors = [{ name = "Sameer Alam" }]
 readme = "README.md"
@@ -22,7 +22,7 @@ dev = [
 ]
 
 [project.scripts]
-ipmg = "ipmg.cli:main"
+ipmg = "ipmg.main:main"
 
 
 # ---------- PYTEST ----------
