@@ -5,6 +5,7 @@ description = "IP Management & Ping Monitoring CLI Tool"
 authors = [{ name = "Sameer Alam" }]
 readme = "README.md"
 requires-python = ">=3.8"
+license = { text = "MIT" }
 
 dependencies = [
     "pandas",
@@ -21,7 +22,8 @@ dev = [
 ]
 
 [project.scripts]
-ipmg = "ipmg.cli:cli"
+ipmg = "ipmg.cli:main"
+
 
 # ---------- PYTEST ----------
 [tool.pytest.ini_options]
