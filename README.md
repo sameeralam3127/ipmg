@@ -42,59 +42,13 @@ IPMG includes a built-in disclaimer shown at runtime (`security.py`).
 
 ---
 
-# Features
+## Features
 
-### ✔ Modular Python package (`src/ipmg`)
-
-Not a single script anymore — now a clean, testable package.
-
-### ✔ CLI Command: `ipmg`
-
-Installed system-wide or via uv.
-
-### ✔ Auto Subnet Discovery
-
-Scan your `/24` instantly:
-
-```
-ipmg --discover
-```
-
-### ✔ Multi-threaded high performance
-
-Scans hundreds of hosts in seconds.
-
-### ✔ Auto Sample Excel Generation
-
-If the input file is missing:
-
-```
-ip_list.xlsx
-```
-
-is created automatically.
-
-### ✔ Supports multiple output formats
-
-```
---formats xlsx csv json
-```
-
-### ✔ Hostname resolution
-
-```
---resolve
-```
-
-### ✔ Scheduled scanning
-
-```
---interval 5
-```
-
-Runs every 5 minutes.
-
-### ✔ Fully tested (pytest) + formatted (ruff/black)
+* Fully modular Python package (`src/ipmg`)
+* System-wide CLI command: `ipmg`
+* Test coverage via `pytest`
+* Formatting and linting via `ruff` and `black`
+* CI-friendly project structure
 
 ---
 
