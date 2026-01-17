@@ -100,38 +100,53 @@ Runs every 5 minutes.
 
 # Installation
 
-## Option 1 — Install via uv (recommended)
+## Option 1 — Install from PyPI (recommended for most users)
 
+Install the latest stable release (**ipmg 1.0.2**) from PyPI:
+
+```bash
+pip install ipmg
 ```
+
+Verify installation:
+
+```bash
+ipmg --help
+```
+
+---
+
+## Option 2 — Install via uv (recommended for isolated global install)
+
+```bash
 uv tool install git+https://github.com/sameeralam3127/ipmg.git
 ```
 
 Test:
 
-```
+```bash
 ipmg --help
 ```
 
 ---
 
-## Option 2 — Install via pip (editable, dev mode)
+## Option 3 — Install via pip (editable, development mode)
 
 ```bash
 git clone https://github.com/sameeralam3127/ipmg.git
 cd IP_Management
-
 pip install -e .
 ```
 
-Now:
+Verify:
 
-```
+```bash
 ipmg --help
 ```
 
 ---
 
-## Option 3 — Install using curl installer
+## Option 4 — Install using curl installer
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/sameeralam3127/ipmg/main/install.sh | bash
@@ -139,8 +154,14 @@ curl -sSL https://raw.githubusercontent.com/sameeralam3127/ipmg/main/install.sh 
 
 This script:
 
-- Installs uv if missing
-- Installs ipmg globally into uv
+* Installs **uv** if missing
+* Installs **ipmg** globally using uv
+
+Verify:
+
+```bash
+ipmg --help
+```
 
 ---
 
