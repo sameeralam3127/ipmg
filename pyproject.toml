@@ -44,7 +44,6 @@ dev = [
 ]
 
 # -------------------- SEMANTIC RELEASE --------------------
-
 [tool.semantic_release]
 branch = "main"
 version_toml = ["pyproject.toml:project.version"]
@@ -52,8 +51,10 @@ tag_format = "v{version}"
 commit_message = "chore(release): {version}"
 build_command = "python -m build"
 upload_to_pypi = true
-upload_to_repository = "pypi"
-major_on_zero = false
+
+[tool.semantic_release.publish]
+env = ["PYPI_TOKEN"]
+
 
 # -------------------- SETUPTOOLS (SRC LAYOUT) --------------------
 
