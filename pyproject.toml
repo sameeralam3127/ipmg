@@ -1,6 +1,6 @@
 [project]
 name = "ipmg"
-version = "1.0.2"
+version = "1.0.3"
 description = "IP Management & Ping Monitoring CLI Tool"
 authors = [{ name = "Sameer Alam" }]
 readme = "README.md"
@@ -8,11 +8,15 @@ requires-python = ">=3.8"
 license = { text = "MIT" }
 
 dependencies = [
-    "pandas",
-    "tqdm",
-    "openpyxl",
-    "rich",
+    "pandas>=2.0",
+    "tqdm>=4.65",
+    "openpyxl>=3.1",
+    "rich>=13.0",
 ]
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
 
 [project.optional-dependencies]
 dev = [
@@ -21,7 +25,6 @@ dev = [
     "ruff",
 ]
 
-# ✅ Correct CLI entry point (FIXED)
 [project.scripts]
 ipmg = "ipmg.cli.commands:run"
 
@@ -65,4 +68,5 @@ target-version = ["py310"]
 [dependency-groups]
 dev = [
     "pre-commit>=3.5.0",
+    "twine>=6.1.0",
 ]
