@@ -1,8 +1,15 @@
+# ==========================================================
+# Build System
+# ==========================================================
+
 [build-system]
 requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
-# -------------------- PROJECT METADATA --------------------
+
+# ==========================================================
+# Project Metadata
+# ==========================================================
 
 [project]
 name = "ipmg"
@@ -11,12 +18,17 @@ description = "IP Management & Ping Monitoring CLI Tool"
 readme = "README.md"
 requires-python = ">=3.8"
 license = { text = "MIT" }
-authors = [{ name = "Sameer Alam" }]
+
+authors = [
+    { name = "Sameer Alam" }
+]
 
 keywords = ["ip", "network", "ping", "monitoring", "cli"]
+
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.8",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Environment :: Console",
@@ -32,7 +44,10 @@ dependencies = [
 [project.scripts]
 ipmg = "ipmg.cli.commands:run"
 
-# -------------------- DEV DEPENDENCIES (uv style) --------------------
+
+# ==========================================================
+# Development Dependencies (uv)
+# ==========================================================
 
 [dependency-groups]
 dev = [
@@ -43,7 +58,11 @@ dev = [
     "python-semantic-release>=10.5.3",
 ]
 
-# -------------------- SEMANTIC RELEASE --------------------
+
+# ==========================================================
+# Semantic Release Configuration
+# ==========================================================
+
 [tool.semantic_release]
 branch = "main"
 version_toml = ["pyproject.toml:project.version"]
@@ -51,12 +70,13 @@ tag_format = "v{version}"
 commit_message = "chore(release): {version}"
 build_command = "python -m build"
 upload_to_pypi = true
+upload_to_repository = "pypi"
+major_on_zero = false
 
-[tool.semantic_release.publish]
-env = ["PYPI_TOKEN"]
 
-
-# -------------------- SETUPTOOLS (SRC LAYOUT) --------------------
+# ==========================================================
+# Setuptools (src layout)
+# ==========================================================
 
 [tool.setuptools]
 package-dir = { "" = "src" }
@@ -64,13 +84,19 @@ package-dir = { "" = "src" }
 [tool.setuptools.packages.find]
 where = ["src"]
 
-# -------------------- TESTING --------------------
+
+# ==========================================================
+# Testing
+# ==========================================================
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
 
-# -------------------- RUFF --------------------
+
+# ==========================================================
+# Ruff
+# ==========================================================
 
 [tool.ruff]
 line-length = 100
@@ -84,7 +110,10 @@ ignore = ["E501"]
 combine-as-imports = true
 known-first-party = ["ipmg"]
 
-# -------------------- BLACK --------------------
+
+# ==========================================================
+# Black
+# ==========================================================
 
 [tool.black]
 line-length = 100
