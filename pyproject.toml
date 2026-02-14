@@ -1,11 +1,26 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+# -------------------- PROJECT METADATA --------------------
+
 [project]
 name = "ipmg"
-version = "1.0.3"
+version = "0.0.0"  # Managed automatically by semantic-release
 description = "IP Management & Ping Monitoring CLI Tool"
-authors = [{ name = "Sameer Alam" }]
 readme = "README.md"
 requires-python = ">=3.8"
 license = { text = "MIT" }
+authors = [{ name = "Sameer Alam" }]
+
+keywords = ["ip", "network", "ping", "monitoring", "cli"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Environment :: Console",
+]
 
 dependencies = [
     "pandas>=2.0",
@@ -13,37 +28,49 @@ dependencies = [
     "openpyxl>=3.1",
     "rich>=13.0",
 ]
-[build-system]
-requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.build_meta"
-
-
-[project.optional-dependencies]
-dev = [
-    "pytest",
-    "black",
-    "ruff",
-]
 
 [project.scripts]
 ipmg = "ipmg.cli.commands:run"
 
+# -------------------- DEV DEPENDENCIES (uv style) --------------------
 
-# ---------- SETUPTOOLS (SRC LAYOUT SUPPORT) ----------
+[dependency-groups]
+dev = [
+    "pytest>=7.4",
+    "black>=24.0",
+    "ruff>=0.4",
+    "pre-commit>=3.5.0",
+    "python-semantic-release>=10.5.3",
+]
+
+# -------------------- SEMANTIC RELEASE --------------------
+
+[tool.semantic_release]
+branch = "main"
+version_toml = ["pyproject.toml:project.version"]
+tag_format = "v{version}"
+commit_message = "chore(release): {version}"
+build_command = "python -m build"
+upload_to_pypi = true
+upload_to_repository = "pypi"
+major_on_zero = false
+
+# -------------------- SETUPTOOLS (SRC LAYOUT) --------------------
+
 [tool.setuptools]
 package-dir = { "" = "src" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
+# -------------------- TESTING --------------------
 
-# ---------- PYTEST ----------
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
 
+# -------------------- RUFF --------------------
 
-# ---------- RUFF ----------
 [tool.ruff]
 line-length = 100
 target-version = "py310"
@@ -54,19 +81,10 @@ ignore = ["E501"]
 
 [tool.ruff.lint.isort]
 combine-as-imports = true
-force-single-line = false
 known-first-party = ["ipmg"]
 
+# -------------------- BLACK --------------------
 
-# ---------- BLACK ----------
 [tool.black]
 line-length = 100
 target-version = ["py310"]
-
-
-# ---------- DEV TOOLING ----------
-[dependency-groups]
-dev = [
-    "pre-commit>=3.5.0",
-    "twine>=6.1.0",
-]
