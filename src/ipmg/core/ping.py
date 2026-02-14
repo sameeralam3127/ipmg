@@ -6,7 +6,6 @@ from typing import Optional, Tuple
 
 
 def validate_ip(ip: str) -> bool:
-    """Strict IP validation."""
     try:
         ipaddress.ip_address(ip)
         return True
@@ -14,23 +13,23 @@ def validate_ip(ip: str) -> bool:
         return False
 
 
-def parse_latency(output: str) -> Optional[float]:
-    """Extract latency from ping output."""
+def _parse_latency(output: str) -> Optional[float]:
     system = platform.system().lower()
 
     if system == "windows":
         match = re.search(r"Average = (\d+)ms", output)
     else:
-        match = re.search(r"min/avg/max/[^=]+=\s*[\d.]+/([\d.]+)/", output)
+        match = re.search(
+            r"min/avg/max/[^=]+=\s*[\d.]+/([\d.]+)/",
+            output,
+        )
 
     return float(match.group(1)) if match else None
 
 
-def ping_ip(ip: str, timeout: int = 2, count: int = 1) -> Tuple[str, Optional[float]]:
-    """Ping a single IP with OS-aware parameters."""
-
+def ping_ip(ip: str, timeout: int, count: int) -> Tuple[str, Optional[float]]:
     if not validate_ip(ip):
-        return ("Invalid IP", None)
+        return "Invalid IP", None
 
     system = platform.system().lower()
     param = "-n" if system == "windows" else "-c"
@@ -48,18 +47,18 @@ def ping_ip(ip: str, timeout: int = 2, count: int = 1) -> Tuple[str, Optional[fl
             timeout=timeout + 1,
         )
 
-        latency = parse_latency(result.stdout)
+        latency = _parse_latency(result.stdout)
 
         if result.returncode == 0:
-            return ("Active", latency)
+            return "Active", latency
 
-        out = result.stdout.lower()
-        if "unreachable" in out:
-            return ("Unreachable", None)
-        if "timed out" in out:
-            return ("Timeout", None)
+        output = result.stdout.lower()
+        if "unreachable" in output:
+            return "Unreachable", None
+        if "timed out" in output:
+            return "Timeout", None
 
-        return ("Inactive", None)
+        return "Inactive", None
 
     except subprocess.TimeoutExpired:
-        return ("Timeout", None)
+        return "Timeout", None
