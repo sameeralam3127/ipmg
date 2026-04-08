@@ -79,6 +79,11 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           git_committer_name: github-actions
           git_committer_email: actions@users.noreply.github.com
+          build: false
+
+      - name: Build release distributions
+        if: steps.release.outputs.released == 'true'
+        run: python -m build
 
       - name: Upload GitHub release assets
         uses: python-semantic-release/publish-action@v10.5.3
