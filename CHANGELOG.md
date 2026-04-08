@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.1.1 (2026-04-08)
+
+### Bug Fixes
+
+- Use pypi environment for trusted publishing
+  ([`6e0507d`](https://github.com/sameeralam3127/ipmg/commit/6e0507d059b70fcd8cfdcf220033dca17561d001))
+
+
 ## v1.1.0 (2026-04-08)
 
 ### Bug Fixes
