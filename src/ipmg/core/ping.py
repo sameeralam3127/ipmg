@@ -4,6 +4,8 @@ import re
 import subprocess
 from typing import Optional, Tuple
 
+from ipmg.exceptions import PingError
+
 
 def validate_ip(ip: str) -> bool:
     try:
@@ -25,6 +27,10 @@ def _parse_latency(output: str) -> Optional[float]:
         )
 
     return float(match.group(1)) if match else None
+
+
+def parse_latency(output: str) -> Optional[float]:
+    return _parse_latency(output)
 
 
 def ping_ip(ip: str, timeout: int, count: int) -> Tuple[str, Optional[float]]:
@@ -62,3 +68,5 @@ def ping_ip(ip: str, timeout: int, count: int) -> Tuple[str, Optional[float]]:
 
     except subprocess.TimeoutExpired:
         return "Timeout", None
+    except FileNotFoundError as exc:
+        raise PingError("The system 'ping' command is not available.") from exc

@@ -1,5 +1,10 @@
 import logging
 
+from rich.panel import Panel
+from rich.text import Text
+
+from ipmg.utils.helpers import console
+
 _DISCLAIMER_SHOWN = False
 
 
@@ -17,4 +22,11 @@ def print_disclaimer_once() -> None:
 
     _DISCLAIMER_SHOWN = True
     logging.warning("IPMG disclaimer displayed")
-    print(DISCLAIMER)
+    console.print(
+        Panel(
+            Text(DISCLAIMER.strip(), style="warning"),
+            title="[ipmg.accent]Security Notice[/ipmg.accent]",
+            border_style="warning",
+            expand=False,
+        )
+    )
