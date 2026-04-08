@@ -24,12 +24,26 @@ authors = [
     { name = "Sameer Alam" }
 ]
 
+maintainers = [
+    { name = "Sameer Alam", email = "sameeralam3127@gmail.com" }
+]
+
 keywords = ["ip", "network", "ping", "monitoring", "cli"]
 
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Internet",
+    "Topic :: System :: Networking",
+    "Topic :: System :: Monitoring",
+    "Intended Audience :: System Administrators",
+    "Intended Audience :: Information Technology",
     "Operating System :: OS Independent",
     "Environment :: Console",
 ]
@@ -43,8 +57,10 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://github.com/sameeralam3127/ipmg"
+Documentation = "https://github.com/sameeralam3127/ipmg#readme"
 Repository = "https://github.com/sameeralam3127/ipmg"
 Issues = "https://github.com/sameeralam3127/ipmg/issues"
+Changelog = "https://github.com/sameeralam3127/ipmg/releases"
 
 [project.optional-dependencies]
 dev = [
