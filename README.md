@@ -1,5 +1,6 @@
 # IPMG — IP Management & Ping Monitoring Tool
 
+![PyPI](https://img.shields.io/pypi/v/ipmg)
 ![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Mac%20%7C%20Linux%20%7C%20Windows-lightgrey)
@@ -60,7 +61,7 @@ IPMG includes a built-in disclaimer shown at runtime (`security.py`).
 
 ## Option 1 — Install from PyPI (recommended for most users)
 
-Install the latest stable release (**ipmg 1.0.2**) from PyPI:
+Install the latest stable release from PyPI:
 
 ```bash
 pip install ipmg
@@ -71,6 +72,8 @@ Verify installation:
 ```bash
 ipmg --help
 ```
+
+You can always check the current published version on [PyPI](https://pypi.org/project/ipmg/).
 
 ---
 

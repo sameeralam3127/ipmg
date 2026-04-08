@@ -13,11 +13,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ipmg"
-version = "0.0.0"  # Managed automatically by semantic-release
+version = "1.0.3"  # Managed automatically by semantic-release
 description = "IP Management & Ping Monitoring CLI Tool"
 readme = "README.md"
 requires-python = ">=3.8"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 
 authors = [
     { name = "Sameer Alam" }
@@ -29,7 +30,6 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.8",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Environment :: Console",
 ]
@@ -39,6 +39,20 @@ dependencies = [
     "tqdm>=4.65",
     "openpyxl>=3.1",
     "rich>=13.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/sameeralam3127/ipmg"
+Repository = "https://github.com/sameeralam3127/ipmg"
+Issues = "https://github.com/sameeralam3127/ipmg/issues"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "black>=24.0",
+    "ruff>=0.4",
+    "pre-commit>=3.5.0",
+    "python-semantic-release>=10.5.3",
 ]
 
 [project.scripts]
@@ -66,6 +80,7 @@ dev = [
 [tool.semantic_release]
 branch = "main"
 version_toml = ["pyproject.toml:project.version"]
+version_variables = ["src/ipmg/__init__.py:__version__"]
 tag_format = "v{version}"
 commit_message = "chore(release): {version}"
 build_command = "python -m build"
