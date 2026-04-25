@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.1.2 (2026-04-25)
+
+### Bug Fixes
+
+- Harden scan resource limits
+  ([`e10118d`](https://github.com/sameeralam3127/ipmg/commit/e10118d763d2090f7c6f9ee0e785c5c7ccf55652))
+
+### Chores
+
+- Enrich PyPI project metadata
+  ([`54e79d4`](https://github.com/sameeralam3127/ipmg/commit/54e79d4f4e511d62683af0543d506c7b28bf0fa8))
+
+
 ## v1.1.1 (2026-04-08)
 
 ### Bug Fixes
