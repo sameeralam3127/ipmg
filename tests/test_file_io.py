@@ -24,6 +24,11 @@ def test_load_targets_from_literal_cidr():
     assert load_targets("10.0.0.0/30") == ["10.0.0.1", "10.0.0.2"]
 
 
+def test_load_targets_rejects_large_cidr():
+    with pytest.raises(Exception):
+        load_targets("10.0.0.0/8")
+
+
 def test_load_targets_requires_expected_column(tmp_path):
     path = tmp_path / "targets.csv"
     pd.DataFrame({"Address": ["8.8.8.8"]}).to_csv(path, index=False)

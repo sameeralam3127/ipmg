@@ -41,9 +41,42 @@ def test_run_scan_handles_worker_errors(monkeypatch):
 
     run_scan(args)
 
+    assert args.timeout == 1
+    assert args.count == 1
+
     df: pd.DataFrame = captured["df"]
     statuses = dict(zip(df["IP Address"], df["Status"]))
     assert statuses["8.8.8.8"] == "Active"
     assert statuses["1.1.1.1"] == "Error"
     assert len(df["Batch Timestamp"].unique()) == 1
     assert (df["Scan Duration (s)"] >= 0).all()
+
+
+def test_run_scan_clamps_resource_limits(monkeypatch):
+    captured = {}
+
+    def fake_ping_ip(_ip, timeout, count):
+        captured["limits"] = (timeout, count)
+        return "Active", 1.0
+
+    monkeypatch.setattr("ipmg.services.scan_service.load_targets", lambda _source: ["8.8.8.8"])
+    monkeypatch.setattr("ipmg.services.scan_service.ping_ip", fake_ping_ip)
+    monkeypatch.setattr("ipmg.services.scan_service.save_results", lambda *_args: None)
+    monkeypatch.setattr("ipmg.services.scan_service.print_summary", lambda *_args: None)
+
+    args = SimpleNamespace(
+        input="targets.csv",
+        output="results",
+        timeout=999,
+        count=999,
+        threads=999,
+        formats=["csv"],
+        discover=False,
+        resolve=False,
+        interval=None,
+    )
+
+    run_scan(args)
+
+    assert args.threads == 500
+    assert captured["limits"] == (60, 10)

@@ -1,7 +1,7 @@
 import ipaddress
 import platform
 import re
-import subprocess
+import subprocess  # nosec B404
 from typing import Optional, Tuple
 
 from ipmg.exceptions import PingError
@@ -45,7 +45,8 @@ def ping_ip(ip: str, timeout: int, count: int) -> Tuple[str, Optional[float]]:
     cmd = ["ping", param, str(count), timeout_param, timeout_val, ip]
 
     try:
-        result = subprocess.run(
+        # Fixed argv list, no shell, and ip is validated before this call.
+        result = subprocess.run(  # nosec B603
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,

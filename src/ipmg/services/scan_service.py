@@ -32,6 +32,8 @@ from ipmg.utils.helpers import (
 
 def run_scan(args) -> None:
     args.threads = clamp_int(args.threads, 1, 500)
+    args.timeout = clamp_int(args.timeout, 1, 60)
+    args.count = clamp_int(args.count, 1, 10)
 
     if not os.path.exists(args.input) and not args.discover:
         if Path(args.input).suffix.lower() in {".xlsx", ".xls", ".csv", ".txt", ".list"}:

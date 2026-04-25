@@ -10,6 +10,7 @@ from ipmg.utils.helpers import console, timestamp_str
 
 
 SUPPORTED_INPUT_SUFFIXES = {".xlsx", ".xls", ".csv", ".txt", ".list"}
+MAX_EXPANDED_TARGETS = 65_536
 
 
 def _deduplicate(targets: Iterable[str]) -> list[str]:
@@ -30,6 +31,12 @@ def _expand_cidr(target: str) -> list[str]:
 
     if parsed.num_addresses == 1:
         return [str(parsed.network_address)]
+
+    if parsed.num_addresses - 2 > MAX_EXPANDED_TARGETS:
+        raise FileIOError(
+            f"CIDR target '{target}' expands to too many hosts. "
+            f"Maximum allowed hosts: {MAX_EXPANDED_TARGETS}."
+        )
 
     return [str(ip) for ip in parsed.hosts()]
 
