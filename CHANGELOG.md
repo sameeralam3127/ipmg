@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.2.0 (2026-06-04)
+
+### Features
+
+- Add CLI version flag and release docs
+  ([`1ccbbbe`](https://github.com/sameeralam3127/ipmg/commit/1ccbbbe92efd854e173302582147c053c7fa8e96))
+
+
 ## v1.1.2 (2026-04-25)
 
 ### Bug Fixes
