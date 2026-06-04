@@ -71,6 +71,7 @@ Verify installation:
 
 ```bash
 ipmg --help
+ipmg --version
 ```
 
 You can always check the current published version on [PyPI](https://pypi.org/project/ipmg/).
@@ -87,6 +88,7 @@ Test:
 
 ```bash
 ipmg --help
+ipmg --version
 ```
 
 ---
@@ -103,6 +105,7 @@ Verify:
 
 ```bash
 ipmg --help
+ipmg --version
 ```
 
 ---
@@ -122,6 +125,7 @@ Verify:
 
 ```bash
 ipmg --help
+ipmg --version
 ```
 
 ---
@@ -239,6 +243,28 @@ Check that:
 ### **One host crashes the scan**
 
 IPMG now records unexpected per-host failures as `Error` and continues scanning the remaining targets.
+
+---
+
+# Development and Release
+
+Set up a local development environment:
+
+```bash
+python -m pip install --upgrade pip
+pip install -e ".[dev]"
+```
+
+Run the test suite and build the package before opening a release PR:
+
+```bash
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -q
+python -m build
+```
+
+Releases are managed from the `main` branch by GitHub Actions. After a PR with a conventional commit such as `feat: ...` or `fix: ...` is merged, the publish workflow runs tests, creates the semantic-release version tag, builds source/wheel distributions, attaches release assets, and publishes the package to [PyPI](https://pypi.org/project/ipmg/) using the `pypi` trusted publishing environment.
+
+Use `ipmg --version` after installation to confirm the installed package version matches the latest PyPI release.
 
 ---
 

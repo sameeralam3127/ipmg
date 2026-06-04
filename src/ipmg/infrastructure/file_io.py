@@ -4,10 +4,9 @@ from typing import Iterable
 import pandas as pd
 from rich.panel import Panel
 
-from ipmg.exceptions import FileIOError
 from ipmg.core.ping import validate_ip
+from ipmg.exceptions import FileIOError
 from ipmg.utils.helpers import console, timestamp_str
-
 
 SUPPORTED_INPUT_SUFFIXES = {".xlsx", ".xls", ".csv", ".txt", ".list"}
 MAX_EXPANDED_TARGETS = 65_536

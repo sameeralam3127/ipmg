@@ -13,9 +13,9 @@ from rich.progress import (
     TimeElapsedColumn,
 )
 
-from ipmg.exceptions import PingError
 from ipmg.core.discovery import discover_local_subnet
 from ipmg.core.ping import ping_ip
+from ipmg.exceptions import PingError
 from ipmg.infrastructure.file_io import (
     create_sample_file,
     load_targets,
