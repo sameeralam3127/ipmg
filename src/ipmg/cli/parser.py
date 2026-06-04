@@ -1,8 +1,15 @@
 import argparse
 
+from ipmg import __version__
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser("IPMG - IP Management & Ping Monitoring Tool")
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}",
+    )
     parser.add_argument("--input", default="ip_list.xlsx")
     parser.add_argument("--output", default="results")
     parser.add_argument("--timeout", type=int, default=2)
