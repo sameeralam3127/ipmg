@@ -19,7 +19,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--formats",
         nargs="+",
         default=["xlsx"],
-        choices=["xlsx", "csv", "json"],
+        choices=["xlsx", "csv", "json", "md"],
     )
     parser.add_argument("--discover", action="store_true")
     parser.add_argument("--resolve", action="store_true")

@@ -124,6 +124,80 @@ def create_sample_file(path: str) -> None:
     df.to_excel(path, index=False)
 
 
+def _markdown_escape(value) -> str:
+    return str(value).replace("|", r"\|")
+
+
+def _format_markdown_value(value) -> str:
+    if pd.isna(value):
+        return ""
+    if isinstance(value, float):
+        return f"{value:.3f}".rstrip("0").rstrip(".")
+    return _markdown_escape(value)
+
+
+def _build_markdown_report(df: pd.DataFrame) -> str:
+    total = len(df)
+    status_counts = df["Status"].value_counts().to_dict() if "Status" in df else {}
+    active = status_counts.get("Active", 0)
+    active_rate = (active / total) * 100 if total else 0
+    duration = df["Scan Duration (s)"].max() if "Scan Duration (s)" in df and total else 0
+    batch_timestamp = ""
+    if "Batch Timestamp" in df and total:
+        batch_timestamp = str(df["Batch Timestamp"].iloc[0])
+
+    lines = [
+        "# IPMG Scan Report",
+        "",
+        "## Scan Metrics",
+        "",
+        f"- Batch timestamp: {batch_timestamp or 'Unknown'}",
+        f"- Total hosts: {total}",
+        f"- Active hosts: {active}",
+        f"- Active rate: {active_rate:.2f}%",
+        f"- Scan duration: {duration:.3f}s",
+        "",
+        "## Status Summary",
+        "",
+        "| Status | Count |",
+        "| --- | ---: |",
+    ]
+
+    if status_counts:
+        for status, count in status_counts.items():
+            lines.append(f"| {_markdown_escape(status)} | {count} |")
+    else:
+        lines.append("| No results | 0 |")
+
+    preview_columns = [
+        column
+        for column in ["IP Address", "Status", "Latency", "Hostname"]
+        if column in df.columns
+    ]
+    if preview_columns:
+        lines.extend(
+            [
+                "",
+                "## Host Preview",
+                "",
+                "| " + " | ".join(preview_columns) + " |",
+                "| " + " | ".join("---" for _ in preview_columns) + " |",
+            ]
+        )
+        for _, row in df.head(25).iterrows():
+            lines.append(
+                "| "
+                + " | ".join(_format_markdown_value(row[column]) for column in preview_columns)
+                + " |"
+            )
+
+        if total > 25:
+            lines.extend(["", f"_Showing 25 of {total} hosts._"])
+
+    lines.append("")
+    return "\n".join(lines)
+
+
 def save_results(df, base: str, formats: list[str]) -> list[str]:
     ts = timestamp_str()
     saved_paths: list[str] = []
@@ -138,6 +212,9 @@ def save_results(df, base: str, formats: list[str]) -> list[str]:
         elif fmt == "json":
             output_path = f"{base}_{ts}.json"
             df.to_json(output_path, orient="records")
+        elif fmt == "md":
+            output_path = f"{base}_{ts}.md"
+            Path(output_path).write_text(_build_markdown_report(df), encoding="utf-8")
         else:
             continue
 
