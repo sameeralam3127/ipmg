@@ -26,6 +26,7 @@ IPMG supports:
 - **Parallel pinging with thread pools**
 - **Hostname resolution**
 - **Multi-format reporting (XLSX/CSV/JSON)**
+- **Human-readable Markdown scan reports**
 - **Flexible target input (XLSX/CSV/text/single IP/CIDR)**
 - **Scheduled recurrent scans**
 - **Auto-generated sample input files**
@@ -51,9 +52,13 @@ IPMG includes a built-in disclaimer shown at runtime (`security.py`).
 - Fully modular Python package (`src/ipmg`)
 - System-wide CLI command: `ipmg`
 - Accepts targets from `.xlsx`, `.csv`, `.txt`, `.list`, literal IPs, and CIDR blocks
+- Exports machine-readable files and shareable Markdown reports from the same scan
 - Test coverage via `pytest`
 - Formatting and linting via `ruff` and `black`
 - CI-friendly project structure
+
+> [!NOTE]
+> Modern network utility users usually need both automation-friendly exports and a quick report they can paste into tickets, handoff notes, or incident timelines. IPMG now supports `md` output so one scan can produce spreadsheet data for analysis and a readable operational summary for humans.
 
 ---
 
@@ -130,18 +135,19 @@ ipmg --version
 
 ---
 
-| Use Case                        | Command                                | Description                                                                            |
-| ------------------------------- | -------------------------------------- | -------------------------------------------------------------------------------------- |
-| Basic Example (Default Input)   | `ipmg`                                 | Runs with default config. Creates `ip_list.xlsx` with sample IPs if missing.           |
-| Scan a Custom Excel File        | `ipmg --input network_devices.xlsx`    | Scans IPs from an Excel file with an `IP Address` column.                              |
-| Scan a CSV File                 | `ipmg --input network_devices.csv`     | Scans IPs from a CSV file with an `IP Address` column.                                 |
-| Scan a Text File                | `ipmg --input targets.txt`             | Scans one target per line. Blank lines and `#` comments are ignored.                   |
-| Scan a Single Host              | `ipmg --input 8.8.8.8`                 | Scans a literal IP passed directly on the CLI.                                         |
-| Scan a CIDR Range               | `ipmg --input 192.168.1.0/24`          | Expands the CIDR block into host IPs and scans them.                                   |
-| Auto-discover LAN Subnet        | `ipmg --discover`                      | Automatically detects and scans devices in the local subnet.                           |
-| Export Results to CSV + XLSX    | `ipmg --formats csv xlsx`              | Exports scan results in CSV and Excel formats.                                         |
-| Resolve Hostnames (PTR Records) | `ipmg --resolve`                       | Performs reverse DNS (PTR) lookups for hostnames.                                      |
-| Run Every 10 Minutes            | `ipmg --interval 10`                   | Repeats the scan every 10 minutes.                                                     |
+| Use Case                        | Command                             | Description                                                                   |
+| ------------------------------- | ----------------------------------- | ----------------------------------------------------------------------------- |
+| Basic Example (Default Input)   | `ipmg`                              | Runs with default config. Creates `ip_list.xlsx` with sample IPs if missing.  |
+| Scan a Custom Excel File        | `ipmg --input network_devices.xlsx` | Scans IPs from an Excel file with an `IP Address` column.                     |
+| Scan a CSV File                 | `ipmg --input network_devices.csv`  | Scans IPs from a CSV file with an `IP Address` column.                        |
+| Scan a Text File                | `ipmg --input targets.txt`          | Scans one target per line. Blank lines and `#` comments are ignored.          |
+| Scan a Single Host              | `ipmg --input 8.8.8.8`              | Scans a literal IP passed directly on the CLI.                                |
+| Scan a CIDR Range               | `ipmg --input 192.168.1.0/24`       | Expands the CIDR block into host IPs and scans them.                          |
+| Auto-discover LAN Subnet        | `ipmg --discover`                   | Automatically detects and scans devices in the local subnet.                  |
+| Export Results to CSV + XLSX    | `ipmg --formats csv xlsx`           | Exports scan results in CSV and Excel formats.                                |
+| Create a Markdown Report        | `ipmg --formats md csv`             | Saves a readable scan report plus CSV data for tickets, handoffs, and audits. |
+| Resolve Hostnames (PTR Records) | `ipmg --resolve`                    | Performs reverse DNS (PTR) lookups for hostnames.                             |
+| Run Every 10 Minutes            | `ipmg --interval 10`                | Repeats the scan every 10 minutes.                                            |
 
 If the default input file does not exist, IPMG creates a sample file based on the requested extension such as `.xlsx`, `.csv`, or `.txt`.
 
@@ -207,6 +213,30 @@ Each exported row includes batch-level metadata so a single run can be grouped r
 | 8.8.8.8    | Active | 12.5    | dns.google | 2026-04-09 11:42:13 | 6.24              |
 
 Possible status values include `Active`, `Inactive`, `Timeout`, `Unreachable`, `Invalid IP`, and `Error`.
+
+## Markdown Reports
+
+Use `md` in `--formats` when you want an easy-to-share report:
+
+```bash
+ipmg --input targets.txt --formats md csv --resolve
+```
+
+The Markdown report includes:
+
+- Batch timestamp
+- Total host count
+- Active host count and active rate
+- Scan duration
+- Status summary table
+- Preview of the first 25 scanned hosts
+
+Example generated files:
+
+```text
+results_20260628_120000.md
+results_20260628_120000.csv
+```
 
 ---
 

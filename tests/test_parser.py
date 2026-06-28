@@ -11,4 +11,12 @@ def test_version_flag_prints_package_version(capsys):
         parser.parse_args(["--version"])
 
     assert exc_info.value.code == 0
-    assert capsys.readouterr().out.strip() == f"IPMG - IP Management & Ping Monitoring Tool {__version__}"
+    assert capsys.readouterr().out.strip() == (
+        f"IPMG - IP Management & Ping Monitoring Tool {__version__}"
+    )
+
+
+def test_parser_accepts_markdown_output_format():
+    args = build_parser().parse_args(["--formats", "md", "csv"])
+
+    assert args.formats == ["md", "csv"]

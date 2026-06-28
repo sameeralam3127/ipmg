@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from ipmg.infrastructure.file_io import load_targets
+from ipmg.infrastructure.file_io import load_targets, save_results
 
 
 def test_load_targets_from_csv(tmp_path):
@@ -35,3 +35,37 @@ def test_load_targets_requires_expected_column(tmp_path):
 
     with pytest.raises(Exception):
         load_targets(str(path))
+
+
+def test_save_results_writes_markdown_report(tmp_path, monkeypatch):
+    monkeypatch.setattr("ipmg.infrastructure.file_io.timestamp_str", lambda: "20260628_120000")
+    df = pd.DataFrame(
+        [
+            {
+                "IP Address": "8.8.8.8",
+                "Status": "Active",
+                "Latency": 12.3456,
+                "Hostname": "dns.google",
+                "Batch Timestamp": "2026-06-28 12:00:00",
+                "Scan Duration (s)": 1.234,
+            },
+            {
+                "IP Address": "1.1.1.1",
+                "Status": "Timeout",
+                "Latency": None,
+                "Hostname": "one.one.one.one",
+                "Batch Timestamp": "2026-06-28 12:00:00",
+                "Scan Duration (s)": 1.234,
+            },
+        ]
+    )
+
+    saved_paths = save_results(df, str(tmp_path / "scan"), ["md"])
+
+    assert saved_paths == [str(tmp_path / "scan_20260628_120000.md")]
+    report = (tmp_path / "scan_20260628_120000.md").read_text(encoding="utf-8")
+    assert "# IPMG Scan Report" in report
+    assert "- Total hosts: 2" in report
+    assert "- Active rate: 50.00%" in report
+    assert "| Active | 1 |" in report
+    assert "| 8.8.8.8 | Active | 12.346 | dns.google |" in report
