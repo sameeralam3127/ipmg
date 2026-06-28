@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.3.0 (2026-06-28)
+
+### Features
+
+- Add markdown scan reports
+  ([`2093a34`](https://github.com/sameeralam3127/ipmg/commit/2093a342aa4bc3c09da50414f6953bf679506397))
+
+
 ## v1.2.0 (2026-06-04)
 
 ### Features
