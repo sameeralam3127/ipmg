@@ -147,6 +147,7 @@ ipmg --version
 | Export Results to CSV + XLSX    | `ipmg --formats csv xlsx`           | Exports scan results in CSV and Excel formats.                                |
 | Create a Markdown Report        | `ipmg --formats md csv`             | Saves a readable scan report plus CSV data for tickets, handoffs, and audits. |
 | Resolve Hostnames (PTR Records) | `ipmg --resolve`                    | Performs reverse DNS (PTR) lookups for hostnames.                             |
+| Cache Hostname Lookups          | `ipmg --resolve --dns-cache-ttl 600` | Reuses PTR results for 10 minutes to make repeated scans faster.              |
 | Run Every 10 Minutes            | `ipmg --interval 10`                | Repeats the scan every 10 minutes.                                            |
 
 If the default input file does not exist, IPMG creates a sample file based on the requested extension such as `.xlsx`, `.csv`, or `.txt`.

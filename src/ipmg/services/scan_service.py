@@ -23,10 +23,10 @@ from ipmg.infrastructure.file_io import (
 )
 from ipmg.reporting.summary import print_summary
 from ipmg.utils.helpers import (
+    HostnameCache,
     clamp_int,
     console,
     current_timestamp,
-    resolve_hostname,
 )
 
 
@@ -34,6 +34,8 @@ def run_scan(args) -> None:
     args.threads = clamp_int(args.threads, 1, 500)
     args.timeout = clamp_int(args.timeout, 1, 60)
     args.count = clamp_int(args.count, 1, 10)
+    args.dns_cache_ttl = clamp_int(getattr(args, "dns_cache_ttl", 300), 0, 86400)
+    hostname_cache = HostnameCache(args.dns_cache_ttl) if args.resolve else None
 
     if not os.path.exists(args.input) and not args.discover:
         if Path(args.input).suffix.lower() in {".xlsx", ".xls", ".csv", ".txt", ".list"}:
@@ -84,7 +86,7 @@ def run_scan(args) -> None:
                     finally:
                         progress.advance(task_id)
 
-        hostnames = {ip: resolve_hostname(ip) if args.resolve else "" for ip in ip_list}
+        hostnames = {ip: hostname_cache.resolve(ip) if hostname_cache else "" for ip in ip_list}
         scan_duration = time.perf_counter() - scan_started_at
 
         df = pd.DataFrame(

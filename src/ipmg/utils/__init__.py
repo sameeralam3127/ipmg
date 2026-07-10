@@ -1,4 +1,5 @@
 from ipmg.utils.helpers import (
+    HostnameCache,
     clamp_int,
     console,
     current_timestamp,
@@ -6,4 +7,11 @@ from ipmg.utils.helpers import (
     timestamp_str,
 )
 
-__all__ = ["clamp_int", "console", "current_timestamp", "resolve_hostname", "timestamp_str"]
+__all__ = [
+    "HostnameCache",
+    "clamp_int",
+    "console",
+    "current_timestamp",
+    "resolve_hostname",
+    "timestamp_str",
+]
