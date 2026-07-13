@@ -31,7 +31,10 @@ def print_summary(df, batch_timestamp, duration_seconds: float) -> None:
     table.add_column("Count", justify="right", style="bright_white")
 
     for status, count in summary.items():
-        table.add_row(f"[{STATUS_STYLES.get(status, 'info')}]{status}[/{STATUS_STYLES.get(status, 'info')}]", str(count))
+        table.add_row(
+            f"[{STATUS_STYLES.get(status, 'info')}]{status}[/{STATUS_STYLES.get(status, 'info')}]",
+            str(count),
+        )
 
     metrics = Columns(
         [

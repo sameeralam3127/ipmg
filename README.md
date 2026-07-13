@@ -5,9 +5,9 @@
 ![License](https://img.shields.io/badge/license-MIT-green)
 [![Publish](https://github.com/sameeralam3127/ipmg/actions/workflows/publish.yml/badge.svg)](https://github.com/sameeralam3127/ipmg/actions/workflows/publish.yml)
 
-Scan and monitor IP networks from the command line. IPMG pings hosts in
-parallel, resolves hostnames, and exports results as Excel, CSV, JSON, or
-Markdown reports.
+Scan and monitor IP networks from the command line — or from a local web
+dashboard. IPMG pings hosts in parallel, resolves hostnames, and exports
+results as Excel, CSV, JSON, or Markdown reports.
 
 > **Security note:** only scan networks you are authorized to scan.
 > Unauthorized scanning may violate your organization's policies or the law.
@@ -65,11 +65,17 @@ ipmg --input 8.8.8.8
 # Scan a CIDR range
 ipmg --input 192.168.1.0/24
 
+# Scan an IP range
+ipmg --input 10.0.0.1-10.0.0.50
+
 # Scan targets from a file (xlsx, csv, txt, or list)
 ipmg --input targets.txt
 
 # Resolve hostnames and export CSV + a readable Markdown report
 ipmg --input targets.txt --resolve --formats md csv
+
+# Open the local web dashboard
+ipmg dashboard
 ```
 
 Running plain `ipmg` uses `ip_list.xlsx` as input and creates a sample file
@@ -77,11 +83,40 @@ if it does not exist.
 
 ---
 
+## Web dashboard
+
+```bash
+ipmg dashboard          # starts http://127.0.0.1:8080 and opens your browser
+```
+
+A modern browser UI that shares the CLI's scanning engine and runs fully
+offline — every stylesheet and script is bundled with the package, nothing
+is loaded from a CDN. It gives you:
+
+- **Dashboard** — status donut, latency trend, and recent scan overview
+- **New Scan** — upload Excel/CSV/text/JSON target files or type IPs,
+  CIDR blocks, and ranges; configure threads, timeout, and DNS options
+- **Live Monitor** — real-time progress and results over WebSockets
+- **History** — every scan stored locally in SQLite (`~/.ipmg/dashboard.db`),
+  searchable and downloadable as XLSX/CSV/JSON/Markdown
+- **Inventory** — every host seen across scans, with last status and export
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--port` | `8080` | Port to listen on |
+| `--host` | `127.0.0.1` | Bind address (local-only by default) |
+| `--no-browser` | off | Don't open the browser automatically |
+| `--db` | `~/.ipmg/dashboard.db` | History database location |
+
+`ipmg web` is an alias for `ipmg dashboard`.
+
+---
+
 ## Options
 
 | Flag | Default | Description |
 | --- | --- | --- |
-| `--input` | `ip_list.xlsx` | Targets: a file (`.xlsx`, `.xls`, `.csv`, `.txt`, `.list`), a single IP, or a CIDR block |
+| `--input` | `ip_list.xlsx` | Targets: a file (`.xlsx`, `.xls`, `.csv`, `.txt`, `.list`), a single IP, a CIDR block, or an IP range (`10.0.0.1-10.0.0.50`) |
 | `--output` | `results` | Output file name prefix |
 | `--formats` | `xlsx` | One or more of `xlsx`, `csv`, `json`, `md` |
 | `--discover` | off | Auto-detect and scan the local subnet |
@@ -112,7 +147,8 @@ if it does not exist.
   192.168.1.0/30
   ```
 
-- **Command line** — a literal IP (`8.8.8.8`) or CIDR block (`10.0.0.0/24`)
+- **Command line** — a literal IP (`8.8.8.8`), CIDR block (`10.0.0.0/24`),
+  or IP range (`10.0.0.1-10.0.0.200`)
 
 ---
 

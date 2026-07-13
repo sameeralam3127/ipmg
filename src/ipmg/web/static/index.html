@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>IPMG Dashboard</title>
+  <link rel="stylesheet" href="/css/app.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='%232a78d6' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='5' fill='%232a78d6'/%3E%3C/svg%3E">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <svg viewBox="0 0 32 32" width="26" height="26" aria-hidden="true">
+          <circle cx="16" cy="16" r="13" fill="none" stroke="currentColor" stroke-width="3"/>
+          <circle cx="16" cy="16" r="5" fill="currentColor"/>
+        </svg>
+        <span>IPMG</span>
+      </div>
+      <nav class="nav">
+        <a href="#/" data-route="dashboard">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 13h8V3H3zm0 8h8v-6H3zm10 0h8V11h-8zm0-18v6h8V3z"/></svg>
+          Dashboard
+        </a>
+        <a href="#/new" data-route="new">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4z"/></svg>
+          New Scan
+        </a>
+        <a href="#/monitor" data-route="monitor">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-9 4 18 3-9h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Live Monitor
+        </a>
+        <a href="#/history" data-route="history">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 3a9 9 0 1 0 8.5 12h-2.2A7 7 0 1 1 13 5a6.9 6.9 0 0 1 4.9 2H14v2h7V2h-2v2.4A8.9 8.9 0 0 0 13 3zm-1 5v5l4.3 2.5.7-1.2-3.5-2V8z"/></svg>
+          History
+        </a>
+        <a href="#/inventory" data-route="inventory">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v4H4zm0 6h16v4H4zm0 6h16v4H4z" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+          Inventory
+        </a>
+      </nav>
+      <div class="sidebar-footer">
+        <button id="theme-toggle" class="ghost-btn" type="button" title="Toggle theme">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"/></svg>
+          Theme
+        </button>
+        <span id="conn-status" class="conn" data-state="connecting">connecting</span>
+      </div>
+    </aside>
+    <main id="view" class="main" aria-live="polite"></main>
+  </div>
+  <div id="tooltip" class="tooltip" hidden></div>
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>

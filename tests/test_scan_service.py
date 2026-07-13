@@ -23,7 +23,7 @@ def test_run_scan_handles_worker_errors(monkeypatch):
         captured["summary"] = (df.copy(), batch_timestamp, duration_seconds)
 
     monkeypatch.setattr("ipmg.services.scan_service.load_targets", fake_load_targets)
-    monkeypatch.setattr("ipmg.services.scan_service.ping_ip", fake_ping_ip)
+    monkeypatch.setattr("ipmg.core.engine.ping_ip", fake_ping_ip)
     monkeypatch.setattr("ipmg.services.scan_service.save_results", fake_save_results)
     monkeypatch.setattr("ipmg.services.scan_service.print_summary", fake_print_summary)
 
@@ -60,7 +60,7 @@ def test_run_scan_clamps_resource_limits(monkeypatch):
         return "Active", 1.0
 
     monkeypatch.setattr("ipmg.services.scan_service.load_targets", lambda _source: ["8.8.8.8"])
-    monkeypatch.setattr("ipmg.services.scan_service.ping_ip", fake_ping_ip)
+    monkeypatch.setattr("ipmg.core.engine.ping_ip", fake_ping_ip)
     monkeypatch.setattr("ipmg.services.scan_service.save_results", lambda *_args: None)
     monkeypatch.setattr("ipmg.services.scan_service.print_summary", lambda *_args: None)
 
