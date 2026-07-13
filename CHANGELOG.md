@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.4.0 (2026-07-13)
+
+### Documentation
+
+- Simplify README ([#13](https://github.com/sameeralam3127/ipmg/pull/13),
+  [`f2df9cd`](https://github.com/sameeralam3127/ipmg/commit/f2df9cd6f76aa674529546e024cd282416e719d2))
+
+### Features
+
+- Cache reverse DNS lookups ([#13](https://github.com/sameeralam3127/ipmg/pull/13),
+  [`f2df9cd`](https://github.com/sameeralam3127/ipmg/commit/f2df9cd6f76aa674529546e024cd282416e719d2))
+
+
 ## v1.3.0 (2026-06-28)
 
 ### Features
