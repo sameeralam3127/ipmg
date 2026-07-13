@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.5.0 (2026-07-13)
+
+### Features
+
+- Add security workflow for code analysis
+  ([`73aa92e`](https://github.com/sameeralam3127/ipmg/commit/73aa92ee4715206eb18e42620b782a2267208b32))
+
+
 ## v1.4.0 (2026-07-13)
 
 ### Documentation
