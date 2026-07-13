@@ -23,6 +23,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--discover", action="store_true")
     parser.add_argument("--resolve", action="store_true")
+    parser.add_argument(
+        "--dns-cache-ttl",
+        type=int,
+        default=300,
+        metavar="SECONDS",
+        help="Cache reverse DNS results for this many seconds (default: 300).",
+    )
     parser.add_argument("--interval", type=int)
     parser.add_argument("--verbose", action="store_true")
     return parser
