@@ -40,6 +40,63 @@ def _expand_cidr(target: str) -> list[str]:
     return [str(ip) for ip in parsed.hosts()]
 
 
+def _expand_range(target: str) -> list[str]:
+    import ipaddress
+
+    start_raw, _, end_raw = target.partition("-")
+    try:
+        start = ipaddress.ip_address(start_raw.strip())
+        end = ipaddress.ip_address(end_raw.strip())
+    except ValueError:
+        # Not an IP range (e.g. a hostname containing dashes) — let callers
+        # decide whether to skip or reject the token.
+        return []
+
+    if start.version != end.version or int(end) < int(start):
+        raise FileIOError(f"Invalid IP range: {target}")
+
+    total = int(end) - int(start) + 1
+    if total > MAX_EXPANDED_TARGETS:
+        raise FileIOError(
+            f"IP range '{target}' expands to too many hosts. "
+            f"Maximum allowed hosts: {MAX_EXPANDED_TARGETS}."
+        )
+
+    return [str(start + offset) for offset in range(total)]
+
+
+def _expand_target(value: str) -> list[str]:
+    """Expand a single target token: literal IP, CIDR block, or IP range."""
+    if validate_ip(value):
+        return [value]
+    if "/" in value:
+        return _expand_cidr(value)
+    if "-" in value:
+        return _expand_range(value)
+    return []
+
+
+def parse_manual_targets(text: str) -> list[str]:
+    """Parse free-form target text: one IP, CIDR, or range per line/comma.
+
+    Blank lines and ``#`` comments are ignored. Used by the web dashboard
+    for manually entered targets.
+    """
+    targets: list[str] = []
+    for raw_line in text.splitlines():
+        line = raw_line.split("#", 1)[0]
+        for token in line.replace(",", " ").split():
+            expanded = _expand_target(token)
+            if not expanded:
+                raise FileIOError(f"Unsupported target input: {token}")
+            targets.extend(expanded)
+
+    if not targets:
+        raise FileIOError("No valid IP targets were provided.")
+
+    return _deduplicate(targets)
+
+
 def _load_from_dataframe(df: pd.DataFrame, source: str) -> list[str]:
     if "IP Address" not in df.columns:
         raise FileIOError(f"Input file '{source}' must contain an 'IP Address' column.")
@@ -49,10 +106,7 @@ def _load_from_dataframe(df: pd.DataFrame, source: str) -> list[str]:
         value = raw_value.strip()
         if not value:
             continue
-        if validate_ip(value):
-            targets.append(value)
-        elif "/" in value:
-            targets.extend(_expand_cidr(value))
+        targets.extend(_expand_target(value))
 
     if not targets:
         raise FileIOError(f"No valid IP targets were found in '{source}'.")
@@ -67,10 +121,7 @@ def _load_from_text(path: str) -> list[str]:
             value = raw_line.strip()
             if not value or value.startswith("#"):
                 continue
-            if validate_ip(value):
-                targets.append(value)
-            elif "/" in value:
-                targets.extend(_expand_cidr(value))
+            targets.extend(_expand_target(value))
 
     if not targets:
         raise FileIOError(f"No valid IP targets were found in '{path}'.")
@@ -94,14 +145,12 @@ def load_targets(source: str) -> list[str]:
             f"Supported types: {', '.join(sorted(SUPPORTED_INPUT_SUFFIXES))}."
         )
 
-    value = source.strip()
-    if validate_ip(value):
-        return [value]
-    if "/" in value:
-        return _expand_cidr(value)
+    expanded = _expand_target(source.strip())
+    if expanded:
+        return expanded
 
     raise FileIOError(
-        f"Input '{source}' is neither a readable file nor a valid IP/CIDR target."
+        f"Input '{source}' is neither a readable file nor a valid IP/CIDR/range target."
     )
 
 
@@ -170,9 +219,7 @@ def _build_markdown_report(df: pd.DataFrame) -> str:
         lines.append("| No results | 0 |")
 
     preview_columns = [
-        column
-        for column in ["IP Address", "Status", "Latency", "Hostname"]
-        if column in df.columns
+        column for column in ["IP Address", "Status", "Latency", "Hostname"] if column in df.columns
     ]
     if preview_columns:
         lines.extend(
@@ -196,6 +243,10 @@ def _build_markdown_report(df: pd.DataFrame) -> str:
 
     lines.append("")
     return "\n".join(lines)
+
+
+def build_markdown_report(df: pd.DataFrame) -> str:
+    return _build_markdown_report(df)
 
 
 def save_results(df, base: str, formats: list[str]) -> list[str]:

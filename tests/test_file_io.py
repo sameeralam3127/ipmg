@@ -6,9 +6,7 @@ from ipmg.infrastructure.file_io import load_targets, save_results
 
 def test_load_targets_from_csv(tmp_path):
     path = tmp_path / "targets.csv"
-    pd.DataFrame({"IP Address": ["8.8.8.8", "192.168.1.0/30", "8.8.8.8"]}).to_csv(
-        path, index=False
-    )
+    pd.DataFrame({"IP Address": ["8.8.8.8", "192.168.1.0/30", "8.8.8.8"]}).to_csv(path, index=False)
 
     assert load_targets(str(path)) == ["8.8.8.8", "192.168.1.1", "192.168.1.2"]
 
@@ -69,3 +67,40 @@ def test_save_results_writes_markdown_report(tmp_path, monkeypatch):
     assert "- Active rate: 50.00%" in report
     assert "| Active | 1 |" in report
     assert "| 8.8.8.8 | Active | 12.346 | dns.google |" in report
+
+
+def test_load_targets_from_literal_range():
+    assert load_targets("10.0.0.1-10.0.0.3") == ["10.0.0.1", "10.0.0.2", "10.0.0.3"]
+
+
+def test_load_targets_rejects_reversed_range():
+    with pytest.raises(Exception):
+        load_targets("10.0.0.9-10.0.0.1")
+
+
+def test_load_targets_skips_hostname_like_tokens_in_files(tmp_path):
+    path = tmp_path / "targets.txt"
+    path.write_text("8.8.4.4\nmy-host-name\n", encoding="utf-8")
+
+    assert load_targets(str(path)) == ["8.8.4.4"]
+
+
+def test_parse_manual_targets_mixed_input():
+    from ipmg.infrastructure.file_io import parse_manual_targets
+
+    parsed = parse_manual_targets("8.8.8.8\n# dns\n192.168.5.0/30, 10.0.0.1-10.0.0.2\n")
+
+    assert parsed == [
+        "8.8.8.8",
+        "192.168.5.1",
+        "192.168.5.2",
+        "10.0.0.1",
+        "10.0.0.2",
+    ]
+
+
+def test_parse_manual_targets_rejects_invalid_token():
+    from ipmg.infrastructure.file_io import parse_manual_targets
+
+    with pytest.raises(Exception):
+        parse_manual_targets("not-an-ip")
