@@ -2,7 +2,12 @@ name: Security
 
 on:
   push:
+    branches: [main]
   pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
 
 jobs:
   security:
@@ -14,10 +19,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: "pip"
 
-      - run: pip install -r requirements.txt
+      - name: Install scanners
+        run: pip install bandit pip-audit detect-secrets
 
-      - run: pip install bandit pip-audit
+      - name: Static security analysis (bandit)
+        run: bandit -r src
 
-      - run: bandit -r .
-      - run: pip-audit
+      - name: Dependency vulnerability audit (pip-audit)
+        run: pip-audit -r requirements.txt
+
+      - name: Secret scan (detect-secrets)
+        run: git ls-files -z | xargs -0 detect-secrets-hook --baseline .secrets.baseline
