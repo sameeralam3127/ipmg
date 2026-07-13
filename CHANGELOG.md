@@ -2,6 +2,21 @@
 
 <!-- version list -->
 
+## v1.6.0 (2026-07-13)
+
+### Continuous Integration
+
+- Add security scanning workflow and secret detection
+  ([#14](https://github.com/sameeralam3127/ipmg/pull/14),
+  [`9ff9f56`](https://github.com/sameeralam3127/ipmg/commit/9ff9f56c1c0ed766280063a11d1d7d597ee56e2f))
+
+### Features
+
+- Add local web dashboard with shared scan engine
+  ([#15](https://github.com/sameeralam3127/ipmg/pull/15),
+  [`f0347f9`](https://github.com/sameeralam3127/ipmg/commit/f0347f9a292d4208c03ecbc83debab087446a000))
+
+
 ## v1.5.0 (2026-07-13)
 
 ### Features
