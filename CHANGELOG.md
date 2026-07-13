@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v1.6.1 (2026-07-13)
+
+### Bug Fixes
+
+- Add websockets dependency for dashboard live updates
+  ([#16](https://github.com/sameeralam3127/ipmg/pull/16),
+  [`87451a7`](https://github.com/sameeralam3127/ipmg/commit/87451a734aaaed8b7d6679f941fff1f5df364c1b))
+
+
 ## v1.6.0 (2026-07-13)
 
 ### Continuous Integration
