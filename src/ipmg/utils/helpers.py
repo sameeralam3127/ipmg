@@ -1,5 +1,6 @@
 import logging
 import socket
+import sys
 import threading
 import time
 from datetime import datetime
@@ -12,21 +13,48 @@ from rich.traceback import install as install_rich_traceback
 
 RICH_THEME = Theme(
     {
-        "info": "bold cyan",
-        "warning": "bold yellow",
-        "danger": "bold red",
-        "success": "bold green",
-        "muted": "dim white",
+        "info": "cyan",
+        "warning": "yellow",
+        "danger": "red",
+        "success": "green",
+        "muted": "dim",
+        # Layout roles: one accent, dim labels, plain values.
         "ipmg.accent": "bold bright_blue",
-        "ipmg.status.active": "bold green",
-        "ipmg.status.inactive": "bold red",
-        "ipmg.status.timeout": "bold yellow",
-        "ipmg.status.unreachable": "bold magenta",
-        "ipmg.status.error": "bold bright_red",
-        "ipmg.status.invalid": "bold bright_yellow",
+        "ipmg.brand": "bold bright_blue",
+        "ipmg.heading": "bold",
+        "ipmg.label": "dim",
+        "ipmg.value": "default",
+        "ipmg.bar": "bright_blue",
+        "ipmg.bar.empty": "dim",
+        "ipmg.status.active": "green",
+        "ipmg.status.inactive": "red",
+        "ipmg.status.timeout": "yellow",
+        "ipmg.status.unreachable": "magenta",
+        "ipmg.status.error": "bright_red",
+        "ipmg.status.invalid": "bright_yellow",
     }
 )
 
+
+def _tolerate_unencodable_output() -> None:
+    """Substitute characters the terminal cannot encode instead of crashing.
+
+    Scan results carry data we do not control (IDN hostnames, file names), so
+    a byte that ASCII cannot represent must never abort the whole command.
+    """
+    reconfigure = getattr(sys.stdout, "reconfigure", None)
+    if reconfigure is None:
+        return
+    try:
+        reconfigure(errors="replace")
+    except (OSError, ValueError):  # pragma: no cover - stream already detached
+        pass
+
+
+_tolerate_unencodable_output()
+
+# No file= here on purpose: rich resolves sys.stdout per write, which keeps
+# output capturable by pytest and redirectable by callers.
 console = Console(theme=RICH_THEME)
 
 
@@ -71,12 +99,21 @@ class HostnameCache:
 
 
 def configure_logging(verbose: bool) -> None:
+    """Keep the terminal quiet unless something goes wrong (or --verbose)."""
     install_rich_traceback(show_locals=verbose)
     logging.basicConfig(
-        level=logging.DEBUG if verbose else logging.INFO,
+        level=logging.DEBUG if verbose else logging.WARNING,
         format="%(message)s",
         datefmt="[%X]",
-        handlers=[RichHandler(console=console, rich_tracebacks=True, show_path=verbose)],
+        handlers=[
+            RichHandler(
+                console=console,
+                rich_tracebacks=True,
+                show_path=verbose,
+                show_time=verbose,
+                markup=False,
+            )
+        ],
         force=True,
     )
 

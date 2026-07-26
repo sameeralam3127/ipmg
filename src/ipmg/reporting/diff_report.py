@@ -8,15 +8,12 @@ import json
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 
-from rich.columns import Columns
-from rich.console import Group
-from rich.panel import Panel
-from rich.table import Table
 from rich.text import Text
 
 from ipmg.core.diff import CHANGE_LABELS, ChangeType, ScanDiff, Severity
 from ipmg.exceptions import ReportError
-from ipmg.utils.helpers import console, timestamp_str
+from ipmg.reporting import ui
+from ipmg.utils.helpers import timestamp_str
 
 DIFF_FORMATS = ("md", "json", "csv")
 
@@ -31,9 +28,15 @@ CSV_COLUMNS = (
 )
 
 SEVERITY_STYLES: Dict[Severity, str] = {
-    Severity.CRITICAL: "ipmg.status.inactive",
+    Severity.CRITICAL: "danger",
     Severity.WARNING: "warning",
     Severity.INFO: "info",
+}
+
+SEVERITY_GLYPHS: Dict[Severity, str] = {
+    Severity.CRITICAL: "fail",
+    Severity.WARNING: "warn",
+    Severity.INFO: "dot",
 }
 
 
@@ -48,95 +51,71 @@ def _cell(value: Optional[object]) -> str:
 # ---------------------------------------------------------------- console
 
 
+def _change_label(change) -> Text:
+    """Severity glyph plus the change name, e.g. ``✗ Host offline``."""
+    style = SEVERITY_STYLES[change.severity]
+    text = Text(f"{ui.glyph(SEVERITY_GLYPHS[change.severity])} ", style=style)
+    text.append(change.label, style="ipmg.value")
+    return text
+
+
 def print_diff(diff: ScanDiff, limit: Optional[int] = None) -> None:
     """Render a comparison to the terminal."""
-    console.rule(Text("IPMG Change Report", style="ipmg.accent"))
-    console.print(
-        Panel.fit(
+    ui.blank()
+    ui.heading("Changes")
+    ui.fields(
+        [
+            ("Baseline", diff.baseline.display(ui.glyph("sep"))),
+            ("Current", diff.current.display(ui.glyph("sep"))),
             (
-                f"[ipmg.accent]Baseline:[/ipmg.accent] {diff.baseline.display()}\n"
-                f"[ipmg.accent]Current:[/ipmg.accent] {diff.current.display()}\n"
-                f"[ipmg.accent]Hosts:[/ipmg.accent] "
-                f"{diff.baseline_hosts} -> {diff.current_hosts} "
-                f"({diff.compared_hosts} compared)"
+                "Hosts",
+                f"{diff.baseline_hosts} {ui.glyph('arrow')} {diff.current_hosts} "
+                f"({diff.compared_hosts} compared)",
             ),
-            title="[ipmg.accent]Comparison[/ipmg.accent]",
-            border_style="ipmg.accent",
-        )
+        ]
     )
-
-    severity_counts = diff.severity_counts
-    console.print(
-        Columns(
-            [
-                Panel.fit(
-                    Group(
-                        Text(str(len(diff.changes)), style="bold bright_white"),
-                        Text("Total Changes", style="muted"),
-                    ),
-                    border_style="ipmg.accent",
-                ),
-                Panel.fit(
-                    Group(
-                        Text(str(severity_counts.get("critical", 0)), style="ipmg.status.inactive"),
-                        Text("Critical", style="muted"),
-                    ),
-                    border_style="ipmg.status.inactive",
-                ),
-                Panel.fit(
-                    Group(
-                        Text(str(severity_counts.get("warning", 0)), style="warning"),
-                        Text("Warning", style="muted"),
-                    ),
-                    border_style="warning",
-                ),
-                Panel.fit(
-                    Group(
-                        Text(str(diff.unchanged_hosts), style="ipmg.status.active"),
-                        Text("Unchanged Hosts", style="muted"),
-                    ),
-                    border_style="ipmg.status.active",
-                ),
-            ],
-            equal=True,
-            expand=True,
-        )
-    )
+    ui.blank()
 
     if not diff.has_changes:
-        console.print(
-            Panel.fit(
-                Text("No changes detected between these scans.", style="success"),
-                border_style="success",
-            )
-        )
+        ui.success("No changes detected between these scans.")
         return
 
-    table = Table(show_header=True, header_style="bold bright_white")
-    table.add_column("Change", style="bold")
-    table.add_column("IP Address")
-    table.add_column("Hostname")
-    table.add_column("Previous")
-    table.add_column("Current")
-    table.add_column("Delta", justify="right")
+    grid = ui.table(
+        "Change",
+        "IP Address",
+        "Hostname",
+        "Previous",
+        "Current",
+        "Delta",
+        justify=["left", "left", "left", "left", "left", "right"],
+    )
 
     shown = diff.changes if limit is None else diff.changes[:limit]
     for change in shown:
-        style = SEVERITY_STYLES[change.severity]
-        table.add_row(
-            f"[{style}]{change.label}[/{style}]",
+        grid.add_row(
+            _change_label(change),
             change.ip,
             change.hostname or "-",
             _cell(change.previous) or "-",
             _cell(change.current) or "-",
             f"{change.delta:+.1f} ms" if change.delta is not None else "-",
         )
+    ui.print_table(grid)
 
-    console.print(table)
-    if limit is not None and len(diff.changes) > limit:
-        console.print(
-            Text(f"Showing {limit} of {len(diff.changes)} changes.", style="muted"),
-        )
+    total = len(diff.changes)
+    truncated = limit is not None and total > limit
+    severity_counts = diff.severity_counts
+
+    parts = [ui.plural(total, "change") + (f" ({limit} shown)" if truncated else "")]
+    parts.extend(
+        f"{severity_counts[severity.value]} {severity.value}"
+        for severity in (Severity.CRITICAL, Severity.WARNING, Severity.INFO)
+        if severity_counts.get(severity.value)
+    )
+    parts.append(f"{ui.plural(diff.unchanged_hosts, 'host')} unchanged")
+
+    ui.blank()
+    ui.joined(parts)
 
 
 # ----------------------------------------------------------- serializers
@@ -265,12 +244,7 @@ def export_diff(diff: ScanDiff, base: str, formats: Iterable[str]) -> List[str]:
         saved.append(str(path))
 
     if saved:
-        console.print(
-            Panel.fit(
-                "\n".join(f"[success]-[/success] {path}" for path in saved),
-                title="[success]Saved Change Reports[/success]",
-                border_style="success",
-            )
-        )
+        ui.blank()
+        ui.field_list("Saved", saved)
 
     return saved

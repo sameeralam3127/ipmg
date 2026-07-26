@@ -11,14 +11,6 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 import pandas as pd
-from rich.panel import Panel
-from rich.progress import (
-    BarColumn,
-    Progress,
-    SpinnerColumn,
-    TextColumn,
-    TimeElapsedColumn,
-)
 
 from ipmg.core.diff import DiffOptions
 from ipmg.core.discovery import discover_local_subnet
@@ -30,11 +22,12 @@ from ipmg.infrastructure.file_io import (
     load_targets,
     save_results,
 )
+from ipmg.reporting import ui
 from ipmg.reporting.diff_report import export_diff, print_diff
 from ipmg.reporting.frames import results_dataframe
 from ipmg.reporting.summary import print_summary
 from ipmg.services.history_service import HistoryService
-from ipmg.utils.helpers import clamp_int, console, current_timestamp
+from ipmg.utils.helpers import clamp_int, current_timestamp
 
 log = logging.getLogger(__name__)
 
@@ -97,31 +90,25 @@ def _ensure_input_file(args) -> None:
 
 
 def _print_configuration(source: str, targets: int, config: ScanConfig) -> None:
-    console.print(
-        Panel.fit(
+    ping_word = "ping" if config.count == 1 else "pings"
+    ui.blank()
+    ui.fields(
+        [
+            ("Source", source),
+            ("Targets", ui.plural(targets, "host")),
             (
-                f"[ipmg.accent]Source:[/ipmg.accent] {source}\n"
-                f"[ipmg.accent]Targets:[/ipmg.accent] {targets}\n"
-                f"[ipmg.accent]Threads:[/ipmg.accent] {config.threads}\n"
-                f"[ipmg.accent]Timeout:[/ipmg.accent] {config.timeout}s x {config.count}"
+                "Config",
+                f"{config.threads} threads {ui.glyph('sep')} {config.timeout}s timeout "
+                f"{ui.glyph('sep')} {config.count} {ping_word}"
+                + (f" {ui.glyph('sep')} reverse DNS" if config.resolve else ""),
             ),
-            title="[ipmg.accent]Scan Configuration[/ipmg.accent]",
-            border_style="ipmg.accent",
-        )
+        ]
     )
 
 
 def _scan_with_progress(ip_list: List[str], config: ScanConfig) -> List[HostResult]:
-    with Progress(
-        SpinnerColumn(style="ipmg.accent"),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(bar_width=None, complete_style="green", finished_style="bright_green"),
-        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-        TextColumn("[bold]{task.completed}/{task.total}[/bold]"),
-        TimeElapsedColumn(),
-        console=console,
-    ) as progress:
-        task_id = progress.add_task("[ipmg.accent]Scanning hosts[/ipmg.accent]", total=len(ip_list))
+    with ui.progress("Scanning") as progress:
+        task_id = progress.add_task("scan", total=len(ip_list))
         return execute_scan(
             ip_list,
             config,
@@ -163,7 +150,8 @@ def _report_changes(
             options=options.diff,
         )
     except HistoryError as exc:
-        console.print(f"[warning]Change report skipped:[/warning] {exc}")
+        ui.blank()
+        ui.warn(f"Change report skipped: {exc}")
         return
 
     print_diff(diff)
@@ -178,10 +166,8 @@ def _store_and_compare(
 ) -> Optional[int]:
     if not options.enabled:
         if options.compare:
-            console.print(
-                "[warning]Change detection needs scan history; "
-                "drop --no-history to enable it.[/warning]"
-            )
+            ui.blank()
+            ui.warn("Change detection needs scan history; drop --no-history to enable it.")
         return None
 
     try:
@@ -193,7 +179,8 @@ def _store_and_compare(
             duration_s=outcome.duration_s,
         )
     except HistoryError as exc:
-        console.print(f"[warning]Scan history unavailable:[/warning] {exc}")
+        ui.blank()
+        ui.warn(f"Scan history unavailable: {exc}")
         log.debug("history recording failed", exc_info=True)
         return None
 
@@ -215,8 +202,8 @@ def run_scan(args) -> None:
     while True:
         outcome = _run_single_pass(args, config)
 
-        save_results(outcome.frame, args.output, args.formats)
         print_summary(outcome.frame, outcome.batch_timestamp, outcome.duration_s)
+        save_results(outcome.frame, args.output, args.formats)
         _store_and_compare(history_options, config, outcome)
 
         if not args.interval:
