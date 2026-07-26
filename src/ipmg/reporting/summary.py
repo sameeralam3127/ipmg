@@ -1,3 +1,5 @@
+from typing import Any, Dict, Sequence
+
 from rich.columns import Columns
 from rich.console import Group
 from rich.panel import Panel
@@ -5,6 +7,13 @@ from rich.table import Table
 from rich.text import Text
 
 from ipmg.utils.helpers import console
+
+SCAN_STATE_STYLES = {
+    "complete": "success",
+    "running": "warning",
+    "cancelled": "muted",
+    "failed": "danger",
+}
 
 STATUS_STYLES = {
     "Active": "ipmg.status.active",
@@ -83,3 +92,51 @@ def print_summary(df, batch_timestamp, duration_seconds: float) -> None:
             border_style="ipmg.accent",
         )
     )
+
+
+def _active_rate(scan: Dict[str, Any]) -> str:
+    total = scan.get("total") or 0
+    active = (scan.get("status_counts") or {}).get("Active", 0)
+    return f"{(active / total) * 100:.1f}%" if total else "-"
+
+
+def print_scan_history(scans: Sequence[Dict[str, Any]]) -> None:
+    """Render stored scans, newest first."""
+    console.rule(Text("IPMG Scan History", style="ipmg.accent"))
+
+    if not scans:
+        console.print(
+            Panel.fit(
+                Text("No scans stored yet. Run a scan to build history.", style="warning"),
+                border_style="warning",
+            )
+        )
+        return
+
+    table = Table(show_header=True, header_style="bold bright_white")
+    table.add_column("#", justify="right", style="bold")
+    table.add_column("Started")
+    table.add_column("Source")
+    table.add_column("Hosts", justify="right")
+    table.add_column("Active", justify="right")
+    table.add_column("Avg Latency", justify="right")
+    table.add_column("Duration", justify="right")
+    table.add_column("State")
+
+    for scan in scans:
+        state = str(scan.get("status", ""))
+        style = SCAN_STATE_STYLES.get(state, "info")
+        avg_latency = scan.get("avg_latency")
+        duration = scan.get("duration_s")
+        table.add_row(
+            str(scan.get("id", "")),
+            str(scan.get("started_at", "")),
+            str(scan.get("source", "")),
+            str(scan.get("total", 0)),
+            _active_rate(scan),
+            f"{avg_latency:.1f} ms" if avg_latency is not None else "-",
+            f"{duration:.1f}s" if duration is not None else "-",
+            f"[{style}]{state}[/{style}]",
+        )
+
+    console.print(table)

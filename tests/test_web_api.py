@@ -148,6 +148,65 @@ def test_websocket_receives_scan_events(client):
         assert events[2]["status"] == "complete"
 
 
+def test_diff_endpoint_compares_scans(client):
+    first = client.post("/api/v1/scans", json={"targets": "10.0.0.1"}).json()["id"]
+    wait_for_completion(client, first)
+
+    # Second scan sees an extra host.
+    second = client.post("/api/v1/scans", json={"targets": "10.0.0.1\n10.0.0.2"}).json()["id"]
+    wait_for_completion(client, second)
+
+    diff = client.get(f"/api/v1/scans/{second}/diff").json()
+    assert diff["baseline"]["id"] == first
+    assert diff["current"]["id"] == second
+    assert diff["summary"]["counts"] == {"new_host": 1}
+    assert diff["changes"][0]["ip"] == "10.0.0.2"
+
+    explicit = client.get(f"/api/v1/scans/{second}/diff?baseline={first}").json()
+    assert explicit["summary"] == diff["summary"]
+
+
+def test_diff_endpoint_without_a_baseline(client):
+    scan_id = client.post("/api/v1/scans", json={"targets": "10.0.0.1"}).json()["id"]
+    wait_for_completion(client, scan_id)
+
+    response = client.get(f"/api/v1/scans/{scan_id}/diff")
+    assert response.status_code == 404
+    assert "No earlier scan" in response.json()["detail"]
+
+    assert client.get("/api/v1/scans/9999/diff").status_code == 404
+
+
+def test_diff_report_downloads(client):
+    first = client.post("/api/v1/scans", json={"targets": "10.0.0.1"}).json()["id"]
+    wait_for_completion(client, first)
+    second = client.post("/api/v1/scans", json={"targets": "10.0.0.2"}).json()["id"]
+    wait_for_completion(client, second)
+
+    md = client.get(f"/api/v1/scans/{second}/diff/report?fmt=md")
+    assert md.status_code == 200
+    assert "# IPMG Change Report" in md.text
+    assert f"ipmg_changes_{first}_to_{second}.md" in md.headers["content-disposition"]
+
+    payload = json.loads(client.get(f"/api/v1/scans/{second}/diff/report?fmt=json").text)
+    assert payload["summary"]["total_changes"] == 2
+
+    csv_report = client.get(f"/api/v1/scans/{second}/diff/report?fmt=csv")
+    assert csv_report.text.startswith("Change,Severity")
+
+    assert client.get(f"/api/v1/scans/{second}/diff/report?fmt=pdf").status_code == 400
+
+
+def test_upload_rejects_oversized_files(client, monkeypatch):
+    monkeypatch.setattr("ipmg.web.app.MAX_UPLOAD_BYTES", 128)
+
+    response = client.post(
+        "/api/v1/upload",
+        files={"file": ("targets.txt", b"10.0.0.1\n" * 200, "text/plain")},
+    )
+    assert response.status_code == 413
+
+
 def test_index_served(client):
     response = client.get("/")
     assert response.status_code == 200

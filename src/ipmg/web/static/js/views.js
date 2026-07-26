@@ -359,6 +359,135 @@ export async function historyView(root) {
   );
 }
 
+// -------------------------------------------------------------- changes
+
+const SEVERITY_COLORS = {
+  critical: "var(--st-inactive)",
+  warning: "var(--st-timeout)",
+  info: "var(--st-active)",
+};
+
+const DIFF_FORMATS = ["md", "json", "csv"];
+
+function severityPill(severity, label) {
+  const pill = h("span", { class: "pill" }, label);
+  pill.style.setProperty("--pill-color", SEVERITY_COLORS[severity] || "var(--muted)");
+  return pill;
+}
+
+function changesTable(changes) {
+  if (!changes.length) return h("div", { class: "empty" }, "No changes between these scans.");
+  return h(
+    "div",
+    { class: "table-wrap" },
+    h(
+      "table",
+      {},
+      h("thead", {}, h("tr", {}, ...["Change", "IP Address", "Hostname", "Previous", "Current", "Delta"].map((t) => h("th", {}, t)))),
+      h(
+        "tbody",
+        {},
+        changes.map((change) =>
+          h(
+            "tr",
+            {},
+            h("td", {}, severityPill(change.severity, change.label)),
+            h("td", {}, change.ip),
+            h("td", {}, change.hostname || "—"),
+            h("td", {}, change.previous ?? "—"),
+            h("td", {}, change.current ?? "—"),
+            h("td", {}, change.delta == null ? "—" : `${change.delta > 0 ? "+" : ""}${change.delta.toFixed(1)} ms`)
+          )
+        )
+      )
+    )
+  );
+}
+
+function scanOption(scan) {
+  return h("option", { value: scan.id }, `#${scan.id} · ${scan.started_at} · ${scan.source}`);
+}
+
+export async function changesView(root, targetId, baselineId) {
+  root.append(
+    h("h1", { class: "page-title" }, "Changes"),
+    h("p", { class: "page-sub" }, "Compare two scans to spot new hosts, outages, and latency shifts.")
+  );
+
+  const scans = (await api.scans(100)).filter((scan) => scan.status === "complete" || scan.status === "cancelled");
+  if (scans.length < 2) {
+    root.append(h("div", { class: "empty" }, "At least two finished scans are needed to compare."));
+    return;
+  }
+
+  const known = new Set(scans.map((scan) => scan.id));
+  const target = h("select", {}, ...scans.map(scanOption));
+  const baseline = h("select", {}, ...scans.map(scanOption));
+
+  // Ignore ids from the URL that are not in the list, so the selects always
+  // hold a valid scan.
+  target.value = String(known.has(targetId) ? targetId : scans[0].id);
+  const fallback = scans.find((scan) => String(scan.id) !== target.value);
+  baseline.value = String(known.has(baselineId) ? baselineId : fallback.id);
+
+  const threshold = h("input", { type: "number", min: 0, step: "0.5", value: "5", title: "Latency threshold (ms)" });
+
+  const exports = h("span", { class: "exports" });
+  const tiles = h("div", { class: "grid tiles" });
+  const tableHost = h("div", { class: "card", style: "margin-top:14px" });
+
+  const toolbar = h(
+    "div",
+    { class: "toolbar" },
+    h("label", { class: "control" }, "Baseline", baseline),
+    h("label", { class: "control" }, "Compare to", target),
+    h("label", { class: "control" }, "Latency Δ (ms)", threshold),
+    h("span", { class: "spacer" }),
+    exports
+  );
+
+  async function refresh() {
+    const options = { baseline: Number(baseline.value), latencyThreshold: Number(threshold.value) || 0 };
+    tableHost.replaceChildren(h("div", { class: "empty" }, "Comparing…"));
+    let diff;
+    try {
+      diff = await api.diff(Number(target.value), options);
+    } catch (err) {
+      tiles.replaceChildren();
+      tableHost.replaceChildren(h("div", { class: "banner err" }, `Comparison failed: ${err.message}`));
+      return;
+    }
+
+    const summary = diff.summary;
+    tiles.replaceChildren(
+      tile(String(summary.total_changes), "Changes"),
+      tile(String(summary.severity_counts.critical || 0), "Critical"),
+      tile(String(summary.severity_counts.warning || 0), "Warning"),
+      tile(String(summary.unchanged_hosts), "Unchanged hosts"),
+      tile(`${summary.baseline_hosts} → ${summary.current_hosts}`, "Hosts scanned")
+    );
+
+    exports.replaceChildren(
+      ...DIFF_FORMATS.map((fmt) =>
+        h(
+          "a",
+          { class: "ghost-btn", href: api.diffReportUrl(Number(target.value), fmt, options), download: "" },
+          fmt.toUpperCase()
+        )
+      )
+    );
+
+    tableHost.replaceChildren(h("h3", {}, `Detected changes (${diff.changes.length})`), changesTable(diff.changes));
+  }
+
+  baseline.addEventListener("change", refresh);
+  target.addEventListener("change", refresh);
+  threshold.addEventListener("change", refresh);
+
+  root.append(toolbar, tiles, tableHost);
+  await refresh();
+}
+
 // ----------------------------------------------------------- scan detail
 
 export async function scanDetailView(root, scanId) {
@@ -395,6 +524,8 @@ export async function scanDetailView(root, scanId) {
     ...Object.keys(scan.status_counts || {}).map((status) => h("option", { value: status }, status))
   );
   toolbar.append(search, statusFilter, h("span", { class: "spacer" }));
+
+  toolbar.append(h("a", { class: "ghost-btn", href: `#/changes/${scan.id}` }, "Compare"));
 
   for (const fmt of REPORT_FORMATS) {
     toolbar.append(

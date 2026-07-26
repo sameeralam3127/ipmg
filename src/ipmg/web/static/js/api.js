@@ -44,7 +44,19 @@ export const api = {
     return request("/upload", { method: "POST", body: form });
   },
   reportUrl: (id, fmt) => `${BASE}/scans/${id}/report?fmt=${fmt}`,
+  diff: (id, { baseline, latencyThreshold, latencyPct } = {}) =>
+    request(`/scans/${id}/diff${diffQuery({ baseline, latencyThreshold, latencyPct })}`),
+  diffReportUrl: (id, fmt, options = {}) =>
+    `${BASE}/scans/${id}/diff/report?fmt=${fmt}${diffQuery(options).replace("?", "&")}`,
 };
+
+function diffQuery({ baseline, latencyThreshold, latencyPct } = {}) {
+  const params = new URLSearchParams();
+  if (baseline != null) params.set("baseline", baseline);
+  if (latencyThreshold != null) params.set("latency_threshold", latencyThreshold);
+  if (latencyPct != null) params.set("latency_pct", latencyPct);
+  return params.toString() ? `?${params}` : "";
+}
 
 // ------------------------------------------------------------ websocket
 
