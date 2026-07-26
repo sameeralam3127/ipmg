@@ -1,19 +1,12 @@
+"""Terminal summaries for a finished scan and for the stored history."""
+
+from __future__ import annotations
+
 from typing import Any, Dict, Sequence
 
-from rich.columns import Columns
-from rich.console import Group
-from rich.panel import Panel
-from rich.table import Table
 from rich.text import Text
 
-from ipmg.utils.helpers import console
-
-SCAN_STATE_STYLES = {
-    "complete": "success",
-    "running": "warning",
-    "cancelled": "muted",
-    "failed": "danger",
-}
+from ipmg.reporting import ui
 
 STATUS_STYLES = {
     "Active": "ipmg.status.active",
@@ -24,119 +17,117 @@ STATUS_STYLES = {
     "Invalid IP": "ipmg.status.invalid",
 }
 
+SCAN_STATE_STYLES = {
+    "complete": "success",
+    "running": "warning",
+    "cancelled": "muted",
+    "failed": "danger",
+}
+
+
+def _status_style(status: str) -> str:
+    return STATUS_STYLES.get(status, "info")
+
+
+def status_dot(status: str) -> Text:
+    """A coloured bullet plus the status name."""
+    text = Text(f"{ui.glyph('dot')} ", style=_status_style(status))
+    text.append(status, style="ipmg.value")
+    return text
+
+
+def _average_latency(df) -> float | None:
+    if "Latency" not in df or "Status" not in df:
+        return None
+    active = df.loc[df["Status"] == "Active", "Latency"].dropna()
+    return float(active.mean()) if len(active) else None
+
 
 def print_summary(df, batch_timestamp, duration_seconds: float) -> None:
-    summary = df["Status"].value_counts().to_dict()
+    """Status breakdown plus a one-line scorecard for a finished scan."""
+    counts = df["Status"].value_counts().to_dict() if "Status" in df else {}
     total = len(df)
-    active = summary.get("Active", 0)
-    successful = active + summary.get("Unreachable", 0)
-    active_rate = (active / total) * 100 if total else 0
-    completion_rate = (successful / total) * 100 if total else 0
+    active = counts.get("Active", 0)
+    active_rate = (active / total) * 100 if total else 0.0
 
-    console.rule(Text("IPMG Summary", style="ipmg.accent"))
+    ui.blank()
+    ui.heading("Results")
 
-    table = Table(show_header=True, header_style="bold bright_white")
-    table.add_column("Status", style="bold")
-    table.add_column("Count", justify="right", style="bright_white")
+    if not total:
+        ui.note("No hosts were scanned.")
+        return
 
-    for status, count in summary.items():
-        table.add_row(
-            f"[{STATUS_STYLES.get(status, 'info')}]{status}[/{STATUS_STYLES.get(status, 'info')}]",
+    grid = ui.table("", "", "", "", justify=["left", "right", "left", "right"])
+    for status, count in sorted(counts.items(), key=lambda item: (-item[1], item[0])):
+        grid.add_row(
+            status_dot(status),
             str(count),
+            ui.bar(count / total, style=_status_style(status)),
+            ui.format_percent((count / total) * 100),
         )
+    ui.print_table(grid)
 
-    metrics = Columns(
+    average = _average_latency(df)
+    ui.blank()
+    ui.joined(
         [
-            Panel.fit(
-                Group(
-                    Text(str(total), style="bold bright_white"),
-                    Text("Total Hosts", style="muted"),
-                ),
-                border_style="ipmg.accent",
-            ),
-            Panel.fit(
-                Group(
-                    Text(f"{active_rate:.2f}%", style="ipmg.status.active"),
-                    Text("Active Rate", style="muted"),
-                ),
-                border_style="ipmg.status.active",
-            ),
-            Panel.fit(
-                Group(
-                    Text(f"{completion_rate:.2f}%", style="info"),
-                    Text("Completion Rate", style="muted"),
-                ),
-                border_style="info",
-            ),
-            Panel.fit(
-                Group(
-                    Text(f"{duration_seconds:.2f}s", style="warning"),
-                    Text("Scan Duration", style="muted"),
-                ),
-                border_style="warning",
-            ),
-        ],
-        equal=True,
-        expand=True,
+            ui.plural(total, "host"),
+            f"{ui.format_percent(active_rate)} active",
+            f"{ui.format_latency(average)} avg" if average is not None else "no latency data",
+            ui.format_duration(duration_seconds),
+            batch_timestamp.isoformat(sep=" ", timespec="seconds"),
+        ]
     )
 
-    console.print(table)
-    console.print(metrics)
-    console.print(
-        Panel.fit(
-            Text(
-                batch_timestamp.isoformat(sep=" ", timespec="seconds"),
-                style="bold bright_white",
-            ),
-            title="[ipmg.accent]Batch Timestamp[/ipmg.accent]",
-            border_style="ipmg.accent",
-        )
-    )
+
+def _short_timestamp(value: Any) -> str:
+    """Drop the seconds: history is browsed by date and time, not by second."""
+    text = str(value or "")
+    return text[:16] if len(text) == 19 and text[13] == ":" else text
 
 
 def _active_rate(scan: Dict[str, Any]) -> str:
     total = scan.get("total") or 0
     active = (scan.get("status_counts") or {}).get("Active", 0)
-    return f"{(active / total) * 100:.1f}%" if total else "-"
+    return ui.format_percent((active / total) * 100) if total else "-"
 
 
 def print_scan_history(scans: Sequence[Dict[str, Any]]) -> None:
     """Render stored scans, newest first."""
-    console.rule(Text("IPMG Scan History", style="ipmg.accent"))
+    ui.blank()
+    ui.heading("Scan history")
 
     if not scans:
-        console.print(
-            Panel.fit(
-                Text("No scans stored yet. Run a scan to build history.", style="warning"),
-                border_style="warning",
-            )
-        )
+        ui.note(f"No scans stored yet {ui.glyph('dash')} run a scan to start building history.")
         return
 
-    table = Table(show_header=True, header_style="bold bright_white")
-    table.add_column("#", justify="right", style="bold")
-    table.add_column("Started")
-    table.add_column("Source")
-    table.add_column("Hosts", justify="right")
-    table.add_column("Active", justify="right")
-    table.add_column("Avg Latency", justify="right")
-    table.add_column("Duration", justify="right")
-    table.add_column("State")
-
+    grid = ui.table(
+        "#",
+        "Started",
+        "Source",
+        "Hosts",
+        "Active",
+        "Latency",
+        "Duration",
+        "State",
+        justify=["right", "left", "left", "right", "right", "right", "right", "left"],
+        # Source is the only column allowed to shrink on a narrow terminal.
+        min_widths=[1, 16, None, 5, 6, 8, 8, 9],
+    )
     for scan in scans:
         state = str(scan.get("status", ""))
         style = SCAN_STATE_STYLES.get(state, "info")
-        avg_latency = scan.get("avg_latency")
-        duration = scan.get("duration_s")
-        table.add_row(
+        grid.add_row(
             str(scan.get("id", "")),
-            str(scan.get("started_at", "")),
+            _short_timestamp(scan.get("started_at")),
             str(scan.get("source", "")),
             str(scan.get("total", 0)),
             _active_rate(scan),
-            f"{avg_latency:.1f} ms" if avg_latency is not None else "-",
-            f"{duration:.1f}s" if duration is not None else "-",
-            f"[{style}]{state}[/{style}]",
+            ui.format_latency(scan.get("avg_latency")),
+            ui.format_duration(scan.get("duration_s")),
+            Text(state, style=style),
         )
+    ui.print_table(grid)
 
-    console.print(table)
+    ui.blank()
+    ui.joined([ui.plural(len(scans), "scan")])

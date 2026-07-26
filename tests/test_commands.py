@@ -114,7 +114,7 @@ def test_history_command_lists_scans(db_path, capsys):
     assert commands.run(["history", "--db", db_path]) == commands.EXIT_OK
 
     out = capsys.readouterr().out
-    assert "IPMG Scan History" in out
+    assert "Scan history" in out
     assert "targets.csv" in out
 
 

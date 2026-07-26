@@ -1,32 +1,25 @@
+"""The authorization notice shown before IPMG sends any probe."""
+
+from __future__ import annotations
+
 import logging
 
-from rich.panel import Panel
-from rich.text import Text
-
-from ipmg.utils.helpers import console
+from ipmg.reporting import ui
 
 _DISCLAIMER_SHOWN = False
 
+DISCLAIMER = "ICMP probes only {dash} scan only networks you are authorized to scan."
 
-DISCLAIMER = """
-IPMG sends ICMP ping traffic.
-Only use on networks where you have explicit authorization.
-"""
+log = logging.getLogger(__name__)
 
 
 def print_disclaimer_once() -> None:
+    """Print the authorization notice the first time a command probes hosts."""
     global _DISCLAIMER_SHOWN
 
     if _DISCLAIMER_SHOWN:
         return
 
     _DISCLAIMER_SHOWN = True
-    logging.warning("IPMG disclaimer displayed")
-    console.print(
-        Panel(
-            Text(DISCLAIMER.strip(), style="warning"),
-            title="[ipmg.accent]Security Notice[/ipmg.accent]",
-            border_style="warning",
-            expand=False,
-        )
-    )
+    log.debug("authorization notice displayed")
+    ui.note(DISCLAIMER.format(dash=ui.glyph("dash")))

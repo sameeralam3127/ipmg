@@ -85,13 +85,15 @@ class ScanRef:
     started_at: str = ""
     source: str = ""
 
-    def display(self) -> str:
+    def display(self, separator: str = "·") -> str:
+        """Human-readable identity; the caller picks a separator its output
+        can render (reports use UTF-8, terminals may not)."""
         parts = [f"#{self.id}" if self.id is not None else self.label or "scan"]
         if self.started_at:
             parts.append(self.started_at)
         if self.source:
             parts.append(self.source)
-        return " · ".join(part for part in parts if part)
+        return f" {separator} ".join(part for part in parts if part)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
