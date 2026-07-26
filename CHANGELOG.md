@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.8.0 (2026-07-26)
+
+### Features
+
+- **cli**: Flat, modern terminal interface ([#18](https://github.com/sameeralam3127/ipmg/pull/18),
+  [`7c247c2`](https://github.com/sameeralam3127/ipmg/commit/7c247c2b0d32d856fcffa335596b131d6212aa50))
+
+
 ## v1.7.0 (2026-07-26)
 
 ### Bug Fixes
