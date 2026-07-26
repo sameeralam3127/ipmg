@@ -2,11 +2,11 @@ from pathlib import Path
 from typing import Iterable
 
 import pandas as pd
-from rich.panel import Panel
 
 from ipmg.core.ping import validate_ip
 from ipmg.exceptions import FileIOError
-from ipmg.utils.helpers import console, timestamp_str
+from ipmg.reporting import ui
+from ipmg.utils.helpers import timestamp_str
 
 SUPPORTED_INPUT_SUFFIXES = {".xlsx", ".xls", ".csv", ".txt", ".list"}
 MAX_EXPANDED_TARGETS = 65_536
@@ -272,12 +272,7 @@ def save_results(df, base: str, formats: list[str]) -> list[str]:
         saved_paths.append(output_path)
 
     if saved_paths:
-        console.print(
-            Panel.fit(
-                "\n".join(f"[success]-[/success] {path}" for path in saved_paths),
-                title="[success]Saved Reports[/success]",
-                border_style="success",
-            )
-        )
+        ui.blank()
+        ui.field_list("Saved", saved_paths)
 
     return saved_paths

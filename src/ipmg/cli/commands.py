@@ -15,11 +15,12 @@ from ipmg.cli.parser import (
 from ipmg.core.diff import DiffOptions
 from ipmg.core.security import print_disclaimer_once
 from ipmg.exceptions import IPMGError
+from ipmg.reporting import ui
 from ipmg.reporting.diff_report import export_diff, print_diff
 from ipmg.reporting.summary import print_scan_history
 from ipmg.services.history_service import HistoryService
 from ipmg.services.scan_service import run_scan
-from ipmg.utils.helpers import configure_logging, console
+from ipmg.utils.helpers import configure_logging
 
 EXIT_OK = 0
 EXIT_ERROR = 1
@@ -32,6 +33,7 @@ log = logging.getLogger(__name__)
 def _scan_command(argv: List[str]) -> int:
     args = build_parser().parse_args(argv)
     configure_logging(args.verbose)
+    ui.header("scan")
     print_disclaimer_once()
     run_scan(args)
     return EXIT_OK
@@ -40,6 +42,7 @@ def _scan_command(argv: List[str]) -> int:
 def _dashboard_command(argv: List[str]) -> int:
     args = build_dashboard_parser().parse_args(argv)
     configure_logging(args.verbose)
+    ui.header("dashboard")
     print_disclaimer_once()
 
     # Imported lazily so plain CLI scans do not pay for the web stack.
@@ -57,6 +60,7 @@ def _dashboard_command(argv: List[str]) -> int:
 def _history_command(argv: List[str]) -> int:
     args = build_history_parser().parse_args(argv)
     configure_logging(args.verbose)
+    ui.header("history")
 
     history = HistoryService.open(args.db)
     print_scan_history(history.list_scans(limit=args.limit, source=args.source))
@@ -66,9 +70,11 @@ def _history_command(argv: List[str]) -> int:
 def _diff_command(argv: List[str]) -> int:
     args = build_diff_parser().parse_args(argv)
     configure_logging(args.verbose)
+    ui.header("diff")
 
     if len(args.scans) > 2:
-        console.print("[danger]Provide at most two scan ids: BASELINE TARGET.[/danger]")
+        ui.blank()
+        ui.error("Provide at most two scan ids: BASELINE TARGET.")
         return EXIT_ERROR
 
     history = HistoryService.open(args.db)
@@ -111,11 +117,13 @@ def run(argv: Optional[List[str]] = None) -> int:
     try:
         return handler(handler_argv)
     except IPMGError as exc:
-        console.print(f"[danger]Error:[/danger] {exc}")
+        ui.blank()
+        ui.error(str(exc))
         log.debug("command failed", exc_info=True)
         return EXIT_ERROR
     except KeyboardInterrupt:
-        console.print("\n[warning]Interrupted.[/warning]")
+        ui.blank()
+        ui.warn("Interrupted.")
         return EXIT_INTERRUPTED
 
 

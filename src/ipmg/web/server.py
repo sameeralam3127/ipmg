@@ -9,11 +9,10 @@ from pathlib import Path
 from typing import Optional
 
 import uvicorn
-from rich.panel import Panel
 
-from ipmg.utils.helpers import console
+from ipmg.infrastructure.database import DEFAULT_DB_PATH, Database
+from ipmg.reporting import ui
 from ipmg.web.app import create_app
-from ipmg.web.db import DEFAULT_DB_PATH, Database
 
 
 def _display_host(host: str) -> str:
@@ -35,17 +34,16 @@ def run_dashboard(
     app = create_app(database)
     url = f"http://{_display_host(host)}:{port}"
 
-    console.print(
-        Panel.fit(
-            (
-                "[ipmg.accent]Starting IPMG Dashboard...[/ipmg.accent]\n\n"
-                f"Dashboard Available:\n\n[bold bright_white]{url}[/bold bright_white]\n\n"
-                "Press CTRL+C to stop."
-            ),
-            title="[ipmg.accent]IPMG Dashboard[/ipmg.accent]",
-            border_style="ipmg.accent",
-        )
+    ui.blank()
+    ui.fields(
+        [
+            ("Local", url),
+            ("History", database.path),
+        ]
     )
+    ui.blank()
+    ui.note("Press CTRL+C to stop.")
+    ui.blank()
 
     if open_browser:
         threading.Timer(1.0, webbrowser.open, args=(url,)).start()

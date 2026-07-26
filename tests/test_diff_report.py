@@ -86,12 +86,14 @@ def test_print_diff_renders_without_error(diff, capsys):
     print_diff(diff)
     out = capsys.readouterr().out
 
-    assert "IPMG Change Report" in out
+    assert "Changes" in out
+    assert "Host offline" in out
     assert "10.0.0.1" in out
+    assert "1 critical" in out
 
 
 def test_print_diff_limit_is_reported(diff, capsys):
     print_diff(diff, limit=1)
     out = capsys.readouterr().out
 
-    assert f"Showing 1 of {len(diff.changes)} changes." in out
+    assert f"{len(diff.changes)} changes (1 shown)" in out

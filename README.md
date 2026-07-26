@@ -218,8 +218,27 @@ Exit codes: `0` success, `1` error, `2` changes detected
 
 ## Output
 
-Every scan prints a color-coded summary and writes result files
-(e.g. `results_20260628_120000.xlsx`). Each row includes:
+```text
+  ipmg 1.7.0  ·  scan
+  ICMP probes only — scan only networks you are authorized to scan.
+
+  Source   targets.txt
+  Targets  3 hosts
+  Config   50 threads · 2s timeout · 1 ping · reverse DNS
+
+  Results
+  ● Active   2  ━━━━━━━━━━━━━━━───────  66.7%
+  ● Timeout  1  ━━━━━━━───────────────  33.3%
+
+  3 hosts · 66.7% active · 5.8 ms avg · 3.08s · 2026-07-26 23:13:25
+
+  Saved    results_20260726_231328.csv
+```
+
+Colors follow `NO_COLOR`, the progress bar is hidden when output is piped,
+and the symbols fall back to ASCII on terminals that cannot render them.
+
+Result files (e.g. `results_20260628_120000.xlsx`) contain one row per host:
 
 | IP Address | Status | Latency | Hostname   | Batch Timestamp     | Scan Duration (s) |
 | ---------- | ------ | ------- | ---------- | ------------------- | ----------------- |
