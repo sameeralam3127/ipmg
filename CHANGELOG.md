@@ -2,6 +2,28 @@
 
 <!-- version list -->
 
+## v1.7.0 (2026-07-26)
+
+### Bug Fixes
+
+- **discover**: Detect the outbound interface instead of the hostname address
+  ([#17](https://github.com/sameeralam3127/ipmg/pull/17),
+  [`f4fb55c`](https://github.com/sameeralam3127/ipmg/commit/f4fb55c4131d6e6f929426ae17a02d484fa0456b))
+
+- **ping**: Use milliseconds for the ping timeout on macOS and BSD
+  ([#17](https://github.com/sameeralam3127/ipmg/pull/17),
+  [`f4fb55c`](https://github.com/sameeralam3127/ipmg/commit/f4fb55c4131d6e6f929426ae17a02d484fa0456b))
+
+### Features
+
+- Compare scan history and detect changes ([#17](https://github.com/sameeralam3127/ipmg/pull/17),
+  [`f4fb55c`](https://github.com/sameeralam3127/ipmg/commit/f4fb55c4131d6e6f929426ae17a02d484fa0456b))
+
+- Compare scan history and detect changes (closes #11)
+  ([#17](https://github.com/sameeralam3127/ipmg/pull/17),
+  [`f4fb55c`](https://github.com/sameeralam3127/ipmg/commit/f4fb55c4131d6e6f929426ae17a02d484fa0456b))
+
+
 ## v1.6.1 (2026-07-13)
 
 ### Bug Fixes
