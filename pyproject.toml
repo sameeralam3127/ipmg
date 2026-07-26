@@ -16,7 +16,7 @@ name = "ipmg"
 version = "1.6.1"  # Managed automatically by semantic-release
 description = "IP Management & Ping Monitoring CLI Tool"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 license = "MIT"
 license-files = ["LICENSE"]
 
@@ -33,7 +33,6 @@ keywords = ["ip", "network", "ping", "monitoring", "cli"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",

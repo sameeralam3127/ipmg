@@ -1,5 +1,5 @@
 from ipmg.core.engine import HostResult
-from ipmg.web.db import Database
+from ipmg.web.db import Database  # backwards-compatible alias
 
 
 def make_db(tmp_path):

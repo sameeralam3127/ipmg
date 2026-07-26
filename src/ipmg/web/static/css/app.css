@@ -266,6 +266,8 @@ tr.click { cursor: pointer; }
 .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
 .toolbar input, .toolbar select { width: auto; }
 .toolbar .spacer { flex: 1; }
+.toolbar .control { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--text-2); font-size: 12.5px; }
+.toolbar .exports { display: inline-flex; gap: 8px; flex-wrap: wrap; }
 
 .empty { color: var(--muted); text-align: center; padding: 32px 0; }
 

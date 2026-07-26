@@ -22,21 +22,35 @@ from pydantic import BaseModel, Field
 from starlette.websockets import WebSocketDisconnect
 
 from ipmg import __version__
-from ipmg.core.engine import ScanConfig
-from ipmg.exceptions import FileIOError
+from ipmg.core.diff import DiffOptions
+from ipmg.core.engine import HostResult, ScanConfig
+from ipmg.exceptions import FileIOError, HistoryError, ReportError
+from ipmg.infrastructure.database import DEFAULT_DB_PATH, Database
 from ipmg.infrastructure.file_io import (
     SUPPORTED_INPUT_SUFFIXES,
     build_markdown_report,
     load_targets,
     parse_manual_targets,
 )
-from ipmg.web.db import DEFAULT_DB_PATH, Database
+from ipmg.reporting.diff_report import DIFF_FORMATS, render_diff
+from ipmg.reporting.frames import results_dataframe
+from ipmg.services.history_service import HistoryService
 from ipmg.web.manager import ScanManager
 
 STATIC_DIR = Path(__file__).parent / "static"
 
+#: Uploaded target files are small by nature; cap them so a single request
+#: cannot exhaust memory on the machine running the dashboard.
+MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+
 REPORT_MEDIA_TYPES = {
     "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "csv": "text/csv",
+    "json": "application/json",
+    "md": "text/markdown",
+}
+
+DIFF_MEDIA_TYPES = {
     "csv": "text/csv",
     "json": "application/json",
     "md": "text/markdown",
@@ -83,19 +97,16 @@ def _parse_scan_targets(request: ScanRequest) -> List[str]:
 
 
 def _results_dataframe(scan: Dict[str, Any], rows: List[Dict[str, Any]]) -> pd.DataFrame:
-    return pd.DataFrame(
-        [
-            {
-                "IP Address": row["ip"],
-                "Status": row["status"],
-                "Latency": row["latency"],
-                "Hostname": row["hostname"],
-                "Batch Timestamp": scan["started_at"],
-                "Scan Duration (s)": scan["duration_s"],
-            }
-            for row in rows
-        ]
-    )
+    results = [
+        HostResult(
+            ip=row["ip"],
+            status=row["status"],
+            latency=row["latency"],
+            hostname=row["hostname"] or "",
+        )
+        for row in rows
+    ]
+    return results_dataframe(results, scan["started_at"], scan["duration_s"])
 
 
 def _render_report(df: pd.DataFrame, fmt: str) -> bytes:
@@ -211,10 +222,84 @@ def _register_report_routes(api: APIRouter, database: Database) -> None:
         )
 
 
+async def _read_upload(file: UploadFile) -> bytes:
+    """Read an upload, refusing anything above :data:`MAX_UPLOAD_BYTES`."""
+    chunks: List[bytes] = []
+    size = 0
+    while True:
+        chunk = await file.read(64 * 1024)
+        if not chunk:
+            break
+        size += len(chunk)
+        if size > MAX_UPLOAD_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File is larger than the {MAX_UPLOAD_BYTES // (1024 * 1024)} MB limit.",
+            )
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+def _register_diff_routes(api: APIRouter, history: HistoryService) -> None:
+    def _diff(
+        scan_id: int,
+        baseline: Optional[int],
+        latency_threshold: float,
+        latency_pct: float,
+    ):
+        options = DiffOptions(
+            latency_abs_ms=max(latency_threshold, 0.0),
+            latency_pct=max(latency_pct, 0.0),
+        )
+        try:
+            if baseline is None:
+                return history.compare_with_previous(scan_id, options=options)
+            return history.compare(baseline, scan_id, options=options)
+        except HistoryError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @api.get("/scans/{scan_id}/diff")
+    def scan_diff(
+        scan_id: int,
+        baseline: Optional[int] = None,
+        latency_threshold: float = 5.0,
+        latency_pct: float = 25.0,
+    ) -> Dict[str, Any]:
+        return _diff(scan_id, baseline, latency_threshold, latency_pct).to_dict()
+
+    @api.get("/scans/{scan_id}/diff/report")
+    def scan_diff_report(
+        scan_id: int,
+        fmt: str = "md",
+        baseline: Optional[int] = None,
+        latency_threshold: float = 5.0,
+        latency_pct: float = 25.0,
+    ) -> Response:
+        if fmt not in DIFF_MEDIA_TYPES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported format: {fmt}. Supported: {', '.join(DIFF_FORMATS)}.",
+            )
+
+        diff = _diff(scan_id, baseline, latency_threshold, latency_pct)
+        try:
+            content = render_diff(diff, fmt)
+        except ReportError as exc:  # pragma: no cover - guarded by the check above
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        baseline_id = diff.baseline.id if diff.baseline.id is not None else "baseline"
+        filename = f"ipmg_changes_{baseline_id}_to_{scan_id}.{fmt}"
+        return Response(
+            content=content.encode("utf-8"),
+            media_type=DIFF_MEDIA_TYPES[fmt],
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+
 def _register_upload_route(api: APIRouter) -> None:
     @api.post("/upload")
     async def upload_targets(file: UploadFile) -> Dict[str, Any]:
-        payload = await file.read()
+        payload = await _read_upload(file)
         try:
             targets = _parse_upload(file.filename or "", payload)
         except FileIOError as exc:
@@ -252,6 +337,7 @@ def _register_websocket(app: FastAPI, manager: ScanManager) -> None:
 def create_app(db: Optional[Database] = None) -> FastAPI:
     database = db if db is not None else Database(DEFAULT_DB_PATH)
     manager = ScanManager(database)
+    history = HistoryService(database)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -261,11 +347,13 @@ def create_app(db: Optional[Database] = None) -> FastAPI:
     app = FastAPI(title="IPMG Dashboard", version=__version__, lifespan=lifespan)
     app.state.db = database
     app.state.manager = manager
+    app.state.history = history
 
     api = APIRouter(prefix="/api/v1")
     _register_overview_routes(api, database)
     _register_scan_routes(api, database, manager)
     _register_report_routes(api, database)
+    _register_diff_routes(api, history)
     _register_upload_route(api)
     app.include_router(api)
 

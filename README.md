@@ -1,7 +1,7 @@
 # IPMG — IP Management & Ping Monitoring Tool
 
 [![PyPI](https://img.shields.io/pypi/v/ipmg)](https://pypi.org/project/ipmg/)
-![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)
+![Python Version](https://img.shields.io/badge/python-3.9%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 [![Publish](https://github.com/sameeralam3127/ipmg/actions/workflows/publish.yml/badge.svg)](https://github.com/sameeralam3127/ipmg/actions/workflows/publish.yml)
 
@@ -74,12 +74,69 @@ ipmg --input targets.txt
 # Resolve hostnames and export CSV + a readable Markdown report
 ipmg --input targets.txt --resolve --formats md csv
 
+# Scan and report what changed since the previous scan
+ipmg --input targets.txt --compare
+
+# List stored scans, then compare any two of them
+ipmg history
+ipmg diff 12 14
+
 # Open the local web dashboard
 ipmg dashboard
 ```
 
 Running plain `ipmg` uses `ip_list.xlsx` as input and creates a sample file
 if it does not exist.
+
+---
+
+## Change detection
+
+Every scan is stored in a local SQLite history (`~/.ipmg/dashboard.db`),
+shared by the CLI and the dashboard. IPMG can then tell you what moved
+between any two scans.
+
+```bash
+ipmg --input targets.txt --compare                   # compare with the previous scan
+ipmg diff                                            # compare the two latest scans
+ipmg diff 14                                         # compare scan 14 with the one before it
+ipmg diff 12 14                                      # compare two specific scans
+ipmg diff --diff-formats md json                     # export the change summary
+ipmg diff --fail-on-change                           # exit 2 when anything changed (CI)
+ipmg history --limit 10                              # list stored scans
+```
+
+Detected changes:
+
+| Change | Severity | Meaning |
+| --- | --- | --- |
+| Host offline | critical | Reachable in the baseline, not reachable now |
+| New host | warning | An IP that the baseline never saw |
+| Host removed | warning | An IP the current scan no longer covers |
+| IP address changed | warning | A known hostname moved to a different IP |
+| Service changed | warning | Status moved between failure modes (e.g. `Timeout` → `Unreachable`) |
+| Host back online | info | Recovered since the baseline |
+| Hostname changed | info | Same IP, different PTR record |
+| Latency changed | info | Latency moved past both thresholds |
+
+A latency change is only reported when it clears **both** `--latency-threshold`
+(default 5 ms) and `--latency-pct` (default 25%), which keeps normal jitter out
+of the report.
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--compare` | off | Print a change report after the scan |
+| `--compare-any-source` | off | Allow a baseline from a different target source |
+| `--no-history` | off | Do not store the scan |
+| `--db` | `~/.ipmg/dashboard.db` | History database location |
+| `--diff-formats` | none | Export the change summary as `md`, `json`, `csv` |
+| `--diff-output` | `changes` | Base filename for exported change summaries |
+| `--latency-threshold` | `5` | Minimum latency delta in ms |
+| `--latency-pct` | `25` | Minimum relative latency change |
+| `--fail-on-change` | off | `ipmg diff` exits 2 when changes are found |
+
+By default a scan is compared against the previous scan **of the same target
+source**, so file-based and `--discover` runs do not get mixed up.
 
 ---
 
@@ -99,6 +156,8 @@ is loaded from a CDN. It gives you:
 - **Live Monitor** — real-time progress and results over WebSockets
 - **History** — every scan stored locally in SQLite (`~/.ipmg/dashboard.db`),
   searchable and downloadable as XLSX/CSV/JSON/Markdown
+- **Changes** — pick any two scans and see new/offline hosts, IP and hostname
+  moves, and latency shifts; export the summary as Markdown/JSON/CSV
 - **Inventory** — every host seen across scans, with last status and export
 
 | Flag | Default | Description |
@@ -126,7 +185,12 @@ is loaded from a CDN. It gives you:
 | `--count` | `1` | Pings per host |
 | `--threads` | `50` | Parallel workers |
 | `--interval` | off | Repeat the scan every N minutes |
+| `--compare` | off | Report what changed since the previous scan |
+| `--no-history` | off | Do not store the scan in the history database |
 | `--verbose` | off | Debug logging |
+
+Exit codes: `0` success, `1` error, `2` changes detected
+(`ipmg diff --fail-on-change`), `130` interrupted.
 
 ---
 

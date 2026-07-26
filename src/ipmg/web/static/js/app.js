@@ -2,6 +2,7 @@
 
 import { connect } from "./api.js";
 import {
+  changesView,
   dashboardView,
   historyView,
   inventoryView,
@@ -16,6 +17,7 @@ const routes = [
   { pattern: /^#\/monitor(?:\/(\d+))?$/, name: "monitor", view: monitorView },
   { pattern: /^#\/history$/, name: "history", view: historyView },
   { pattern: /^#\/scan\/(\d+)$/, name: "history", view: scanDetailView },
+  { pattern: /^#\/changes(?:\/(\d+))?(?:\/(\d+))?$/, name: "changes", view: changesView },
   { pattern: /^#\/inventory$/, name: "inventory", view: inventoryView },
 ];
 
@@ -33,8 +35,12 @@ async function render() {
     link.classList.toggle("active", link.dataset.route === route.name);
   });
 
+  const params = (match ? match.slice(1) : []).map((value) =>
+    value === undefined ? undefined : Number(value)
+  );
+
   try {
-    await route.view(root, match && match[1] ? Number(match[1]) : undefined);
+    await route.view(root, ...params);
   } catch (err) {
     root.replaceChildren();
     const banner = document.createElement("div");

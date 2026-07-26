@@ -27,3 +27,7 @@ class FileIOError(IPMGError):
 
 class ReportError(IPMGError):
     """Raised when report generation or export fails."""
+
+
+class HistoryError(IPMGError):
+    """Raised when scan history cannot be stored, read, or compared."""
