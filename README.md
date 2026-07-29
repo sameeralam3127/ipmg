@@ -214,12 +214,15 @@ Exit codes: `0` success, `1` error, `2` changes detected
 - **Command line** — a literal IP (`8.8.8.8`), CIDR block (`10.0.0.0/24`),
   or IP range (`10.0.0.1-10.0.0.200`)
 
+Duplicate targets are removed automatically, and one scan expands to at most
+65,536 hosts — larger CIDR blocks or ranges are rejected up front.
+
 ---
 
 ## Output
 
 ```text
-  ipmg 1.7.0  ·  scan
+  ipmg 1.8.1  ·  scan
   ICMP probes only — scan only networks you are authorized to scan.
 
   Source   targets.txt
@@ -248,6 +251,29 @@ Status values: `Active`, `Inactive`, `Timeout`, `Unreachable`, `Invalid IP`, `Er
 
 The `md` format produces a shareable Markdown report with a status summary
 table — handy for tickets, handoffs, and incident timelines.
+
+---
+
+## Security
+
+IPMG is built for scanning networks you are authorized to scan, and the
+tool itself is hardened accordingly:
+
+- Pings run as a direct process call (no shell), and every target is
+  validated as an IP address first
+- The dashboard binds to `127.0.0.1` by default and serves everything
+  locally — no CDN assets, no outbound requests
+- WebSocket connections are origin-checked, so a web page you happen to
+  visit cannot connect to the local dashboard and read your scan results
+- Uploads are capped at 5 MB and one scan expands to at most 65,536 hosts,
+  so a bad input file cannot exhaust memory
+- All database access uses parameterized SQL
+
+If you bind to a non-local address with `--host`, anyone who can reach that
+interface can start scans and read results — put a reverse proxy with
+authentication in front of it.
+
+Found a vulnerability? See [SECURITY.md](SECURITY.md) for how to report it.
 
 ---
 
