@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.8.1 (2026-07-29)
+
+### Bug Fixes
+
+- **security**: Harden dashboard and target parsing, remove dead code
+  ([`e6d36f2`](https://github.com/sameeralam3127/ipmg/commit/e6d36f20c1c4c78f5c7b59a8e8d980794436298e))
+
+### Documentation
+
+- Add security section to README and fill in SECURITY.md
+  ([`78a689b`](https://github.com/sameeralam3127/ipmg/commit/78a689b68ecbf52980684c37e38032e482f1b87c))
+
+
 ## v1.8.0 (2026-07-26)
 
 ### Features
