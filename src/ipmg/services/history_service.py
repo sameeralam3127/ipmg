@@ -11,7 +11,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
-from ipmg.core.diff import DiffOptions, HostSnapshot, ScanDiff, ScanRef, compare_snapshots
+from ipmg.core.diff import DiffOptions, ScanDiff, ScanRef, compare_snapshots
 from ipmg.core.engine import HostResult, ScanConfig
 from ipmg.exceptions import HistoryError
 from ipmg.infrastructure.database import DEFAULT_DB_PATH, Database
@@ -106,42 +106,6 @@ class HistoryService:
             )
         target_id, baseline_id = recent[0], recent[1]
         return self.compare(baseline_id, target_id, options=options)
-
-    def compare_results(
-        self,
-        results: Sequence[HostResult],
-        baseline_id: Optional[int] = None,
-        source: Optional[str] = None,
-        options: Optional[DiffOptions] = None,
-        label: str = "current scan",
-    ) -> ScanDiff:
-        """Compare in-memory results against a stored baseline."""
-        if baseline_id is None:
-            recent = self._db.latest_scan_ids(limit=1, source=source)
-            if not recent:
-                raise HistoryError(
-                    "No previous scan is stored to compare against. "
-                    "The current scan has been saved as the new baseline."
-                )
-            baseline_id = recent[0]
-
-        baseline_ref = self._require_ref(baseline_id)
-        current = [
-            HostSnapshot(
-                ip=result.ip,
-                status=result.status,
-                latency=result.latency,
-                hostname=result.hostname,
-            )
-            for result in results
-        ]
-        return compare_snapshots(
-            self._db.snapshot(baseline_id),
-            current,
-            options=options,
-            baseline_ref=baseline_ref,
-            current_ref=ScanRef(label=label, source=source or ""),
-        )
 
     # ------------------------------------------------------------ helpers
 

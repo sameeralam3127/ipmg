@@ -25,15 +25,11 @@ def validate_ip(ip: str) -> bool:
         return False
 
 
-def _parse_latency(output: str) -> Optional[float]:
+def parse_latency(output: str) -> Optional[float]:
     system = platform.system().lower()
     pattern = _WINDOWS_LATENCY if system == "windows" else _POSIX_LATENCY
     match = pattern.search(output)
     return float(match.group(1)) if match else None
-
-
-def parse_latency(output: str) -> Optional[float]:
-    return _parse_latency(output)
 
 
 def build_ping_command(
@@ -70,7 +66,7 @@ def ping_ip(ip: str, timeout: int, count: int) -> Tuple[str, Optional[float]]:
             timeout=timeout * count + 1,
         )
 
-        latency = _parse_latency(result.stdout)
+        latency = parse_latency(result.stdout)
 
         if result.returncode == 0:
             return "Active", latency

@@ -13,6 +13,7 @@ import tempfile
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlsplit
 
 import pandas as pd
 from fastapi import APIRouter, FastAPI, HTTPException, UploadFile, WebSocket
@@ -50,11 +51,10 @@ REPORT_MEDIA_TYPES = {
     "md": "text/markdown",
 }
 
-DIFF_MEDIA_TYPES = {
-    "csv": "text/csv",
-    "json": "application/json",
-    "md": "text/markdown",
-}
+DIFF_MEDIA_TYPES = {fmt: REPORT_MEDIA_TYPES[fmt] for fmt in DIFF_FORMATS}
+
+#: Hostnames that count as "this machine" when checking WebSocket origins.
+_LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
 
 class ScanRequest(BaseModel):
@@ -304,15 +304,41 @@ def _register_upload_route(api: APIRouter) -> None:
             targets = _parse_upload(file.filename or "", payload)
         except FileIOError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-        except (ValueError, UnicodeDecodeError) as exc:
+        except Exception as exc:
+            # Corrupt uploads raise parser-specific errors (BadZipFile,
+            # ParserError, ...); every one of them is a client error, not a 500.
             raise HTTPException(status_code=400, detail=f"Could not parse file: {exc}") from exc
 
         return {"filename": file.filename, "count": len(targets), "targets": targets}
 
 
+def _origin_allowed(websocket: WebSocket) -> bool:
+    """Reject cross-site WebSocket connections.
+
+    Browsers do not apply the same-origin policy to WebSockets, so without
+    this check any web page could connect to the local dashboard and read
+    live scan results. Non-browser clients (no Origin header) are allowed.
+    """
+    origin = websocket.headers.get("origin")
+    if origin is None:
+        return True
+    try:
+        origin_host = urlsplit(origin).hostname
+    except ValueError:
+        return False
+    server_host = websocket.url.hostname
+    if origin_host == server_host:
+        return True
+    return origin_host in _LOOPBACK_HOSTS and server_host in _LOOPBACK_HOSTS
+
+
 def _register_websocket(app: FastAPI, manager: ScanManager) -> None:
     @app.websocket("/api/v1/ws")
     async def websocket_events(websocket: WebSocket) -> None:
+        if not _origin_allowed(websocket):
+            await websocket.close(code=1008)
+            return
+
         await websocket.accept()
         queue = manager.subscribe()
 

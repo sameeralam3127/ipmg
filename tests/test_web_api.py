@@ -136,6 +136,14 @@ def test_cancel_requires_running_scan(client):
     assert client.post(f"/api/v1/scans/{scan_id}/cancel").status_code == 409
 
 
+def test_websocket_rejects_cross_origin(client):
+    with pytest.raises(Exception):
+        with client.websocket_connect(
+            "/api/v1/ws", headers={"origin": "http://evil.example"}
+        ) as websocket:
+            websocket.receive_json()
+
+
 def test_websocket_receives_scan_events(client):
     with client.websocket_connect("/api/v1/ws") as websocket:
         scan_id = client.post("/api/v1/scans", json={"targets": "10.0.0.1"}).json()["id"]

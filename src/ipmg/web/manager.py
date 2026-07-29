@@ -69,10 +69,6 @@ class ScanManager:
         stop.set()
         return True
 
-    def is_running(self, scan_id: int) -> bool:
-        with self._lock:
-            return scan_id in self._stops
-
     # ------------------------------------------------------------ worker
 
     def _run(

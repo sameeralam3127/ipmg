@@ -250,7 +250,8 @@ def _index_by_hostname(snapshots: Mapping[str, HostSnapshot]) -> Dict[str, Set[s
     return index
 
 
-def _ip_sort_key(value: str) -> Tuple[int, int, str]:
+def ip_sort_key(value: str) -> Tuple[int, int, str]:
+    """Sort key placing valid IPs first in numeric order; shared with the DB layer."""
     try:
         address = ipaddress.ip_address(value)
     except ValueError:
@@ -265,7 +266,7 @@ def _sort_changes(changes: Sequence[HostChange]) -> Tuple[HostChange, ...]:
             key=lambda change: (
                 _SEVERITY_RANK[change.severity],
                 _TYPE_RANK[change.type],
-                _ip_sort_key(change.ip),
+                ip_sort_key(change.ip),
             ),
         )
     )
@@ -323,8 +324,8 @@ def _detect_ip_moves(
             continue
 
         lost = baseline_ips - current_ips
-        previous = ", ".join(sorted(lost or baseline_ips, key=_ip_sort_key))
-        for ip in sorted(gained, key=_ip_sort_key):
+        previous = ", ".join(sorted(lost or baseline_ips, key=ip_sort_key))
+        for ip in sorted(gained, key=ip_sort_key):
             snapshot = current_by_ip.get(ip)
             changes.append(
                 HostChange(

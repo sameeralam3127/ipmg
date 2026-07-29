@@ -27,7 +27,7 @@ from ipmg.reporting.diff_report import export_diff, print_diff
 from ipmg.reporting.frames import results_dataframe
 from ipmg.reporting.summary import print_summary
 from ipmg.services.history_service import HistoryService
-from ipmg.utils.helpers import clamp_int, current_timestamp
+from ipmg.utils.helpers import current_timestamp
 
 log = logging.getLogger(__name__)
 
@@ -190,11 +190,6 @@ def _store_and_compare(
 
 
 def run_scan(args) -> None:
-    args.threads = clamp_int(args.threads, 1, 500)
-    args.timeout = clamp_int(args.timeout, 1, 60)
-    args.count = clamp_int(args.count, 1, 10)
-    args.dns_cache_ttl = clamp_int(getattr(args, "dns_cache_ttl", 300), 0, 86400)
-
     config = _config_from_args(args)
     history_options = _history_options(args)
     _ensure_input_file(args)

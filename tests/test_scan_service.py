@@ -94,7 +94,6 @@ def test_run_scan_clamps_resource_limits(monkeypatch):
 
     run_scan(args)
 
-    assert args.threads == 500
     assert captured["limits"] == (60, 10)
 
 

@@ -104,3 +104,12 @@ def test_parse_manual_targets_rejects_invalid_token():
 
     with pytest.raises(Exception):
         parse_manual_targets("not-an-ip")
+
+
+def test_parse_manual_targets_caps_total_expansion():
+    from ipmg.exceptions import FileIOError
+    from ipmg.infrastructure.file_io import parse_manual_targets
+
+    # Each /16 stays under the per-token limit, but together they exceed it.
+    with pytest.raises(FileIOError, match="expand to more than"):
+        parse_manual_targets("10.0.0.0/16\n10.1.0.0/16\n")

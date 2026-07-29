@@ -9,10 +9,6 @@ class IPMGError(Exception):
     """Base exception for all IPMG-related errors."""
 
 
-class ConfigurationError(IPMGError):
-    """Raised when configuration or CLI arguments are invalid."""
-
-
 class DiscoveryError(IPMGError):
     """Raised when IP discovery fails."""
 

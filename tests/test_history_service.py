@@ -85,24 +85,6 @@ def test_compare_latest_needs_two_scans(history):
     assert diff.of_type(ChangeType.LATENCY_CHANGED)[0].delta == 27.0
 
 
-def test_compare_results_against_stored_baseline(history):
-    baseline = record(history, HostResult("10.0.0.1", "Active", 3.0))
-
-    diff = history.compare_results([HostResult("10.0.0.2", "Active", 3.0)])
-
-    assert diff.baseline.id == baseline
-    assert diff.current.id is None
-    assert {change.type for change in diff.changes} == {
-        ChangeType.NEW_HOST,
-        ChangeType.HOST_REMOVED,
-    }
-
-
-def test_compare_results_without_history(history):
-    with pytest.raises(HistoryError, match="No previous scan"):
-        history.compare_results([HostResult("10.0.0.1", "Active", 3.0)])
-
-
 def test_unknown_scan_id_is_reported(history):
     with pytest.raises(HistoryError, match="was not found"):
         history.compare(1, 2)

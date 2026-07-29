@@ -13,7 +13,7 @@ from rich.text import Text
 from ipmg.core.diff import CHANGE_LABELS, ChangeType, ScanDiff, Severity
 from ipmg.exceptions import ReportError
 from ipmg.reporting import ui
-from ipmg.utils.helpers import timestamp_str
+from ipmg.utils.helpers import markdown_escape, timestamp_str
 
 DIFF_FORMATS = ("md", "json", "csv")
 
@@ -38,10 +38,6 @@ SEVERITY_GLYPHS: Dict[Severity, str] = {
     Severity.WARNING: "warn",
     Severity.INFO: "dot",
 }
-
-
-def _escape_markdown(value: object) -> str:
-    return str(value).replace("|", r"\|")
 
 
 def _cell(value: Optional[object]) -> str:
@@ -156,8 +152,8 @@ def diff_to_markdown(diff: ScanDiff) -> str:
     lines: List[str] = [
         "# IPMG Change Report",
         "",
-        f"- Baseline: {_escape_markdown(diff.baseline.display())}",
-        f"- Current: {_escape_markdown(diff.current.display())}",
+        f"- Baseline: {markdown_escape(diff.baseline.display())}",
+        f"- Current: {markdown_escape(diff.current.display())}",
         f"- Hosts: {diff.baseline_hosts} -> {diff.current_hosts} "
         f"({diff.compared_hosts} compared, {diff.unchanged_hosts} unchanged)",
         f"- Total changes: {len(diff.changes)}",
@@ -194,7 +190,7 @@ def diff_to_markdown(diff: ScanDiff) -> str:
         lines.append(
             "| "
             + " | ".join(
-                _escape_markdown(value)
+                markdown_escape(value)
                 for value in (
                     change.label,
                     change.severity.value,

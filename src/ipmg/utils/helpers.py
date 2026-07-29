@@ -138,3 +138,8 @@ def clamp_int(value: int, minimum: Optional[int], maximum: Optional[int]) -> int
         value = min(value, maximum)
 
     return value
+
+
+def markdown_escape(value: object) -> str:
+    """Escape ``|`` so a value can sit inside a Markdown table cell."""
+    return str(value).replace("|", r"\|")

@@ -7,16 +7,15 @@ background scan threads and the web request loop can write concurrently.
 
 from __future__ import annotations
 
-import ipaddress
 import json
 import sqlite3
 import threading
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence
 
-from ipmg.core.diff import HostSnapshot, ScanRef
+from ipmg.core.diff import HostSnapshot, ScanRef, ip_sort_key
 from ipmg.core.engine import HostResult
 
 DEFAULT_DB_PATH = Path.home() / ".ipmg" / "dashboard.db"
@@ -69,13 +68,6 @@ def _escape_like(term: str) -> str:
     for char in (_LIKE_ESCAPE, "%", "_"):
         term = term.replace(char, _LIKE_ESCAPE + char)
     return term
-
-
-def _ip_sort_key(value: str) -> Tuple[int, int]:
-    try:
-        return (0, int(ipaddress.ip_address(value)))
-    except ValueError:
-        return (1, 0)
 
 
 class Database:
@@ -341,7 +333,7 @@ class Database:
         with self._session() as conn:
             rows = [dict(row) for row in conn.execute(query).fetchall()]
 
-        rows.sort(key=lambda row: _ip_sort_key(row["ip"]))
+        rows.sort(key=lambda row: ip_sort_key(row["ip"]))
         return rows
 
     # ------------------------------------------------------------ helpers

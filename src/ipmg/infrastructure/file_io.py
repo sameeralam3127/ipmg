@@ -1,3 +1,4 @@
+import ipaddress
 from pathlib import Path
 from typing import Iterable
 
@@ -6,7 +7,7 @@ import pandas as pd
 from ipmg.core.ping import validate_ip
 from ipmg.exceptions import FileIOError
 from ipmg.reporting import ui
-from ipmg.utils.helpers import timestamp_str
+from ipmg.utils.helpers import markdown_escape, timestamp_str
 
 SUPPORTED_INPUT_SUFFIXES = {".xlsx", ".xls", ".csv", ".txt", ".list"}
 MAX_EXPANDED_TARGETS = 65_536
@@ -16,14 +17,15 @@ def _deduplicate(targets: Iterable[str]) -> list[str]:
     return list(dict.fromkeys(targets))
 
 
+def _check_target_limit(count: int, source: str) -> None:
+    if count > MAX_EXPANDED_TARGETS:
+        raise FileIOError(
+            f"Targets from {source} expand to more than {MAX_EXPANDED_TARGETS} hosts."
+        )
+
+
 def _expand_cidr(target: str) -> list[str]:
     try:
-        network = pd.notna(target) and target.strip()
-        if not network:
-            return []
-
-        import ipaddress
-
         parsed = ipaddress.ip_network(target, strict=False)
     except ValueError as exc:
         raise FileIOError(f"Unsupported target input: {target}") from exc
@@ -41,8 +43,6 @@ def _expand_cidr(target: str) -> list[str]:
 
 
 def _expand_range(target: str) -> list[str]:
-    import ipaddress
-
     start_raw, _, end_raw = target.partition("-")
     try:
         start = ipaddress.ip_address(start_raw.strip())
@@ -76,57 +76,65 @@ def _expand_target(value: str) -> list[str]:
     return []
 
 
+def _collect_targets(values: Iterable[str], source: str, strict: bool) -> list[str]:
+    """Expand every token, enforcing the overall host limit as we go.
+
+    ``strict`` rejects tokens that expand to nothing (manual input) instead of
+    silently skipping them (file input, where stray hostnames are tolerated).
+    """
+    targets: list[str] = []
+    for value in values:
+        expanded = _expand_target(value)
+        if not expanded and strict:
+            raise FileIOError(f"Unsupported target input: {value}")
+        targets.extend(expanded)
+        _check_target_limit(len(targets), source)
+    return _deduplicate(targets)
+
+
 def parse_manual_targets(text: str) -> list[str]:
     """Parse free-form target text: one IP, CIDR, or range per line/comma.
 
     Blank lines and ``#`` comments are ignored. Used by the web dashboard
     for manually entered targets.
     """
-    targets: list[str] = []
-    for raw_line in text.splitlines():
-        line = raw_line.split("#", 1)[0]
-        for token in line.replace(",", " ").split():
-            expanded = _expand_target(token)
-            if not expanded:
-                raise FileIOError(f"Unsupported target input: {token}")
-            targets.extend(expanded)
+    tokens = [
+        token
+        for raw_line in text.splitlines()
+        for token in raw_line.split("#", 1)[0].replace(",", " ").split()
+    ]
+    targets = _collect_targets(tokens, "manual input", strict=True)
 
     if not targets:
         raise FileIOError("No valid IP targets were provided.")
 
-    return _deduplicate(targets)
+    return targets
 
 
 def _load_from_dataframe(df: pd.DataFrame, source: str) -> list[str]:
     if "IP Address" not in df.columns:
         raise FileIOError(f"Input file '{source}' must contain an 'IP Address' column.")
 
-    targets: list[str] = []
-    for raw_value in df["IP Address"].dropna().astype(str):
-        value = raw_value.strip()
-        if not value:
-            continue
-        targets.extend(_expand_target(value))
+    values = (value.strip() for value in df["IP Address"].dropna().astype(str) if value.strip())
+    targets = _collect_targets(values, f"'{source}'", strict=False)
 
     if not targets:
         raise FileIOError(f"No valid IP targets were found in '{source}'.")
 
-    return _deduplicate(targets)
+    return targets
 
 
 def _load_from_text(path: str) -> list[str]:
-    targets: list[str] = []
     with open(path, encoding="utf-8") as handle:
-        for raw_line in handle:
-            value = raw_line.strip()
-            if not value or value.startswith("#"):
-                continue
-            targets.extend(_expand_target(value))
+        values = [
+            line.strip() for line in handle if line.strip() and not line.strip().startswith("#")
+        ]
+    targets = _collect_targets(values, f"'{path}'", strict=False)
 
     if not targets:
         raise FileIOError(f"No valid IP targets were found in '{path}'.")
 
-    return _deduplicate(targets)
+    return targets
 
 
 def load_targets(source: str) -> list[str]:
@@ -154,10 +162,6 @@ def load_targets(source: str) -> list[str]:
     )
 
 
-def load_ip_file(path: str) -> list[str]:
-    return load_targets(path)
-
-
 def create_sample_file(path: str) -> None:
     df = pd.DataFrame({"IP Address": ["8.8.8.8", "1.1.1.1"]})
     suffix = Path(path).suffix.lower()
@@ -173,19 +177,15 @@ def create_sample_file(path: str) -> None:
     df.to_excel(path, index=False)
 
 
-def _markdown_escape(value) -> str:
-    return str(value).replace("|", r"\|")
-
-
 def _format_markdown_value(value) -> str:
     if pd.isna(value):
         return ""
     if isinstance(value, float):
         return f"{value:.3f}".rstrip("0").rstrip(".")
-    return _markdown_escape(value)
+    return markdown_escape(value)
 
 
-def _build_markdown_report(df: pd.DataFrame) -> str:
+def build_markdown_report(df: pd.DataFrame) -> str:
     total = len(df)
     status_counts = df["Status"].value_counts().to_dict() if "Status" in df else {}
     active = status_counts.get("Active", 0)
@@ -214,7 +214,7 @@ def _build_markdown_report(df: pd.DataFrame) -> str:
 
     if status_counts:
         for status, count in status_counts.items():
-            lines.append(f"| {_markdown_escape(status)} | {count} |")
+            lines.append(f"| {markdown_escape(status)} | {count} |")
     else:
         lines.append("| No results | 0 |")
 
@@ -245,10 +245,6 @@ def _build_markdown_report(df: pd.DataFrame) -> str:
     return "\n".join(lines)
 
 
-def build_markdown_report(df: pd.DataFrame) -> str:
-    return _build_markdown_report(df)
-
-
 def save_results(df, base: str, formats: list[str]) -> list[str]:
     ts = timestamp_str()
     saved_paths: list[str] = []
@@ -265,7 +261,7 @@ def save_results(df, base: str, formats: list[str]) -> list[str]:
             df.to_json(output_path, orient="records")
         elif fmt == "md":
             output_path = f"{base}_{ts}.md"
-            Path(output_path).write_text(_build_markdown_report(df), encoding="utf-8")
+            Path(output_path).write_text(build_markdown_report(df), encoding="utf-8")
         else:
             continue
 
