@@ -1,19 +1,21 @@
 // App shell: hash router, theme toggle, and WebSocket bootstrap.
 
-import { connect } from "./api.js?v=20260808.1";
+import { connect } from "./api.js?v=20260808.2";
 import {
   aboutView,
   changesView,
   dashboardView,
   historyView,
   inventoryView,
+  landingView,
   monitorView,
   newScanView,
   scanDetailView,
-} from "./views.js?v=20260808.1";
+} from "./views.js?v=20260808.2";
 
 const routes = [
-  { pattern: /^#?\/?$/, name: "dashboard", view: dashboardView },
+  { pattern: /^#?\/?$/, name: "home", view: landingView },
+  { pattern: /^#\/dashboard$/, name: "dashboard", view: dashboardView },
   { pattern: /^#\/new$/, name: "new", view: newScanView },
   { pattern: /^#\/monitor(?:\/(\d+))?$/, name: "monitor", view: monitorView },
   { pattern: /^#\/history$/, name: "history", view: historyView },
@@ -32,6 +34,7 @@ async function render() {
   const hash = location.hash || "#/";
   const route = routes.find((candidate) => candidate.pattern.test(hash)) || routes[0];
   const match = hash.match(route.pattern);
+  root.classList.toggle("public-view", route.name === "home");
 
   document.querySelectorAll(".nav a").forEach((link) => {
     link.classList.toggle("active", link.dataset.route === route.name);

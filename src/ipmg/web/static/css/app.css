@@ -139,6 +139,28 @@ body {
 /* --------------------------------------------------------------- main */
 
 .main { flex: 1; padding: 24px 28px 48px; max-width: 1200px; }
+.main.public-view { max-width: 1080px; padding-top: 44px; }
+
+.hero { padding: 34px 0 44px; border-bottom: 1px solid var(--border); }
+.hero h1 { max-width: 760px; margin: 10px 0 16px; font-size: clamp(36px, 5vw, 58px); line-height: 1.04; letter-spacing: -0.045em; }
+.hero > p { max-width: 690px; margin: 0; color: var(--text-2); font-size: 17px; line-height: 1.6; }
+.eyebrow, .section-kicker { color: var(--accent); font-size: 12px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+.hero-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 22px; }
+.install-line { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 24px; color: var(--muted); font-size: 12px; }
+.install-line code { padding: 7px 10px; border-radius: 7px; background: var(--surface); border: 1px solid var(--border); color: var(--text); }
+.landing-section { padding: 48px 0; border-bottom: 1px solid var(--border); }
+.landing-section h2 { max-width: 650px; margin: 8px 0 22px; font-size: clamp(25px, 3vw, 36px); letter-spacing: -.03em; }
+.landing-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; border: 1px solid var(--border); background: var(--border); border-radius: 12px; overflow: hidden; }
+.landing-point { padding: 22px; background: var(--surface); }
+.landing-point h3, .step h3 { margin: 0 0 7px; font-size: 15px; }
+.landing-point p, .step p, .project-section > p { margin: 0; color: var(--text-2); line-height: 1.55; }
+.how-section { border-bottom: none; }
+.steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.step { padding: 20px 0; border-top: 2px solid var(--accent); }
+.step > span { display: block; margin-bottom: 22px; color: var(--accent); font-size: 12px; font-weight: 700; }
+.project-section { border-top: 1px solid var(--border); }
+.project-section > p { max-width: 710px; margin-bottom: 18px; }
+.security-callout { margin-top: 30px; padding: 13px 15px; border: 1px solid var(--border); border-radius: 9px; color: var(--text-2); }
 
 .page-title { font-size: 20px; font-weight: 700; margin: 0 0 4px; }
 .page-sub { color: var(--text-2); margin: 0 0 20px; }
@@ -343,6 +365,11 @@ tr.click { cursor: pointer; }
   .nav a { padding: 7px 9px; }
   .sidebar-footer { margin: 0 0 0 auto; flex-direction: row; align-items: center; }
   .main { padding: 18px 14px 40px; }
+  .main.public-view { padding-top: 22px; }
+  .hero { padding: 18px 0 32px; }
+  .hero h1 { font-size: 38px; }
+  .landing-section { padding: 34px 0; }
+  .landing-grid, .steps { grid-template-columns: 1fr; }
   .details-list { grid-template-columns: 1fr; gap: 3px; }
   .details-list dd { margin-bottom: 10px; }
 }
