@@ -71,9 +71,15 @@ function initTheme() {
   });
 }
 
+function initDemoBadge() {
+  const isDemo = location.hostname.endsWith("github.io") || new URLSearchParams(location.search).has("demo");
+  document.querySelector(".demo-badge").hidden = !isDemo;
+}
+
 // -------------------------------------------------------------- boot
 
 window.addEventListener("hashchange", render);
 initTheme();
+initDemoBadge();
 connect();
 render();

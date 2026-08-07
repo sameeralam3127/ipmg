@@ -19,6 +19,14 @@ function h(tag, attrs = {}, ...children) {
   return node;
 }
 
+function toast(message, tone = "success") {
+  const region = document.getElementById("toast-region");
+  if (!region) return;
+  const note = h("div", { class: `toast ${tone}`, role: "status" }, message);
+  region.append(note);
+  setTimeout(() => note.remove(), 3600);
+}
+
 function statusPill(status) {
   const pill = h("span", { class: "pill" }, status);
   pill.style.setProperty("--pill-color", STATUS_COLORS[status] || "var(--muted)");
@@ -244,6 +252,7 @@ export async function newScanView(root) {
         dns_cache_ttl: Number(data.get("dns_cache_ttl")),
         resolve: data.get("resolve") === "on",
       });
+      toast(`Scan #${scan.id} created successfully.`);
       location.hash = `#/monitor/${scan.id}`;
     } catch (err) {
       banner.append(h("div", { class: "banner err" }, `Could not start scan: ${err.message}`));
@@ -537,6 +546,7 @@ export async function scanDetailView(root, scanId) {
   deleteBtn.addEventListener("click", async () => {
     if (!confirm(`Delete scan #${scan.id} and its results?`)) return;
     await api.deleteScan(scan.id);
+    toast(`Scan #${scan.id} deleted.`);
     location.hash = "#/history";
   });
   toolbar.append(deleteBtn);

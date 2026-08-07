@@ -94,6 +94,17 @@ body {
   padding: 4px 8px 18px;
 }
 
+.demo-badge {
+  align-self: flex-start;
+  margin: -10px 8px 14px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+}
+
 .nav { display: flex; flex-direction: column; gap: 2px; }
 
 .nav a {
@@ -123,6 +134,7 @@ body {
 .conn[data-state="open"]::before { content: "● "; color: var(--st-active); }
 .conn[data-state="connecting"]::before { content: "● "; color: var(--st-timeout); }
 .conn[data-state="closed"]::before { content: "● "; color: var(--st-inactive); }
+.conn[data-state="demo"]::before { content: "● "; color: var(--accent); }
 
 /* --------------------------------------------------------------- main */
 
@@ -303,10 +315,16 @@ tr.click { cursor: pointer; }
 .tooltip .t-title { font-weight: 600; margin-bottom: 2px; }
 .tooltip .t-sub { color: var(--text-2); }
 
+.toast-region { position: fixed; right: 18px; bottom: 18px; z-index: 20; display: grid; gap: 8px; max-width: min(360px, calc(100vw - 36px)); }
+.toast { padding: 11px 14px; border-radius: 9px; color: var(--text); background: var(--surface); border: 1px solid var(--border); box-shadow: 0 8px 24px rgba(0,0,0,.16); }
+.toast.success { border-left: 4px solid var(--st-active); }
+.toast.error { border-left: 4px solid var(--danger); }
+
 @media (max-width: 720px) {
   .app { flex-direction: column; }
   .sidebar { width: 100%; height: auto; position: static; flex-direction: row; align-items: center; gap: 10px; }
   .brand { padding: 0; }
+  .demo-badge { display: none; }
   .nav { flex-direction: row; flex-wrap: wrap; }
   .nav a { padding: 7px 9px; }
   .sidebar-footer { margin: 0 0 0 auto; flex-direction: row; align-items: center; }

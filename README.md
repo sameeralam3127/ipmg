@@ -298,6 +298,29 @@ Releases are automated: merging a conventional commit (`feat: ...`,
 `fix: ...`) to `main` triggers GitHub Actions to run tests, create a
 semantic-release tag, and publish to [PyPI](https://pypi.org/project/ipmg/).
 
+### GitHub Pages demo
+
+The dashboard also has a static, interactive demonstration at
+[sameeralam3127.github.io/ipmg](https://sameeralam3127.github.io/ipmg/).
+GitHub Pages cannot run the Python scanner or access a local SQLite database,
+so this version transparently uses realistic seeded network inventory and scan
+history. Search, filters, comparison, exports, theme switching, and a manual
+demo scan all work in the browser. The local `ipmg dashboard` command always
+uses the real FastAPI API and scan engine instead.
+
+The `Deploy dashboard demo to GitHub Pages` workflow publishes
+`src/ipmg/web/static` after changes to `main`. In repository settings, select
+**GitHub Actions** as the GitHub Pages source once; no secrets are required.
+
+To review the static experience locally, run any static web server from
+`src/ipmg/web/static` and open it with `?demo=1`:
+
+```bash
+cd src/ipmg/web/static
+python3 -m http.server 4173
+# http://127.0.0.1:4173/?demo=1
+```
+
 ---
 
 ## License
