@@ -1,7 +1,7 @@
 // Page views for the IPMG dashboard. Each view renders into the <main> node.
 
-import { api, onEvent } from "./api.js?v=20260808.1";
-import { STATUS_COLORS, latencyTrend, statusDonut } from "./charts.js?v=20260808.1";
+import { api, onEvent } from "./api.js?v=20260808.2";
+import { STATUS_COLORS, latencyTrend, statusDonut } from "./charts.js?v=20260808.2";
 
 const REPORT_FORMATS = ["xlsx", "csv", "json", "md"];
 
@@ -123,6 +123,58 @@ function scansTable(scans, { onOpen }) {
         )
       )
     )
+  );
+}
+
+// ------------------------------------------------------------- public home
+
+export function landingView(root) {
+  const link = (label, href, style = "ghost-btn") => h("a", { class: style, href }, label);
+  const point = (title, copy) => h("div", { class: "landing-point" }, h("h3", {}, title), h("p", {}, copy));
+  const step = (number, title, copy) => h("div", { class: "step" }, h("span", {}, number), h("h3", {}, title), h("p", {}, copy));
+
+  root.append(
+    h("section", { class: "hero" },
+      h("div", { class: "eyebrow" }, "IP Management & Ping Monitoring"),
+      h("h1", {}, "Know what is reachable across your network."),
+      h("p", {}, "IPMG is an open-source command-line and local dashboard tool for scanning authorized IP networks, monitoring availability, and spotting meaningful changes over time."),
+      h("div", { class: "hero-actions" },
+        link("Explore the live demo", "#/dashboard", "btn"),
+        link("View on GitHub", "https://github.com/sameeralam3127/ipmg")
+      ),
+      h("div", { class: "install-line" }, h("code", {}, "pip install ipmg"), h("span", {}, "Python 3.9+ · MIT licensed"))
+    ),
+    h("section", { class: "landing-section" },
+      h("div", { class: "section-kicker" }, "Built for real network operations"),
+      h("h2", {}, "From first scan to reliable inventory"),
+      h("div", { class: "landing-grid" },
+        point("Scan flexibly", "Use a single address, CIDR, IP range, or a CSV, Excel, text, or JSON target file."),
+        point("See results clearly", "Review host status, latency, and optional reverse DNS in the terminal or a private local dashboard."),
+        point("Keep the history", "Each scan is saved to SQLite so you can search the inventory and compare network state later."),
+        point("Export what matters", "Share results and change reports as Excel, CSV, JSON, or Markdown."),
+      )
+    ),
+    h("section", { class: "landing-section how-section" },
+      h("div", { class: "section-kicker" }, "How it works"),
+      h("h2", {}, "A short path to better visibility"),
+      h("div", { class: "steps" },
+        step("01", "Choose authorized targets", "Enter addresses manually, upload a target list, or let IPMG discover your local subnet."),
+        step("02", "Run a parallel scan", "Set timeouts, worker count, ping count, and optional reverse-DNS resolution."),
+        step("03", "Review and compare", "Inspect live results, search historical scans, and identify outages, new hosts, or latency shifts."),
+      )
+    ),
+    h("section", { class: "landing-section project-section" },
+      h("div", { class: "section-kicker" }, "Project details"),
+      h("h2", {}, "Open source, local-first, and practical."),
+      h("p", {}, "The GitHub Pages version is an interactive demo with seeded data. The installed application runs the real scanner locally and keeps your history in a local SQLite database."),
+      h("div", { class: "hero-actions" },
+        link("Project details & license", "#/about", "btn secondary"),
+        link("PyPI package", "https://pypi.org/project/ipmg/"),
+        link("Documentation", "https://github.com/sameeralam3127/ipmg#readme"),
+        link("Support & issues", "https://github.com/sameeralam3127/ipmg/issues")
+      )
+    ),
+    h("section", { class: "security-callout" }, h("strong", {}, "Use responsibly."), " Only scan networks you are authorized to scan.")
   );
 }
 
