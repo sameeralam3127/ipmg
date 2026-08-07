@@ -1,6 +1,6 @@
 // App shell: hash router, theme toggle, and WebSocket bootstrap.
 
-import { connect } from "./api.js";
+import { connect } from "./api.js?v=20260808.1";
 import {
   aboutView,
   changesView,
@@ -10,7 +10,7 @@ import {
   monitorView,
   newScanView,
   scanDetailView,
-} from "./views.js";
+} from "./views.js?v=20260808.1";
 
 const routes = [
   { pattern: /^#?\/?$/, name: "dashboard", view: dashboardView },

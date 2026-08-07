@@ -1,7 +1,7 @@
 // Page views for the IPMG dashboard. Each view renders into the <main> node.
 
-import { api, onEvent } from "./api.js";
-import { STATUS_COLORS, latencyTrend, statusDonut } from "./charts.js";
+import { api, onEvent } from "./api.js?v=20260808.1";
+import { STATUS_COLORS, latencyTrend, statusDonut } from "./charts.js?v=20260808.1";
 
 const REPORT_FORMATS = ["xlsx", "csv", "json", "md"];
 
