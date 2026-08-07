@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.11.0 (2026-08-07)
+
+### Features
+
+- Add public IPMG landing page
+  ([`68e9a1c`](https://github.com/sameeralam3127/ipmg/commit/68e9a1ce98749889e264996ed635b64ed2c9fec2))
+
+
 ## v1.10.0 (2026-08-07)
 
 ### Bug Fixes
