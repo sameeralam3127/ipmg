@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.9.0 (2026-08-07)
+
+### Bug Fixes
+
+- Enable GitHub Pages deployment
+  ([`5de52ca`](https://github.com/sameeralam3127/ipmg/commit/5de52cabad5ca8a7bd14d86d95b9b5fb5c8de2ae))
+
+### Features
+
+- Add GitHub Pages dashboard demo
+  ([`cf7fd21`](https://github.com/sameeralam3127/ipmg/commit/cf7fd21074fe437737a6e0d336fca136d27f4cc9))
+
+
 ## v1.8.1 (2026-07-29)
 
 ### Bug Fixes
