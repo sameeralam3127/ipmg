@@ -28,6 +28,8 @@ jobs:
       - name: Assemble static dashboard
         run: cp -R src/ipmg/web/static/. _site/
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
