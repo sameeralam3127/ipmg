@@ -2,6 +2,7 @@
 
 import { connect } from "./api.js";
 import {
+  aboutView,
   changesView,
   dashboardView,
   historyView,
@@ -19,6 +20,7 @@ const routes = [
   { pattern: /^#\/scan\/(\d+)$/, name: "history", view: scanDetailView },
   { pattern: /^#\/changes(?:\/(\d+))?(?:\/(\d+))?$/, name: "changes", view: changesView },
   { pattern: /^#\/inventory$/, name: "inventory", view: inventoryView },
+  { pattern: /^#\/about$/, name: "about", view: aboutView },
 ];
 
 async function render() {
