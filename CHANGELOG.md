@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.10.0 (2026-08-07)
+
+### Bug Fixes
+
+- Version dashboard assets for Pages
+  ([`2615fb9`](https://github.com/sameeralam3127/ipmg/commit/2615fb927dcebcf054155fdb9503a40ae0c09ad2))
+
+### Features
+
+- Add project details page
+  ([`8880733`](https://github.com/sameeralam3127/ipmg/commit/88807334950ffb2b6b0816d4d1c2f5327661827a))
+
+
 ## v1.9.0 (2026-08-07)
 
 ### Bug Fixes
