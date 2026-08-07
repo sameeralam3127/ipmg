@@ -126,6 +126,52 @@ function scansTable(scans, { onOpen }) {
   );
 }
 
+// --------------------------------------------------------------- about
+
+export function aboutView(root) {
+  const feature = (title, description) => h(
+    "div", { class: "card feature-card" }, h("h3", {}, title), h("p", {}, description)
+  );
+  const external = (label, url) => h(
+    "a", { class: "ghost-btn", href: url, target: "_blank", rel: "noreferrer" }, label
+  );
+
+  root.append(
+    h("h1", { class: "page-title" }, "About IPMG"),
+    h("p", { class: "page-sub" }, "IP Management & Ping Monitoring for authorized networks."),
+    h(
+      "section", { class: "card overview-card" },
+      h("h2", {}, "A practical network visibility tool"),
+      h("p", {}, "IPMG scans IP addresses, CIDR ranges, and target files in parallel. It records results locally, resolves hostnames when requested, and makes scan history, changes, and exports easy to review from the command line or dashboard."),
+      h("div", { class: "toolbar" },
+        external("View source on GitHub", "https://github.com/sameeralam3127/ipmg"),
+        external("Install from PyPI", "https://pypi.org/project/ipmg/"),
+        external("MIT License", "https://github.com/sameeralam3127/ipmg/blob/main/LICENSE"),
+        h("a", { class: "btn", href: "#/new" }, "Try a demo scan")
+      )
+    ),
+    h("h2", { class: "section-title" }, "Core features"),
+    h("div", { class: "grid features-grid" },
+      feature("Parallel ICMP scanning", "Probe individual IPs, CIDR blocks, ranges, and spreadsheet or text inputs with configurable concurrency and timeouts."),
+      feature("Local dashboard", "Launch a private FastAPI dashboard for live scan progress, status charts, searchable results, and downloadable reports."),
+      feature("History & inventory", "Store every scan in local SQLite, track the last status of every observed host, and export the inventory as CSV."),
+      feature("Change detection", "Compare any two scans to identify outages, new or removed hosts, hostname changes, and meaningful latency shifts."),
+      feature("DNS & reporting", "Optionally resolve reverse DNS and export results or change summaries as Excel, CSV, JSON, or Markdown."),
+      feature("Offline by design", "The local dashboard bundles its assets and defaults to a loopback-only server. GitHub Pages uses clearly marked demo data instead."),
+    ),
+    h("section", { class: "card details-card" },
+      h("h2", {}, "Project details"),
+      h("dl", { class: "details-list" },
+        h("dt", {}, "Repository"), h("dd", {}, h("a", { href: "https://github.com/sameeralam3127/ipmg", target: "_blank", rel: "noreferrer" }, "github.com/sameeralam3127/ipmg")),
+        h("dt", {}, "Package"), h("dd", {}, h("a", { href: "https://pypi.org/project/ipmg/", target: "_blank", rel: "noreferrer" }, "pypi.org/project/ipmg")),
+        h("dt", {}, "License"), h("dd", {}, "MIT — free for commercial and personal use."),
+        h("dt", {}, "Technology"), h("dd", {}, "Python, FastAPI, SQLite, Pandas, and a dependency-free JavaScript dashboard."),
+        h("dt", {}, "Safety"), h("dd", {}, "Only scan networks you are authorized to scan.")
+      )
+    )
+  );
+}
+
 // ------------------------------------------------------------ dashboard
 
 export async function dashboardView(root) {
