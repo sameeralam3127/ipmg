@@ -1,69 +1,398 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>IPMG Dashboard</title>
-  <link rel="stylesheet" href="css/app.css?v=20260808.2">
+  <title>IPMG — IP Management &amp; Ping Monitoring</title>
+  <meta name="description" content="IPMG is a fast, enterprise-ready IP management and ping-monitoring CLI with parallel scanning, subnet discovery, change detection, and a local web dashboard. Reports in XLSX, CSV, JSON, and Markdown.">
+  <meta name="color-scheme" content="light dark">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='%232a78d6' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='5' fill='%232a78d6'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="assets/landing.css?v=1">
+  <meta property="og:title" content="IPMG — IP Management & Ping Monitoring">
+  <meta property="og:description" content="Scan and monitor IP networks from the command line or a local web dashboard. Parallel pinging, subnet discovery, change detection, and multi-format reports.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://sameeralam3127.github.io/ipmg/">
 </head>
 <body>
-  <div class="app">
-    <aside class="sidebar">
-      <div class="brand">
+
+  <!-- ================================================== header -->
+  <header class="site">
+    <div class="wrap nav">
+      <a class="brand" href="#top" aria-label="IPMG home">
         <svg viewBox="0 0 32 32" width="26" height="26" aria-hidden="true">
           <circle cx="16" cy="16" r="13" fill="none" stroke="currentColor" stroke-width="3"/>
           <circle cx="16" cy="16" r="5" fill="currentColor"/>
         </svg>
         <span>IPMG</span>
-      </div>
-      <div class="demo-badge" aria-label="Demo data is active on GitHub Pages" hidden>Demo data</div>
-      <nav class="nav">
-        <a href="#/" data-route="home">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 9 8h-3v9h-5v-6h-2v6H6v-9H3z"/></svg>
-          Home
-        </a>
-        <a href="#/dashboard" data-route="dashboard">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 13h8V3H3zm0 8h8v-6H3zm10 0h8V11h-8zm0-18v6h8V3z"/></svg>
-          Dashboard
-        </a>
-        <a href="#/new" data-route="new">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4z"/></svg>
-          New Scan
-        </a>
-        <a href="#/monitor" data-route="monitor">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-9 4 18 3-9h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          Live Monitor
-        </a>
-        <a href="#/history" data-route="history">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 3a9 9 0 1 0 8.5 12h-2.2A7 7 0 1 1 13 5a6.9 6.9 0 0 1 4.9 2H14v2h7V2h-2v2.4A8.9 8.9 0 0 0 13 3zm-1 5v5l4.3 2.5.7-1.2-3.5-2V8z"/></svg>
-          History
-        </a>
-        <a href="#/changes" data-route="changes">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h11l-3-3 1.4-1.4L18.8 8l-5.4 5.4L12 12l3-3H4zm16 10H9l3 3-1.4 1.4L5.2 16l5.4-5.4L12 12l-3 3h11z"/></svg>
-          Changes
-        </a>
-        <a href="#/inventory" data-route="inventory">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v4H4zm0 6h16v4H4zm0 6h16v4H4z" fill="none" stroke="currentColor" stroke-width="2"/></svg>
-          Inventory
-        </a>
-        <a href="#/about" data-route="about">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 16h-2v-6h2zm-1-8.5a1.25 1.25 0 1 1 1.25-1.25A1.25 1.25 0 0 1 12 9.5z"/></svg>
-          About IPMG
-        </a>
+        <span class="tag">CLI + Dashboard</span>
+      </a>
+
+      <nav class="nav-links" id="nav-links" aria-label="Primary">
+        <a href="#features">Features</a>
+        <a href="#usage">Usage</a>
+        <a href="#changes">Change detection</a>
+        <a href="#dashboard">Dashboard</a>
+        <a href="#install">Install</a>
+        <a href="#security">Security</a>
       </nav>
-      <div class="sidebar-footer">
-        <button id="theme-toggle" class="ghost-btn" type="button" title="Toggle theme">
-          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"/></svg>
-          Theme
+
+      <div class="nav-actions">
+        <button class="icon-btn theme-toggle" data-theme-toggle type="button" aria-label="Toggle color theme" title="Toggle theme">
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+          <svg class="moon" viewBox="0 0 24 24" fill="currentColor"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
         </button>
-        <span id="conn-status" class="conn" data-state="connecting">connecting</span>
+        <a class="btn btn-primary cta-nav" href="#install">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+          Get started
+        </a>
+        <button class="icon-btn menu-btn" data-menu type="button" aria-label="Open menu">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
       </div>
-    </aside>
-    <main id="view" class="main" aria-live="polite"></main>
-  </div>
-  <div id="tooltip" class="tooltip" hidden></div>
-  <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
-  <script type="module" src="js/app.js?v=20260808.2"></script>
+    </div>
+  </header>
+
+  <span id="top"></span>
+
+  <!-- ================================================== hero -->
+  <section class="hero">
+    <div class="wrap hero-grid">
+      <div class="hero-copy">
+        <span class="eyebrow">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>
+          Open source · MIT · Python 3.9+
+        </span>
+        <h1>Scan and monitor your network<br><span class="grad">from one command.</span></h1>
+        <p class="lead">IPMG pings hosts in parallel, discovers your subnet, resolves hostnames, and tells you exactly what changed since last time — in the terminal or a local web dashboard.</p>
+        <div class="hero-cta">
+          <a class="btn btn-primary" href="#install">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+            Install IPMG
+          </a>
+          <a class="btn btn-ghost" href="demo/" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3l14 9-14 9z"/></svg>
+            Live dashboard demo
+          </a>
+        </div>
+        <div class="hero-meta">
+          <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Up to 65,536 hosts / scan</span>
+          <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Runs fully offline</span>
+          <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> XLSX · CSV · JSON · MD</span>
+        </div>
+      </div>
+
+      <div class="terminal" aria-hidden="true">
+        <div class="terminal-bar">
+          <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+          <span class="title">ipmg — zsh</span>
+        </div>
+        <div class="terminal-body" id="term-body"></div>
+      </div>
+    </div>
+
+    <div class="wrap badges" style="margin-top:34px;">
+      <img src="https://img.shields.io/pypi/v/ipmg?color=2a78d6&label=PyPI" alt="PyPI version" loading="lazy">
+      <img src="https://img.shields.io/badge/python-3.9%2B-blue" alt="Python 3.9+" loading="lazy">
+      <img src="https://img.shields.io/badge/license-MIT-green" alt="MIT license" loading="lazy">
+      <img src="https://img.shields.io/badge/platform-macOS%20%C2%B7%20Linux%20%C2%B7%20Windows-8a8f98" alt="Cross platform" loading="lazy">
+    </div>
+  </section>
+
+  <!-- ================================================== features -->
+  <section class="block" id="features">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <span class="eyebrow">Capabilities</span>
+        <h2>Everything you need to keep a network honest</h2>
+        <p>A modular, testable engine shared by the CLI and the dashboard — no agents to install, no cloud, no telemetry.</p>
+      </div>
+
+      <div class="features">
+        <div class="card reveal">
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg></span>
+          <h3>Parallel scanning</h3>
+          <p>Up to 500 worker threads ping every target at once, so a full /24 finishes in seconds instead of minutes.</p>
+        </div>
+        <div class="card reveal">
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg></span>
+          <h3>Subnet auto-discovery</h3>
+          <p><code>--discover</code> detects your local network and scans it — no need to type a CIDR block by hand.</p>
+        </div>
+        <div class="card reveal">
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h10M4 17h7"/><circle cx="18" cy="16" r="3"/></svg></span>
+          <h3>Hostname resolution</h3>
+          <p>Optional reverse-DNS (PTR) lookups with a thread-safe TTL cache, so repeat scans stay fast.</p>
+        </div>
+        <div class="card reveal">
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h11l-3-3M20 17H9l3 3"/></svg></span>
+          <h3>Change detection</h3>
+          <p>Compare any two scans and see new, offline, moved, and slower hosts — with severity levels and CI-friendly exit codes.</p>
+        </div>
+        <div class="card reveal">
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M9 15l2 2 4-4"/></svg></span>
+          <h3>Multi-format reports</h3>
+          <p>Export to Excel, CSV, JSON, or a shareable Markdown report ready to drop into a ticket or incident timeline.</p>
+        </div>
+        <div class="card reveal">
+          <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 4v5c0 4.4-3 7.6-7 9-4-1.4-7-4.6-7-9V7z"/><path d="M9.5 12l1.8 1.8L15 10"/></svg></span>
+          <h3>Local &amp; hardened</h3>
+          <p>No shell calls, every target validated, uploads capped, parameterized SQL, and the dashboard binds to localhost.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================================== usage -->
+  <section class="block" id="usage" style="background:var(--bg-soft);">
+    <div class="wrap usage-grid">
+      <div class="usage-copy reveal">
+        <span class="eyebrow">Quick start</span>
+        <h2>One binary. Every workflow.</h2>
+        <p>Point IPMG at a single host, a CIDR block, an IP range, or a file of targets. It does the right thing and stores every run in a local history you can compare later.</p>
+        <ul class="usage-list">
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span><b>Flexible targets</b> — <code>8.8.8.8</code>, <code>10.0.0.0/24</code>, <code>10.0.0.1-10.0.0.50</code>, or an XLSX/CSV/TXT file.</span></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span><b>Scheduled monitoring</b> — <code>--interval</code> repeats the scan every N minutes.</span></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span><b>Clean output</b> — respects <code>NO_COLOR</code>, hides the progress bar when piped, ASCII fallback in dumb terminals.</span></li>
+        </ul>
+      </div>
+
+      <div class="code-card reveal" data-tabs>
+        <div class="tabs" role="tablist" aria-label="Usage examples">
+          <button class="tab" role="tab" data-tab="scan" aria-selected="true">Scan</button>
+          <button class="tab" role="tab" data-tab="report" aria-selected="false">Report</button>
+          <button class="tab" role="tab" data-tab="compare" aria-selected="false">Compare</button>
+          <button class="tab" role="tab" data-tab="web" aria-selected="false">Dashboard</button>
+        </div>
+        <div class="code-body">
+          <button class="copy-btn" data-copy-target="#pane-scan" data-copy-group="1" aria-label="Copy code"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+<pre data-pane="scan" id="pane-scan"><span class="c"># Scan your local subnet automatically</span>
+<span class="k">ipmg</span> <span class="f">--discover</span>
+
+<span class="c"># A single host, a CIDR block, or a range</span>
+<span class="k">ipmg</span> <span class="f">--input</span> <span class="s">8.8.8.8</span>
+<span class="k">ipmg</span> <span class="f">--input</span> <span class="s">192.168.1.0/24</span>
+<span class="k">ipmg</span> <span class="f">--input</span> <span class="s">10.0.0.1-10.0.0.50</span>
+
+<span class="c"># Targets from a file (xlsx, csv, txt, list)</span>
+<span class="k">ipmg</span> <span class="f">--input</span> <span class="s">targets.txt</span> <span class="f">--threads</span> <span class="s">200</span></pre>
+<pre data-pane="report" id="pane-report" hidden><span class="c"># Resolve hostnames and export CSV + Markdown</span>
+<span class="k">ipmg</span> <span class="f">--input</span> <span class="s">targets.txt</span> <span class="f">--resolve</span> <span class="f">--formats</span> <span class="s">md csv</span>
+
+<span class="c"># All four report formats at once</span>
+<span class="k">ipmg</span> <span class="f">--discover</span> <span class="f">--formats</span> <span class="s">xlsx csv json md</span>
+
+<span class="c"># Repeat every 5 minutes (scheduled monitoring)</span>
+<span class="k">ipmg</span> <span class="f">--input</span> <span class="s">targets.txt</span> <span class="f">--interval</span> <span class="s">5</span></pre>
+<pre data-pane="compare" id="pane-compare" hidden><span class="c"># Report what changed since the previous scan</span>
+<span class="k">ipmg</span> <span class="f">--input</span> <span class="s">targets.txt</span> <span class="f">--compare</span>
+
+<span class="c"># List stored scans, then diff any two</span>
+<span class="k">ipmg</span> history
+<span class="k">ipmg</span> diff <span class="s">12 14</span>
+
+<span class="c"># Fail CI when anything changed (exit code 2)</span>
+<span class="k">ipmg</span> diff <span class="f">--fail-on-change</span></pre>
+<pre data-pane="web" id="pane-web" hidden><span class="c"># Start the local web dashboard + open the browser</span>
+<span class="k">ipmg</span> dashboard
+
+<span class="c"># Pick a port, keep it headless</span>
+<span class="k">ipmg</span> dashboard <span class="f">--port</span> <span class="s">9000</span> <span class="f">--no-browser</span>
+
+<span class="c"># 'web' is an alias for 'dashboard'</span>
+<span class="k">ipmg</span> web</pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================================== changes -->
+  <section class="block" id="changes">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <span class="eyebrow">Change detection</span>
+        <h2>Know what moved between two scans</h2>
+        <p>Every scan is stored in a local SQLite history. IPMG diffs any two runs and classifies each difference by severity — jitter is filtered out by dual latency thresholds.</p>
+      </div>
+
+      <div class="changes-wrap reveal">
+        <table class="changes">
+          <thead>
+            <tr><th>Change</th><th>Severity</th><th>Meaning</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Host offline</td><td><span class="sev crit">Critical</span></td><td>Reachable in the baseline, not reachable now</td></tr>
+            <tr><td>New host</td><td><span class="sev warn">Warning</span></td><td>An IP the baseline never saw</td></tr>
+            <tr><td>Host removed</td><td><span class="sev warn">Warning</span></td><td>An IP the current scan no longer covers</td></tr>
+            <tr><td>IP address changed</td><td><span class="sev warn">Warning</span></td><td>A known hostname moved to a different IP</td></tr>
+            <tr><td>Service changed</td><td><span class="sev warn">Warning</span></td><td>Status moved between failure modes (Timeout → Unreachable)</td></tr>
+            <tr><td>Host back online</td><td><span class="sev info">Info</span></td><td>Recovered since the baseline</td></tr>
+            <tr><td>Hostname changed</td><td><span class="sev info">Info</span></td><td>Same IP, different PTR record</td></tr>
+            <tr><td>Latency changed</td><td><span class="sev info">Info</span></td><td>Latency moved past both the absolute and percentage thresholds</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================================== dashboard -->
+  <section class="block" id="dashboard" style="background:var(--bg-soft);">
+    <div class="wrap">
+      <div class="showcase reveal">
+        <div>
+          <span class="eyebrow">Web dashboard</span>
+          <h2>The same engine, in your browser</h2>
+          <p>Run <code>ipmg dashboard</code> for a modern UI that shares the CLI's scanning engine and runs fully offline — every script and style is bundled, nothing loads from a CDN.</p>
+          <div class="chips">
+            <span class="chip">Status donut</span>
+            <span class="chip">Latency trend</span>
+            <span class="chip">Live WebSocket monitor</span>
+            <span class="chip">Searchable history</span>
+            <span class="chip">Scan comparison</span>
+            <span class="chip">Host inventory</span>
+          </div>
+          <a class="btn btn-primary" href="demo/" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3l14 9-14 9z"/></svg>
+            Open the interactive demo
+          </a>
+        </div>
+
+        <div class="mock" role="img" aria-label="Illustration of the IPMG dashboard: three stat tiles, a status donut, and a legend.">
+          <div class="mock-bar">
+            <span class="dot r"></span><span class="dot y"></span><span class="dot g"></span>
+          </div>
+          <div class="mock-body">
+            <div class="mock-stats">
+              <div class="mock-stat"><div class="n">254</div><div class="l">Hosts</div></div>
+              <div class="mock-stat"><div class="n">198</div><div class="l">Active</div></div>
+              <div class="mock-stat"><div class="n">6.4ms</div><div class="l">Avg latency</div></div>
+            </div>
+            <div class="mock-donut">
+              <div class="donut"></div>
+              <div class="legend">
+                <span><i style="background:var(--ok)"></i> Active · 78%</span>
+                <span><i style="background:var(--warn)"></i> Timeout · 16%</span>
+                <span><i style="background:var(--crit)"></i> Unreachable · 6%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================================== install -->
+  <section class="block" id="install">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <span class="eyebrow">Install</span>
+        <h2>Up and running in one line</h2>
+        <p>Ships as a pure-Python package. Pick whichever fits your setup.</p>
+      </div>
+
+      <div class="install-grid">
+        <div class="install-card reveal">
+          <h3><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg> pip</h3>
+          <p class="sub">The standard way — from PyPI.</p>
+          <div class="snippet">pip install ipmg<button class="copy-inline" data-copy-text="pip install ipmg" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div>
+        </div>
+
+        <div class="install-card reveal">
+          <h3><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg> uv</h3>
+          <p class="sub">Isolated global tool install.</p>
+          <div class="snippet">uv tool install git+https://github.com/sameeralam3127/ipmg.git<button class="copy-inline" data-copy-text="uv tool install git+https://github.com/sameeralam3127/ipmg.git" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div>
+        </div>
+
+        <div class="install-card reveal">
+          <h3><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l6-6-6-6M12 19h8"/></svg> curl</h3>
+          <p class="sub">One-shot installer (adds uv if missing).</p>
+          <div class="snippet">curl -sSL https://raw.githubusercontent.com/sameeralam3127/ipmg/main/install.sh | bash<button class="copy-inline" data-copy-text="curl -sSL https://raw.githubusercontent.com/sameeralam3127/ipmg/main/install.sh | bash" aria-label="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button></div>
+        </div>
+      </div>
+
+      <div class="note reveal">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+        <span>Only scan networks you are authorized to scan. IPMG sends ICMP probes; unauthorized scanning may violate your organization's policies or the law.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================================== security -->
+  <section class="block" id="security" style="background:var(--bg-soft);">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <span class="eyebrow">Built to be safe</span>
+        <h2>Security by default</h2>
+        <p>IPMG is designed for authorized scanning, and the tool itself is hardened accordingly.</p>
+      </div>
+      <ul class="security reveal">
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span><b>No shell calls.</b> Pings run as a direct process invocation, and every target is validated as an IP address first.</span></li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span><b>Local only.</b> The dashboard binds to <code>127.0.0.1</code> and serves everything locally — no CDN assets, no outbound requests.</span></li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span><b>Origin-checked sockets.</b> A web page you visit can't connect to your local dashboard and read scan results.</span></li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span><b>Bounded inputs.</b> Uploads are capped at 5&nbsp;MB and one scan expands to at most 65,536 hosts.</span></li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span><b>Parameterized SQL.</b> All database access binds values — never string-built queries.</span></li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span><b>CI in the loop.</b> Bandit, pip-audit, and detect-secrets run on every push.</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ================================================== CTA -->
+  <section class="block">
+    <div class="wrap">
+      <div class="cta-banner reveal">
+        <h2>Ready to map your network?</h2>
+        <p>Install IPMG and run your first scan in under a minute — or explore the dashboard demo right now.</p>
+        <div class="row">
+          <a class="btn btn-white" href="#install">Get started</a>
+          <a class="btn btn-outline" href="https://github.com/sameeralam3127/ipmg" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M12 .5A11.5 11.5 0 0 0 8.3 22.9c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.5-1.4-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1.1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2 0-.4-.5-1.6.2-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0C17.3 5 18.3 5.3 18.3 5.3c.7 1.6.2 2.8.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A11.5 11.5 0 0 0 12 .5z"/></svg>
+            View on GitHub
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================================== footer -->
+  <footer class="site">
+    <div class="wrap">
+      <div class="foot-grid">
+        <div class="foot-brand">
+          <a class="brand" href="#top">
+            <svg viewBox="0 0 32 32" width="24" height="24" aria-hidden="true"><circle cx="16" cy="16" r="13" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="16" cy="16" r="5" fill="currentColor"/></svg>
+            <span>IPMG</span>
+          </a>
+          <p>A modular, enterprise-ready IP management and ping-monitoring CLI with parallel scanning, change detection, and a local dashboard.</p>
+        </div>
+        <div class="foot-cols">
+          <div class="foot-col">
+            <h4>Product</h4>
+            <a href="#features">Features</a>
+            <a href="#usage">Usage</a>
+            <a href="#changes">Change detection</a>
+            <a href="demo/" target="_blank" rel="noopener">Dashboard demo</a>
+          </div>
+          <div class="foot-col">
+            <h4>Resources</h4>
+            <a href="https://github.com/sameeralam3127/ipmg#readme" target="_blank" rel="noopener">Documentation</a>
+            <a href="https://pypi.org/project/ipmg/" target="_blank" rel="noopener">PyPI package</a>
+            <a href="https://github.com/sameeralam3127/ipmg/releases" target="_blank" rel="noopener">Changelog</a>
+            <a href="https://github.com/sameeralam3127/ipmg/issues" target="_blank" rel="noopener">Issues</a>
+          </div>
+          <div class="foot-col">
+            <h4>Project</h4>
+            <a href="https://github.com/sameeralam3127/ipmg" target="_blank" rel="noopener">GitHub</a>
+            <a href="https://github.com/sameeralam3127/ipmg/blob/main/SECURITY.md" target="_blank" rel="noopener">Security policy</a>
+            <a href="https://github.com/sameeralam3127/ipmg/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a>
+          </div>
+        </div>
+      </div>
+      <div class="foot-bottom">
+        <span>© <span id="year">2026</span> IPMG · Released under the MIT License.</span>
+        <span>Built for authorized network scanning.</span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="assets/landing.js?v=1" defer></script>
 </body>
 </html>
