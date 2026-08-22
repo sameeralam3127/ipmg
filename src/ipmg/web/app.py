@@ -25,6 +25,7 @@ from starlette.websockets import WebSocketDisconnect
 from ipmg import __version__
 from ipmg.core.diff import DiffOptions
 from ipmg.core.engine import HostResult, ScanConfig
+from ipmg.core.portscan import decode_ports
 from ipmg.exceptions import FileIOError, HistoryError, ReportError
 from ipmg.infrastructure.database import DEFAULT_DB_PATH, Database
 from ipmg.infrastructure.file_io import (
@@ -103,6 +104,7 @@ def _results_dataframe(scan: Dict[str, Any], rows: List[Dict[str, Any]]) -> pd.D
             status=row["status"],
             latency=row["latency"],
             hostname=row["hostname"] or "",
+            open_ports=decode_ports(row.get("open_ports") or ""),
         )
         for row in rows
     ]

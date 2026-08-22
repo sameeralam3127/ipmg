@@ -83,6 +83,46 @@ def test_scan_config_clamps_limits():
     assert config.dns_cache_ttl == 0
 
 
+def test_scan_config_clamps_port_timeout():
+    config = ScanConfig(port_timeout=999).clamped()
+
+    assert config.port_timeout == 30.0
+
+
+def test_execute_scan_probes_ports_only_for_active_hosts_when_enabled(monkeypatch):
+    def fake_ping_ip(ip, _timeout, _count):
+        return ("Active", 1.0) if ip == "10.0.0.1" else ("Timeout", None)
+
+    monkeypatch.setattr("ipmg.core.engine.ping_ip", fake_ping_ip)
+    monkeypatch.setattr(
+        "ipmg.core.engine.scan_ports", lambda ip, _ports, _timeout: [22, 443]
+    )
+
+    results = execute_scan(
+        ["10.0.0.1", "10.0.0.2"],
+        ScanConfig(scan_ports=True, ports=(22, 443)),
+    )
+
+    by_ip = {result.ip: result for result in results}
+    assert by_ip["10.0.0.1"].open_ports == (22, 443)
+    assert by_ip["10.0.0.2"].open_ports == ()
+
+
+def test_execute_scan_skips_port_scan_when_disabled(monkeypatch):
+    monkeypatch.setattr("ipmg.core.engine.ping_ip", lambda *_a: ("Active", 1.0))
+
+    called = []
+    monkeypatch.setattr(
+        "ipmg.core.engine.scan_ports",
+        lambda *args: called.append(args) or [],
+    )
+
+    results = execute_scan(["10.0.0.1"], ScanConfig(scan_ports=False))
+
+    assert results[0].open_ports == ()
+    assert called == []
+
+
 def test_execute_scan_propagates_ping_errors(monkeypatch):
     from ipmg.exceptions import PingError
 

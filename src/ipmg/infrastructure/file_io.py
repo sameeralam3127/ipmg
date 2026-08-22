@@ -219,7 +219,9 @@ def build_markdown_report(df: pd.DataFrame) -> str:
         lines.append("| No results | 0 |")
 
     preview_columns = [
-        column for column in ["IP Address", "Status", "Latency", "Hostname"] if column in df.columns
+        column
+        for column in ["IP Address", "Status", "Latency", "Hostname", "Open Ports"]
+        if column in df.columns
     ]
     if preview_columns:
         lines.extend(

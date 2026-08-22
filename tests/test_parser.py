@@ -20,3 +20,23 @@ def test_parser_accepts_markdown_output_format():
     args = build_parser().parse_args(["--formats", "md", "csv"])
 
     assert args.formats == ["md", "csv"]
+
+
+def test_parser_port_scanning_defaults_off():
+    args = build_parser().parse_args([])
+
+    assert args.scan_ports is False
+    assert args.ports == (21, 22, 25, 53, 80, 443, 445, 1433, 3306, 3389, 5432)
+    assert args.port_timeout == 1.0
+
+
+def test_parser_accepts_custom_port_list():
+    args = build_parser().parse_args(["--scan-ports", "--ports", "22,80,443"])
+
+    assert args.scan_ports is True
+    assert args.ports == (22, 80, 443)
+
+
+def test_parser_rejects_invalid_port():
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["--ports", "not-a-port"])

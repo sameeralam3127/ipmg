@@ -28,7 +28,7 @@ maintainers = [
     { name = "Sameer Alam", email = "sameeralam3127@gmail.com" }
 ]
 
-keywords = ["ip", "network", "ping", "monitoring", "cli"]
+keywords = ["ip", "network", "ping", "monitoring", "cli", "port-scan"]
 
 classifiers = [
     "Programming Language :: Python :: 3",

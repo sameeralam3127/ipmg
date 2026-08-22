@@ -200,6 +200,9 @@ or behind a reverse proxy with authentication (see [Security](#security)).
 | `--timeout` | `2` | Ping timeout in seconds |
 | `--count` | `1` | Pings per host |
 | `--threads` | `50` | Parallel workers |
+| `--scan-ports` | off | Probe common TCP ports on hosts that answer ICMP |
+| `--ports` | `21,22,25,53,80,443,445,1433,3306,3389,5432` | Comma-separated TCP ports to probe when `--scan-ports` is set |
+| `--port-timeout` | `1` | Connect timeout per port in seconds, when `--scan-ports` is set |
 | `--interval` | off | Repeat the scan every N minutes |
 | `--compare` | off | Report what changed since the previous scan |
 | `--no-history` | off | Do not store the scan in the history database |
@@ -259,11 +262,21 @@ and the symbols fall back to ASCII on terminals that cannot render them.
 
 Result files (e.g. `results_20260628_120000.xlsx`) contain one row per host:
 
-| IP Address | Status | Latency | Hostname   | Batch Timestamp     | Scan Duration (s) |
-| ---------- | ------ | ------- | ---------- | ------------------- | ----------------- |
-| 8.8.8.8    | Active | 12.5    | dns.google | 2026-04-09 11:42:13 | 6.24              |
+| IP Address | Status | Latency | Hostname   | Open Ports | Batch Timestamp     | Scan Duration (s) |
+| ---------- | ------ | ------- | ---------- | ---------- | ------------------- | ----------------- |
+| 8.8.8.8    | Active | 12.5    | dns.google | 443        | 2026-04-09 11:42:13 | 6.24               |
 
 Status values: `Active`, `Inactive`, `Timeout`, `Unreachable`, `Invalid IP`, `Error`.
+
+`Open Ports` is only populated when `--scan-ports` is set: for each host that
+answers ICMP, IPMG probes a configurable list of common TCP ports
+(SSH, HTTP, HTTPS, RDP, SMB, FTP, SMTP, DNS, MSSQL, MySQL, PostgreSQL by
+default) concurrently and records which ones accepted a connection.
+
+```bash
+ipmg --input targets.txt --scan-ports
+ipmg --input targets.txt --scan-ports --ports 22,80,443 --port-timeout 0.5
+```
 
 The `md` format produces a shareable Markdown report with a status summary
 table — handy for tickets, handoffs, and incident timelines.

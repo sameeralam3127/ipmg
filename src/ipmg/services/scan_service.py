@@ -15,6 +15,7 @@ import pandas as pd
 from ipmg.core.diff import DiffOptions
 from ipmg.core.discovery import discover_local_subnet
 from ipmg.core.engine import HostResult, ScanConfig, execute_scan
+from ipmg.core.portscan import DEFAULT_PORTS
 from ipmg.exceptions import HistoryError
 from ipmg.infrastructure.file_io import (
     SUPPORTED_INPUT_SUFFIXES,
@@ -79,6 +80,9 @@ def _config_from_args(args) -> ScanConfig:
         threads=args.threads,
         resolve=args.resolve,
         dns_cache_ttl=getattr(args, "dns_cache_ttl", 300),
+        scan_ports=getattr(args, "scan_ports", False),
+        ports=tuple(getattr(args, "ports", None) or DEFAULT_PORTS),
+        port_timeout=getattr(args, "port_timeout", 1.0),
     ).clamped()
 
 
@@ -100,7 +104,12 @@ def _print_configuration(source: str, targets: int, config: ScanConfig) -> None:
                 "Config",
                 f"{config.threads} threads {ui.glyph('sep')} {config.timeout}s timeout "
                 f"{ui.glyph('sep')} {config.count} {ping_word}"
-                + (f" {ui.glyph('sep')} reverse DNS" if config.resolve else ""),
+                + (f" {ui.glyph('sep')} reverse DNS" if config.resolve else "")
+                + (
+                    f" {ui.glyph('sep')} {ui.plural(len(config.ports), 'port')} scan"
+                    if config.scan_ports
+                    else ""
+                ),
             ),
         ]
     )

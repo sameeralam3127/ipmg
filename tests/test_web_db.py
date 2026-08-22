@@ -1,3 +1,5 @@
+import sqlite3
+
 from ipmg.core.engine import HostResult
 from ipmg.web.db import Database  # backwards-compatible alias
 
@@ -34,6 +36,63 @@ def test_results_filtering(tmp_path):
     assert len(db.get_results(scan_id, status="Active")) == 2
     assert [row["ip"] for row in db.get_results(scan_id, search="beta")] == ["10.0.0.2"]
     assert [row["ip"] for row in db.get_results(scan_id, search="0.3")] == ["10.0.0.3"]
+
+
+def test_open_ports_round_trip_through_storage(tmp_path):
+    db = make_db(tmp_path)
+    scan_id = db.create_scan("manual", 1, {})
+    db.add_result(
+        scan_id, HostResult("10.0.0.1", "Active", 1.0, "router", open_ports=(22, 80, 443))
+    )
+
+    results = db.get_results(scan_id)
+    assert results[0]["open_ports"] == "22,80,443"
+
+
+def test_open_ports_defaults_to_empty_string(tmp_path):
+    db = make_db(tmp_path)
+    scan_id = db.create_scan("manual", 1, {})
+    db.add_result(scan_id, HostResult("10.0.0.1", "Timeout", None))
+
+    results = db.get_results(scan_id)
+    assert results[0]["open_ports"] == ""
+
+
+def test_opening_a_pre_existing_database_adds_open_ports_column(tmp_path):
+    path = tmp_path / "legacy.db"
+    conn = sqlite3.connect(path)
+    conn.executescript(
+        """
+        CREATE TABLE scans (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            started_at TEXT NOT NULL,
+            finished_at TEXT,
+            duration_s REAL,
+            source TEXT NOT NULL,
+            total INTEGER NOT NULL DEFAULT 0,
+            completed INTEGER NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'running',
+            config TEXT NOT NULL DEFAULT '{}',
+            error TEXT
+        );
+        CREATE TABLE results (
+            scan_id INTEGER NOT NULL REFERENCES scans(id) ON DELETE CASCADE,
+            ip TEXT NOT NULL,
+            status TEXT NOT NULL,
+            latency REAL,
+            hostname TEXT NOT NULL DEFAULT '',
+            checked_at TEXT NOT NULL
+        );
+        """
+    )
+    conn.commit()
+    conn.close()
+
+    db = Database(path)
+    scan_id = db.create_scan("manual", 1, {})
+    db.add_result(scan_id, HostResult("10.0.0.1", "Active", 1.0, open_ports=(22,)))
+
+    assert db.get_results(scan_id)[0]["open_ports"] == "22"
 
 
 def test_delete_scan_cascades(tmp_path):

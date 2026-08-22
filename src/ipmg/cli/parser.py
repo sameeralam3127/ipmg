@@ -5,9 +5,17 @@ from __future__ import annotations
 import argparse
 
 from ipmg import __version__
+from ipmg.core.portscan import DEFAULT_PORTS, parse_port_list
 from ipmg.reporting.diff_report import DIFF_FORMATS
 
 PROG = "IPMG - IP Management & Ping Monitoring Tool"
+
+
+def _port_list(value: str) -> tuple:
+    try:
+        return parse_port_list(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
 
 
 def _add_database_argument(parser) -> None:
@@ -89,6 +97,30 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--interval", type=int)
     parser.add_argument("--verbose", action="store_true")
+
+    ports_group = parser.add_argument_group("TCP service discovery")
+    ports_group.add_argument(
+        "--scan-ports",
+        action="store_true",
+        help="Probe common TCP ports on hosts that answer ICMP (off by default).",
+    )
+    ports_group.add_argument(
+        "--ports",
+        type=_port_list,
+        default=DEFAULT_PORTS,
+        metavar="PORTS",
+        help=(
+            "Comma-separated TCP ports to probe when --scan-ports is set "
+            f"(default: {','.join(str(p) for p in DEFAULT_PORTS)})."
+        ),
+    )
+    ports_group.add_argument(
+        "--port-timeout",
+        type=float,
+        default=1.0,
+        metavar="SECONDS",
+        help="Connect timeout per port when --scan-ports is set (default: 1).",
+    )
 
     history = parser.add_argument_group("scan history")
     history.add_argument(
