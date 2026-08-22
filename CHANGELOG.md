@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v1.12.1 (2026-08-22)
+
+### Bug Fixes
+
+- **dashboard**: Open local dashboard on New Scan, not the marketing landing page
+  ([#27](https://github.com/sameeralam3127/ipmg/pull/27),
+  [`0734d6c`](https://github.com/sameeralam3127/ipmg/commit/0734d6c2d0a4a40dfe3c87f62bb283e259335709))
+
+
 ## v1.12.0 (2026-08-22)
 
 ### Bug Fixes
