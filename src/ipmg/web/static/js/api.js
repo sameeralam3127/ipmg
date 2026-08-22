@@ -5,7 +5,7 @@ import { demo } from "./demo.js";
 const BASE = "/api/v1";
 // Pages has no Python process. `?demo=1` is also useful for reviewing the
 // static experience locally without starting a scanner.
-const useDemo = location.hostname.endsWith("github.io") || new URLSearchParams(location.search).has("demo");
+const useDemo = location.hostname.endsWith(".github.io") || new URLSearchParams(location.search).has("demo");
 
 async function request(path, options = {}) {
   const response = await fetch(`${BASE}${path}`, options);

@@ -106,6 +106,7 @@ body {
 }
 
 .nav { display: flex; flex-direction: column; gap: 2px; }
+.nav a[hidden] { display: none; }
 
 .nav a {
   display: flex;
