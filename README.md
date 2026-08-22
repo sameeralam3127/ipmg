@@ -169,6 +169,22 @@ is loaded from a CDN. It gives you:
 
 `ipmg web` is an alias for `ipmg dashboard`.
 
+### Headless / remote servers
+
+On a Linux server with no display (e.g. accessed over plain SSH), IPMG
+detects that no browser can be opened, skips the attempt, and prints a hint
+instead of failing silently. The dashboard still binds to `127.0.0.1` by
+default, so reach it from your workstation with an SSH tunnel:
+
+```bash
+ssh -L 8080:127.0.0.1:8080 user@server
+# then open http://127.0.0.1:8080 locally
+```
+
+Alternatively, bind to all interfaces with `--host 0.0.0.0` — this exposes
+an unauthenticated API on the network, so only do this on a trusted network
+or behind a reverse proxy with authentication (see [Security](#security)).
+
 ---
 
 ## Options
