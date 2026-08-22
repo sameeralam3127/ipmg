@@ -1,6 +1,6 @@
 // App shell: hash router, theme toggle, and WebSocket bootstrap.
 
-import { connect } from "./api.js?v=20260808.2";
+import { connect } from "./api.js?v=20260822.1";
 import {
   aboutView,
   changesView,
@@ -11,10 +11,18 @@ import {
   monitorView,
   newScanView,
   scanDetailView,
-} from "./views.js?v=20260808.2";
+} from "./views.js?v=20260822.1";
+
+// The GitHub Pages demo is a marketing surface, so it opens on the landing
+// page; a real local dashboard is a tool the user already chose to run, so
+// it should open straight into the app instead.
+const isDemo =
+  location.hostname.endsWith(".github.io") || new URLSearchParams(location.search).has("demo");
 
 const routes = [
-  { pattern: /^#?\/?$/, name: "home", view: landingView },
+  isDemo
+    ? { pattern: /^#?\/?$/, name: "home", view: landingView }
+    : { pattern: /^#?\/?$/, name: "new", view: newScanView },
   { pattern: /^#\/dashboard$/, name: "dashboard", view: dashboardView },
   { pattern: /^#\/new$/, name: "new", view: newScanView },
   { pattern: /^#\/monitor(?:\/(\d+))?$/, name: "monitor", view: monitorView },
@@ -76,15 +84,15 @@ function initTheme() {
   });
 }
 
-function initDemoBadge() {
-  const isDemo = location.hostname.endsWith("github.io") || new URLSearchParams(location.search).has("demo");
+function initPublicNav() {
   document.querySelector(".demo-badge").hidden = !isDemo;
+  document.querySelector('.nav a[data-route="home"]').hidden = !isDemo;
 }
 
 // -------------------------------------------------------------- boot
 
 window.addEventListener("hashchange", render);
 initTheme();
-initDemoBadge();
+initPublicNav();
 connect();
 render();
