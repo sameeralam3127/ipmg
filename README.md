@@ -32,10 +32,10 @@ ipmg --version
 **uv (isolated global install):**
 
 ```bash
-uv tool install git+https://github.com/sameeralam3127/ipmg.git
+uv tool install ipmg
 ```
 
-**curl installer (installs uv if missing):**
+**curl installer (installs uv if missing, then installs/upgrades ipmg from PyPI):**
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/sameeralam3127/ipmg/main/install.sh | bash
