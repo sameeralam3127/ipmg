@@ -17,6 +17,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 from ipmg.core.diff import HostSnapshot, ScanRef, ip_sort_key
 from ipmg.core.engine import HostResult
+from ipmg.core.portscan import encode_ports
 
 DEFAULT_DB_PATH = Path.home() / ".ipmg" / "dashboard.db"
 
@@ -48,6 +49,7 @@ CREATE TABLE IF NOT EXISTS results (
     status TEXT NOT NULL,
     latency REAL,
     hostname TEXT NOT NULL DEFAULT '',
+    open_ports TEXT NOT NULL DEFAULT '',
     checked_at TEXT NOT NULL
 );
 
@@ -77,6 +79,14 @@ class Database:
         Path(self._path).parent.mkdir(parents=True, exist_ok=True)
         with self._session() as conn:
             conn.executescript(_SCHEMA)
+            self._migrate(conn)
+
+    @staticmethod
+    def _migrate(conn: sqlite3.Connection) -> None:
+        """Add columns introduced after a database was first created."""
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(results)")}
+        if "open_ports" not in columns:
+            conn.execute("ALTER TABLE results ADD COLUMN open_ports TEXT NOT NULL DEFAULT ''")
 
     @property
     def path(self) -> str:
@@ -111,7 +121,15 @@ class Database:
         """Insert many results in one transaction; returns the number stored."""
         checked_at = _now()
         rows = [
-            (scan_id, result.ip, result.status, result.latency, result.hostname, checked_at)
+            (
+                scan_id,
+                result.ip,
+                result.status,
+                result.latency,
+                result.hostname,
+                encode_ports(result.open_ports),
+                checked_at,
+            )
             for result in results
         ]
         if not rows:
@@ -119,8 +137,9 @@ class Database:
 
         with self._session() as conn:
             conn.executemany(
-                "INSERT INTO results (scan_id, ip, status, latency, hostname, checked_at) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO results "
+                "(scan_id, ip, status, latency, hostname, open_ports, checked_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
                 rows,
             )
             conn.execute(
@@ -260,7 +279,10 @@ class Database:
         status: Optional[str] = None,
         search: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        query = "SELECT ip, status, latency, hostname, checked_at FROM results WHERE scan_id = ?"
+        query = (
+            "SELECT ip, status, latency, hostname, open_ports, checked_at "
+            "FROM results WHERE scan_id = ?"
+        )
         params: List[Any] = [scan_id]
         if status:
             query += " AND status = ?"

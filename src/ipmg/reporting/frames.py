@@ -13,9 +13,14 @@ RESULT_COLUMNS: List[str] = [
     "Status",
     "Latency",
     "Hostname",
+    "Open Ports",
     "Batch Timestamp",
     "Scan Duration (s)",
 ]
+
+
+def format_open_ports(ports: Iterable[int]) -> str:
+    return ", ".join(str(port) for port in ports)
 
 
 def results_dataframe(
@@ -31,6 +36,7 @@ def results_dataframe(
             "Status": result.status,
             "Latency": result.latency,
             "Hostname": result.hostname,
+            "Open Ports": format_open_ports(result.open_ports),
             "Batch Timestamp": batch_timestamp,
             "Scan Duration (s)": duration,
         }

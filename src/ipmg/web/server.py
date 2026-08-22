@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import ipaddress
+import os
+import sys
 import threading
 import webbrowser
 from pathlib import Path
@@ -24,6 +26,22 @@ def _display_host(host: str) -> str:
     return host
 
 
+def _is_loopback(host: str) -> bool:
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def _has_display() -> bool:
+    """False on a Linux session with no X11/Wayland display (e.g. over plain SSH)."""
+    if sys.platform.startswith("linux"):
+        return bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+    return True
+
+
 def run_dashboard(
     host: str = "127.0.0.1",
     port: int = 8080,
@@ -43,9 +61,17 @@ def run_dashboard(
     )
     ui.blank()
     ui.note("Press CTRL+C to stop.")
-    ui.blank()
 
-    if open_browser:
+    headless = open_browser and not _has_display()
+    if headless:
+        ui.note("No display detected — skipping automatic browser launch.")
+    elif open_browser:
         threading.Timer(1.0, webbrowser.open, args=(url,)).start()
+
+    if _is_loopback(host):
+        ui.note(f"Remote access: ssh -L {port}:127.0.0.1:{port} user@this-host, then open {url}.")
+        ui.note("Or run with --host 0.0.0.0 (exposes an unauthenticated API — see SECURITY.md).")
+
+    ui.blank()
 
     uvicorn.run(app, host=host, port=port, log_level="warning")

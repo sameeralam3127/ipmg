@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import concurrent.futures
-from dataclasses import dataclass
-from typing import Callable, Iterable, List, Optional
+from dataclasses import dataclass, field
+from typing import Callable, Iterable, List, Optional, Tuple
 
 from ipmg.core.ping import ping_ip
+from ipmg.core.portscan import DEFAULT_PORTS, scan_ports
 from ipmg.exceptions import PingError
 from ipmg.utils.helpers import HostnameCache, clamp_int
 
@@ -18,6 +19,9 @@ class ScanConfig:
     threads: int = 50
     resolve: bool = False
     dns_cache_ttl: int = 300
+    scan_ports: bool = False
+    ports: Tuple[int, ...] = DEFAULT_PORTS
+    port_timeout: float = 1.0
 
     def clamped(self) -> "ScanConfig":
         return ScanConfig(
@@ -26,6 +30,9 @@ class ScanConfig:
             threads=clamp_int(self.threads, 1, 500),
             resolve=self.resolve,
             dns_cache_ttl=clamp_int(self.dns_cache_ttl, 0, 86400),
+            scan_ports=self.scan_ports,
+            ports=tuple(self.ports),
+            port_timeout=max(min(self.port_timeout, 30.0), 0.1),
         )
 
 
@@ -35,6 +42,7 @@ class HostResult:
     status: str
     latency: Optional[float]
     hostname: str = ""
+    open_ports: Tuple[int, ...] = field(default_factory=tuple)
 
 
 ResultCallback = Callable[[HostResult, int, int], None]
@@ -76,7 +84,13 @@ def execute_scan(
                 status, latency = "Error", None
 
             hostname = cache.resolve(ip) if cache else ""
-            result = HostResult(ip=ip, status=status, latency=latency, hostname=hostname)
+            open_ports: Tuple[int, ...] = ()
+            if config.scan_ports and status == "Active":
+                open_ports = tuple(scan_ports(ip, config.ports, config.port_timeout))
+
+            result = HostResult(
+                ip=ip, status=status, latency=latency, hostname=hostname, open_ports=open_ports
+            )
             results.append(result)
 
             if on_result is not None:
