@@ -2,6 +2,30 @@
 
 <!-- version list -->
 
+## v1.12.0 (2026-08-22)
+
+### Bug Fixes
+
+- **dashboard**: Skip browser launch and hint remote access on headless servers
+  ([#26](https://github.com/sameeralam3127/ipmg/pull/26),
+  [`5fa24f7`](https://github.com/sameeralam3127/ipmg/commit/5fa24f714d94947b318af22604743b6968702253))
+
+- **install**: Always install from PyPI and harden edge cases
+  ([#26](https://github.com/sameeralam3127/ipmg/pull/26),
+  [`5fa24f7`](https://github.com/sameeralam3127/ipmg/commit/5fa24f714d94947b318af22604743b6968702253))
+
+### Documentation
+
+- **security**: Update supported version and note known issues
+  ([`8f503f6`](https://github.com/sameeralam3127/ipmg/commit/8f503f61139b04c92fa8daa78d513a49ec566d9d))
+
+### Features
+
+- Add optional TCP service discovery after ICMP
+  ([#26](https://github.com/sameeralam3127/ipmg/pull/26),
+  [`5fa24f7`](https://github.com/sameeralam3127/ipmg/commit/5fa24f714d94947b318af22604743b6968702253))
+
+
 ## v1.11.0 (2026-08-07)
 
 ### Features
