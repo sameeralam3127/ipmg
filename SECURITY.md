@@ -36,8 +36,6 @@ reverse proxy in front is outside the supported threat model.
 
 Tracked hardening items — see the linked issues for details:
 
-- CSV/formula injection in exported reports via attacker-controlled PTR
-  hostnames ([#20](https://github.com/sameeralam3127/ipmg/issues/20))
 - Dashboard REST API has no authentication; keep it on `127.0.0.1` and do not
   expose it beyond localhost ([#21](https://github.com/sameeralam3127/ipmg/issues/21))
 - Unbounded live-event buffering, only reachable when the dashboard is exposed

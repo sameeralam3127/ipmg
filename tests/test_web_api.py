@@ -1,3 +1,4 @@
+import io
 import json
 import time
 
@@ -5,7 +6,7 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-from ipmg.web.app import create_app
+from ipmg.web.app import _render_report, create_app
 from ipmg.web.db import Database
 
 
@@ -219,3 +220,25 @@ def test_index_served(client):
     response = client.get("/")
     assert response.status_code == 200
     assert "IPMG Dashboard" in response.text
+
+
+def test_report_rendering_neutralizes_formula_cells():
+    """A PTR record the scanned host controls must not become a live formula."""
+    df = pd.DataFrame(
+        [
+            {
+                "IP Address": "10.0.0.1",
+                "Status": "Active",
+                "Latency": 1.5,
+                "Hostname": "=cmd|'/c calc'!A1",
+            }
+        ]
+    )
+
+    assert b"'=cmd" in _render_report(df, "csv")
+    assert b",=cmd" not in _render_report(df, "csv")
+
+    xlsx = pd.read_excel(io.BytesIO(_render_report(df, "xlsx")))
+    assert xlsx.loc[0, "Hostname"] == "'=cmd|'/c calc'!A1"
+
+    assert rb"'=cmd\|'/c calc'!A1" in _render_report(df, "md")

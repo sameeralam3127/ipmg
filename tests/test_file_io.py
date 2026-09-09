@@ -1,7 +1,9 @@
+import json
+
 import pandas as pd
 import pytest
 
-from ipmg.infrastructure.file_io import load_targets, save_results
+from ipmg.infrastructure.file_io import load_targets, sanitize_export_frame, save_results
 
 
 def test_load_targets_from_csv(tmp_path):
@@ -113,3 +115,58 @@ def test_parse_manual_targets_caps_total_expansion():
     # Each /16 stays under the per-token limit, but together they exceed it.
     with pytest.raises(FileIOError, match="expand to more than"):
         parse_manual_targets("10.0.0.0/16\n10.1.0.0/16\n")
+
+
+HOSTILE_HOSTNAME = "=cmd|'/c calc'!A1"
+
+
+def _hostile_frame():
+    return pd.DataFrame(
+        [
+            {
+                "IP Address": "10.0.0.1",
+                "Status": "Active",
+                "Latency": 12.3456,
+                "Hostname": HOSTILE_HOSTNAME,
+                "Open Ports": "@22, 80",
+                "Batch Timestamp": "2026-06-28 12:00:00",
+                "Scan Duration (s)": 1.234,
+            }
+        ]
+    )
+
+
+def test_sanitize_export_frame_quotes_formula_cells_only():
+    safe = sanitize_export_frame(_hostile_frame())
+
+    assert safe.loc[0, "Hostname"] == "'" + HOSTILE_HOSTNAME
+    assert safe.loc[0, "Open Ports"] == "'@22, 80"
+    assert safe.loc[0, "IP Address"] == "10.0.0.1"
+    assert safe.loc[0, "Latency"] == 12.3456
+
+
+def test_sanitize_export_frame_leaves_the_original_untouched():
+    df = _hostile_frame()
+    sanitize_export_frame(df)
+
+    assert df.loc[0, "Hostname"] == HOSTILE_HOSTNAME
+
+
+def test_save_results_neutralizes_formulas_in_csv_and_xlsx(tmp_path, monkeypatch):
+    monkeypatch.setattr("ipmg.infrastructure.file_io.timestamp_str", lambda: "20260628_120000")
+
+    save_results(_hostile_frame(), str(tmp_path / "scan"), ["csv", "xlsx", "md", "json"])
+
+    csv_text = (tmp_path / "scan_20260628_120000.csv").read_text(encoding="utf-8")
+    assert "'=cmd" in csv_text
+    assert ",=cmd" not in csv_text
+
+    xlsx = pd.read_excel(tmp_path / "scan_20260628_120000.xlsx")
+    assert xlsx.loc[0, "Hostname"] == "'" + HOSTILE_HOSTNAME
+
+    report = (tmp_path / "scan_20260628_120000.md").read_text(encoding="utf-8")
+    assert r"'=cmd\|'/c calc'!A1" in report
+
+    # JSON is data interchange, not a spreadsheet: it keeps the raw value.
+    raw = json.loads((tmp_path / "scan_20260628_120000.json").read_text(encoding="utf-8"))
+    assert raw[0]["Hostname"] == HOSTILE_HOSTNAME

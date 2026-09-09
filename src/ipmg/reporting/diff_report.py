@@ -13,7 +13,7 @@ from rich.text import Text
 from ipmg.core.diff import CHANGE_LABELS, ChangeType, ScanDiff, Severity
 from ipmg.exceptions import ReportError
 from ipmg.reporting import ui
-from ipmg.utils.helpers import markdown_escape, timestamp_str
+from ipmg.utils.helpers import markdown_cell, markdown_escape, spreadsheet_escape, timestamp_str
 
 DIFF_FORMATS = ("md", "json", "csv")
 
@@ -128,13 +128,16 @@ def diff_to_csv(diff: ScanDiff) -> str:
     for change in diff.changes:
         writer.writerow(
             [
-                change.label,
-                change.severity.value,
-                change.ip,
-                change.hostname,
-                _cell(change.previous),
-                _cell(change.current),
-                "" if change.delta is None else f"{change.delta:+.3f}",
+                spreadsheet_escape(value)
+                for value in (
+                    change.label,
+                    change.severity.value,
+                    change.ip,
+                    change.hostname,
+                    _cell(change.previous),
+                    _cell(change.current),
+                    "" if change.delta is None else f"{change.delta:+.3f}",
+                )
             ]
         )
     return buffer.getvalue()
@@ -190,7 +193,7 @@ def diff_to_markdown(diff: ScanDiff) -> str:
         lines.append(
             "| "
             + " | ".join(
-                markdown_escape(value)
+                markdown_cell(value)
                 for value in (
                     change.label,
                     change.severity.value,
