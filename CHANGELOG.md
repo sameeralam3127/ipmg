@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v1.12.2 (2026-09-09)
+
+### Bug Fixes
+
+- **security**: Neutralize spreadsheet formulas in exported reports
+  ([#28](https://github.com/sameeralam3127/ipmg/pull/28),
+  [`578553a`](https://github.com/sameeralam3127/ipmg/commit/578553ad89e06d076640d12b642450a34d6db785))
+
+
 ## v1.12.1 (2026-08-22)
 
 ### Bug Fixes
