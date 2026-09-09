@@ -143,3 +143,38 @@ def clamp_int(value: int, minimum: Optional[int], maximum: Optional[int]) -> int
 def markdown_escape(value: object) -> str:
     """Escape ``|`` so a value can sit inside a Markdown table cell."""
     return str(value).replace("|", r"\|")
+
+
+#: Leading characters that make a spreadsheet evaluate a cell as a formula.
+FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _is_number(text: str) -> bool:
+    try:
+        float(text)
+    except ValueError:
+        return False
+    return True
+
+
+def spreadsheet_escape(value: object) -> str:
+    """Neutralise a value a spreadsheet would otherwise evaluate as a formula.
+
+    Report cells carry data we do not control — most notably hostnames taken
+    from reverse DNS, which the scanned host itself publishes. A PTR record of
+    ``=cmd|'/c calc'!A1`` becomes a live formula the moment the operator opens
+    the exported CSV/XLSX, so prefix a single quote to force literal text.
+    Signed numbers such as ``-12.5`` are left alone: they are values, not
+    formulas, and quoting them would break the column's arithmetic.
+    """
+    text = str(value)
+    if not text.startswith(FORMULA_PREFIXES):
+        return text
+    if text[0] in "+-" and _is_number(text):
+        return text
+    return "'" + text
+
+
+def markdown_cell(value: object) -> str:
+    """Escape a table cell for Markdown *and* for spreadsheets importing it."""
+    return markdown_escape(spreadsheet_escape(value))

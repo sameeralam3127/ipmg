@@ -97,3 +97,32 @@ def test_print_diff_limit_is_reported(diff, capsys):
     out = capsys.readouterr().out
 
     assert f"{len(diff.changes)} changes (1 shown)" in out
+
+
+@pytest.fixture()
+def hostile_diff():
+    """A change report where the host published a formula as its PTR record."""
+    return compare_snapshots(
+        [HostSnapshot("10.0.0.1", "Active", 10.0, "=cmd|'/c calc'!A1")],
+        [HostSnapshot("10.0.0.1", "Timeout", None, "=cmd|'/c calc'!A1")],
+        baseline_ref=ScanRef(id=1, started_at="2026-07-26 10:00:00", source="targets.csv"),
+        current_ref=ScanRef(id=2, started_at="2026-07-26 11:00:00", source="targets.csv"),
+    )
+
+
+def test_csv_report_neutralizes_formula_cells(hostile_diff):
+    rows = list(csv.reader(io.StringIO(diff_to_csv(hostile_diff))))
+
+    assert rows[1][3] == "'=cmd|'/c calc'!A1"
+
+
+def test_csv_report_keeps_signed_deltas_numeric(diff):
+    rows = list(csv.reader(io.StringIO(diff_to_csv(diff))))
+    deltas = [row[6] for row in rows[1:] if row[6]]
+
+    assert deltas
+    assert all(not delta.startswith("'") for delta in deltas)
+
+
+def test_markdown_report_neutralizes_formula_cells(hostile_diff):
+    assert r"'=cmd\|'/c calc'!A1" in diff_to_markdown(hostile_diff)

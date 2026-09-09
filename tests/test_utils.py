@@ -1,7 +1,16 @@
 import threading
 import time
 
-from ipmg.utils import HostnameCache, clamp_int, resolve_hostname, timestamp_str
+import pytest
+
+from ipmg.utils import (
+    HostnameCache,
+    clamp_int,
+    markdown_cell,
+    resolve_hostname,
+    spreadsheet_escape,
+    timestamp_str,
+)
 
 
 def test_timestamp_str_format():
@@ -69,3 +78,27 @@ def test_hostname_cache_coordinates_simultaneous_lookups(monkeypatch):
 
     assert calls == ["192.0.2.1"]
     assert results == ["router.local", "router.local"]
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "=cmd|'/c calc'!A1",
+        '+HYPERLINK("http://evil.example")',
+        "@SUM(1+1)*cmd",
+        "-2+3+cmd|' /C calc'!A0",
+        "\tleading-tab",
+        "\rleading-cr",
+    ],
+)
+def test_spreadsheet_escape_neutralizes_formula_cells(value):
+    assert spreadsheet_escape(value) == "'" + value
+
+
+@pytest.mark.parametrize("value", ["dns.google", "Active", "", "12.5", "-12.5", "+0.75"])
+def test_spreadsheet_escape_leaves_plain_values_untouched(value):
+    assert spreadsheet_escape(value) == value
+
+
+def test_markdown_cell_escapes_pipes_and_formulas():
+    assert markdown_cell("=SUM(A1)|x") == r"'=SUM(A1)\|x"

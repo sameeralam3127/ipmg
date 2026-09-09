@@ -7,7 +7,7 @@ import pandas as pd
 from ipmg.core.ping import validate_ip
 from ipmg.exceptions import FileIOError
 from ipmg.reporting import ui
-from ipmg.utils.helpers import markdown_escape, timestamp_str
+from ipmg.utils.helpers import markdown_cell, spreadsheet_escape, timestamp_str
 
 SUPPORTED_INPUT_SUFFIXES = {".xlsx", ".xls", ".csv", ".txt", ".list"}
 MAX_EXPANDED_TARGETS = 65_536
@@ -177,12 +177,31 @@ def create_sample_file(path: str) -> None:
     df.to_excel(path, index=False)
 
 
+def sanitize_export_frame(df: pd.DataFrame) -> pd.DataFrame:
+    """Copy ``df`` with every text cell neutralised for spreadsheet export.
+
+    Applied to CSV and XLSX output on both the CLI and dashboard paths so a
+    hostname harvested from reverse DNS cannot smuggle a formula into the
+    operator's spreadsheet. See :func:`spreadsheet_escape`.
+    """
+    safe = df.copy()
+    for column in safe.columns:
+        # Every column is walked rather than filtered by dtype: pandas stores
+        # text as ``object`` or ``str`` depending on the version, and numbers
+        # pass straight through the isinstance guard anyway.
+        safe[column] = safe[column].map(
+            lambda value: spreadsheet_escape(value) if isinstance(value, str) else value,
+            na_action="ignore",
+        )
+    return safe
+
+
 def _format_markdown_value(value) -> str:
     if pd.isna(value):
         return ""
     if isinstance(value, float):
         return f"{value:.3f}".rstrip("0").rstrip(".")
-    return markdown_escape(value)
+    return markdown_cell(value)
 
 
 def build_markdown_report(df: pd.DataFrame) -> str:
@@ -214,7 +233,7 @@ def build_markdown_report(df: pd.DataFrame) -> str:
 
     if status_counts:
         for status, count in status_counts.items():
-            lines.append(f"| {markdown_escape(status)} | {count} |")
+            lines.append(f"| {markdown_cell(status)} | {count} |")
     else:
         lines.append("| No results | 0 |")
 
@@ -254,10 +273,10 @@ def save_results(df, base: str, formats: list[str]) -> list[str]:
     for fmt in formats:
         if fmt == "xlsx":
             output_path = f"{base}_{ts}.xlsx"
-            df.to_excel(output_path, index=False)
+            sanitize_export_frame(df).to_excel(output_path, index=False)
         elif fmt == "csv":
             output_path = f"{base}_{ts}.csv"
-            df.to_csv(output_path, index=False)
+            sanitize_export_frame(df).to_csv(output_path, index=False)
         elif fmt == "json":
             output_path = f"{base}_{ts}.json"
             df.to_json(output_path, orient="records")

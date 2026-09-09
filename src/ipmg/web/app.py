@@ -33,6 +33,7 @@ from ipmg.infrastructure.file_io import (
     build_markdown_report,
     load_targets,
     parse_manual_targets,
+    sanitize_export_frame,
 )
 from ipmg.reporting.diff_report import DIFF_FORMATS, render_diff
 from ipmg.reporting.frames import results_dataframe
@@ -114,10 +115,10 @@ def _results_dataframe(scan: Dict[str, Any], rows: List[Dict[str, Any]]) -> pd.D
 def _render_report(df: pd.DataFrame, fmt: str) -> bytes:
     if fmt == "xlsx":
         buffer = io.BytesIO()
-        df.to_excel(buffer, index=False)
+        sanitize_export_frame(df).to_excel(buffer, index=False)
         return buffer.getvalue()
     if fmt == "csv":
-        return df.to_csv(index=False).encode("utf-8")
+        return sanitize_export_frame(df).to_csv(index=False).encode("utf-8")
     if fmt == "json":
         return df.to_json(orient="records").encode("utf-8")
     return build_markdown_report(df).encode("utf-8")
