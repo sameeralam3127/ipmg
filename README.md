@@ -40,18 +40,103 @@ ipmg --discover        # scan the network you are on, right now
 
 ## Install
 
+**Linux and macOS — one command, works on every distribution:**
+
 ```bash
-pip install ipmg
+curl -sSL https://raw.githubusercontent.com/sameeralam3127/ipmg/main/install.sh | bash
 ```
 
-Check that it worked:
+It installs [uv](https://docs.astral.sh/uv/) (which brings its own Python, so
+your system Python does not matter), then installs IPMG as an isolated tool.
+Nothing is installed system-wide unless you run it as root.
+
+On a minimal server or container image, add `--with-deps` and it will install
+the handful of system packages it needs (`curl`, `tar`, `gzip`, `ping`) for you:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/sameeralam3127/ipmg/main/install.sh | bash -s -- --with-deps
+```
+
+**Windows — two commands in PowerShell:**
+
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+uv tool install ipmg
+```
+
+Then check it works, on any platform:
 
 ```bash
 ipmg --version
 ```
 
-You need Python 3.9 or newer and the `ping` command that ships with your
-operating system. You do **not** need root or administrator rights.
+### Installing with pip
+
+`pip install ipmg` works inside a virtual environment, and inside one only.
+On Ubuntu 23.04+, Debian 12+, Fedora 38+, and recent openSUSE, installing into
+the system Python is blocked by the distribution itself:
+
+```
+error: externally-managed-environment
+× This environment is externally managed
+```
+
+That is [PEP 668](https://peps.python.org/pep-0668/), and it is not an IPMG
+bug — the distro is protecting its own Python. Any of these get you around it:
+
+```bash
+# 1. uv — no system Python needed at all (what the installer above uses)
+uv tool install ipmg
+
+# 2. pipx — the standard way to install Python applications
+pipx install ipmg
+
+# 3. a virtual environment you manage yourself
+python3 -m venv ~/.venvs/ipmg
+~/.venvs/ipmg/bin/pip install ipmg
+~/.venvs/ipmg/bin/ipmg --version
+```
+
+Please do not reach for `--break-system-packages`. It does what it says.
+
+### The one thing IPMG needs from your system
+
+IPMG probes hosts with your operating system's `ping` command, and minimal
+Ubuntu, RHEL, SUSE, and container images ship without it. If a scan reports
+`The system 'ping' command is not available`, install it:
+
+| System | Command |
+| --- | --- |
+| Ubuntu, Debian | `sudo apt-get install -y iputils-ping` |
+| RHEL, Rocky, Alma, Fedora | `sudo dnf install -y iputils` |
+| openSUSE, SLES | `sudo zypper install -y iputils` |
+| Arch | `sudo pacman -S iputils` |
+| Alpine | `sudo apk add iputils` |
+| macOS, Windows | already included |
+
+You do **not** need root, administrator rights, or a raw-socket capability —
+IPMG runs the same `ping` you would run by hand.
+
+### Verified environments
+
+Each of these was installed from scratch and run against a live target:
+
+| Environment | Notes |
+| --- | --- |
+| Ubuntu 22.04 / 24.04 | 24.04 blocks `pip install`; the installer is unaffected |
+| Debian 12 | same PEP 668 situation as Ubuntu |
+| RHEL 8 / RHEL 9 (UBI), Rocky 9 | RHEL 8's system Python is 3.6 — uv supplies its own |
+| Fedora 41 | |
+| openSUSE Leap 15.6 | image has no Python at all; installer supplies everything |
+| Alpine 3.20 | run the installer with `bash`, not `sh` |
+| macOS | verified on Apple silicon |
+
+Windows is not in that list because it cannot be tested in a container: it is
+covered instead by the CI matrix, which runs the full test suite and a live
+scan on `windows-latest` for every change.
+
+Python 3.9 through 3.14 are supported, and CI runs the test suite against every
+one of them.
 
 <details>
 <summary>Other ways to install</summary>
@@ -62,10 +147,10 @@ operating system. You do **not** need root or administrator rights.
 uv tool install ipmg
 ```
 
-**curl installer (installs uv if missing, then installs/upgrades ipmg from PyPI):**
+**Pin a specific version:**
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/sameeralam3127/ipmg/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/sameeralam3127/ipmg/main/install.sh | bash -s -- --version 1.13.0
 ```
 
 **From source (development):**
@@ -73,7 +158,14 @@ curl -sSL https://raw.githubusercontent.com/sameeralam3127/ipmg/main/install.sh 
 ```bash
 git clone https://github.com/sameeralam3127/ipmg.git
 cd ipmg
-pip install -e .
+pip install -e ".[dev]"
+```
+
+**Upgrade or remove:**
+
+```bash
+uv tool upgrade ipmg
+uv tool uninstall ipmg
 ```
 
 </details>
@@ -419,9 +511,26 @@ Found a vulnerability? See [SECURITY.md](SECURITY.md) for how to report it.
 
 ## Troubleshooting
 
-**`command not found: ipmg`**
-Pip installed it somewhere that is not on your `PATH`. Try `python -m ipmg`, or
-reinstall with `uv tool install ipmg`, which handles the `PATH` for you.
+**`error: externally-managed-environment` when running `pip install ipmg`**
+Your distribution blocks installs into the system Python (Ubuntu 23.04+,
+Debian 12+, Fedora 38+). Use the one-line installer, `uv tool install ipmg`, or
+`pipx install ipmg` — see [Installing with pip](#installing-with-pip).
+
+**`command not found: ipmg` right after installing**
+The install directory is not on your `PATH` yet. Open a new terminal first —
+the installer adds it to your shell profile. Still missing? Run it directly
+from `~/.local/bin/ipmg`, or `python -m ipmg` if you installed with pip.
+
+**The installer fails on a minimal image**
+Bare container and cloud images often lack `curl`, `tar`, or `gzip`. The
+installer names exactly what is missing and the command that installs it, or
+you can let it do the work: add `--with-deps`. On Alpine, run it with `bash`
+(`apk add bash`) — the script needs more than busybox `sh` provides.
+
+**`The system 'ping' command is not available`**
+IPMG installed fine, but your image has no ping. Install it with the command
+for your distribution — see
+[The one thing IPMG needs](#the-one-thing-ipmg-needs-from-your-system).
 
 **Every host comes back `Timeout`**
 Something is dropping ICMP — a host firewall, a VPN, or a cloud security group.
@@ -458,7 +567,14 @@ Check the extension is one IPMG reads (`.xlsx`, `.xls`, `.csv`, `.txt`,
 ## FAQ
 
 **Do I need root or administrator rights?**
-No. IPMG calls the same `ping` command you would run by hand.
+No. IPMG calls the same `ping` command you would run by hand. The installer
+only writes to `~/.local/bin`, unless you run it as root — then it installs
+system-wide to `/usr/local/bin` on purpose.
+
+**Do I need a specific Python version installed?**
+No. The one-line installer brings its own Python, which is why it works on
+RHEL 8 (system Python 3.6) and on openSUSE images with no Python at all. If you
+install with pip instead, you need Python 3.9 or newer.
 
 **Does it change anything on the hosts it scans?**
 No. It sends ICMP echo requests, and with `--scan-ports` it opens and
