@@ -26,6 +26,7 @@ from ipmg.infrastructure.file_io import (
 from ipmg.reporting import ui
 from ipmg.reporting.diff_report import export_diff, print_diff
 from ipmg.reporting.frames import results_dataframe
+from ipmg.reporting.live import DEFAULT_REFRESH_S, StreamOptions, scan_display
 from ipmg.reporting.summary import print_summary
 from ipmg.services.history_service import HistoryService
 from ipmg.utils.helpers import current_timestamp
@@ -73,6 +74,17 @@ def _history_options(args) -> HistoryOptions:
     )
 
 
+def _stream_options(args) -> StreamOptions:
+    """Read live-output settings off the parsed arguments."""
+    all_hosts = bool(getattr(args, "stream_all", False))
+    return StreamOptions(
+        # --stream-all is a stronger form of --stream, so it implies it.
+        enabled=bool(getattr(args, "stream", False)) or all_hosts,
+        all_hosts=all_hosts,
+        refresh_s=float(getattr(args, "stream_refresh", DEFAULT_REFRESH_S)),
+    ).clamped()
+
+
 def _config_from_args(args) -> ScanConfig:
     return ScanConfig(
         timeout=args.timeout,
@@ -115,17 +127,16 @@ def _print_configuration(source: str, targets: int, config: ScanConfig) -> None:
     )
 
 
-def _scan_with_progress(ip_list: List[str], config: ScanConfig) -> List[HostResult]:
-    with ui.progress("Scanning") as progress:
-        task_id = progress.add_task("scan", total=len(ip_list))
-        return execute_scan(
-            ip_list,
-            config,
-            on_result=lambda _result, _done, _total: progress.advance(task_id),
-        )
+def _scan_with_progress(
+    ip_list: List[str],
+    config: ScanConfig,
+    stream: StreamOptions,
+) -> List[HostResult]:
+    with scan_display(len(ip_list), config, stream) as on_result:
+        return execute_scan(ip_list, config, on_result=on_result)
 
 
-def _run_single_pass(args, config: ScanConfig) -> ScanOutcome:
+def _run_single_pass(args, config: ScanConfig, stream: StreamOptions) -> ScanOutcome:
     batch_timestamp = current_timestamp()
     started_at = time.perf_counter()
 
@@ -133,7 +144,7 @@ def _run_single_pass(args, config: ScanConfig) -> ScanOutcome:
     source = "auto-discovery" if args.discover else args.input
 
     _print_configuration(source, len(ip_list), config)
-    results = _scan_with_progress(ip_list, config)
+    results = _scan_with_progress(ip_list, config, stream)
     duration = time.perf_counter() - started_at
 
     return ScanOutcome(
@@ -201,10 +212,11 @@ def _store_and_compare(
 def run_scan(args) -> None:
     config = _config_from_args(args)
     history_options = _history_options(args)
+    stream = _stream_options(args)
     _ensure_input_file(args)
 
     while True:
-        outcome = _run_single_pass(args, config)
+        outcome = _run_single_pass(args, config, stream)
 
         print_summary(outcome.frame, outcome.batch_timestamp, outcome.duration_s)
         save_results(outcome.frame, args.output, args.formats)

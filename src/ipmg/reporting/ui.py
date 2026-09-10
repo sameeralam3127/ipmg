@@ -14,6 +14,7 @@ from rich.padding import Padding
 from rich.progress import (
     BarColumn,
     Progress,
+    ProgressColumn,
     SpinnerColumn,
     TextColumn,
     TimeElapsedColumn,
@@ -200,8 +201,21 @@ def print_table(grid: Table) -> None:
     console.print(Padding(grid, (0, 0, 0, len(INDENT)), expand=False))
 
 
-def progress(description: str) -> Progress:
-    """A compact, self-erasing progress bar (silent when output is piped)."""
+def active_column() -> ProgressColumn:
+    """A live ``12 up`` tally, fed by the task's ``active`` field."""
+    return TextColumn("[muted]{task.fields[active]} up")
+
+
+def progress(
+    description: str,
+    columns: Sequence[ProgressColumn] = (),
+    refresh_per_second: float = 10,
+) -> Progress:
+    """A compact, self-erasing progress bar (silent when output is piped).
+
+    ``columns`` are appended after the built-in ones, for callers that
+    track something extra alongside the count.
+    """
     return Progress(
         TextColumn(INDENT),
         SpinnerColumn(style="ipmg.accent", finished_text=" "),
@@ -216,8 +230,10 @@ def progress(description: str) -> Progress:
         TextColumn("[muted]{task.percentage:>3.0f}%"),
         TextColumn("[muted]{task.completed}/{task.total}"),
         TimeElapsedColumn(),
+        *columns,
         console=console,
         transient=True,
+        refresh_per_second=refresh_per_second,
         # A progress bar in a log file or a pipe is noise, not information.
         disable=not console.is_terminal,
     )

@@ -74,6 +74,9 @@ ipmg --input targets.txt
 # Resolve hostnames and export CSV + a readable Markdown report
 ipmg --input targets.txt --resolve --formats md csv
 
+# Watch hosts appear as they answer, instead of waiting for the summary
+ipmg --input 192.168.1.0/24 --stream
+
 # Scan and report what changed since the previous scan
 ipmg --input targets.txt --compare
 
@@ -87,6 +90,37 @@ ipmg dashboard
 
 Running plain `ipmg` uses `ip_list.xlsx` as input and creates a sample file
 if it does not exist.
+
+---
+
+## Live results
+
+By default a scan prints its results once every host has been probed. On a
+large range that is a long wait with nothing to look at, so `--stream`
+prints each host the moment its probe finishes, above a progress bar that
+also carries a running count of the hosts that answered:
+
+```bash
+ipmg --input 192.168.1.0/24 --stream
+```
+
+```
+  Live
+  Status        Host                Latency
+  ● Active      192.168.1.1          0.9 ms
+  ● Active      192.168.1.24         3.1 ms
+   ⠹ Scanning ━━━━━━━━━━━───────────  48% 122/254 0:00:09 2 up
+```
+
+`--stream` shows only the hosts that answer, which is what makes a sparse
+range readable. Add `--stream-all` to see every result, including timeouts
+and unreachable hosts. The rows gain a `Name` column under `--resolve` and
+an `Open ports` column under `--scan-ports`.
+
+Streaming costs nothing in scan time: rows are printed by the thread that
+collects results, so the workers never wait on the terminal. When output is
+piped or redirected the progress bar is dropped and the rows are written as
+plain lines, which makes `ipmg --stream-all >> scan.log` a usable live log.
 
 ---
 
@@ -203,6 +237,9 @@ or behind a reverse proxy with authentication (see [Security](#security)).
 | `--scan-ports` | off | Probe common TCP ports on hosts that answer ICMP |
 | `--ports` | `21,22,25,53,80,443,445,1433,3306,3389,5432` | Comma-separated TCP ports to probe when `--scan-ports` is set |
 | `--port-timeout` | `1` | Connect timeout per port in seconds, when `--scan-ports` is set |
+| `--stream` | off | Print each host that answers as soon as its probe finishes |
+| `--stream-all` | off | Stream every result, including hosts that did not answer (implies `--stream`) |
+| `--stream-refresh` | `0.25` | Seconds between progress-bar redraws while streaming (0.05-5) |
 | `--interval` | off | Repeat the scan every N minutes |
 | `--compare` | off | Report what changed since the previous scan |
 | `--no-history` | off | Do not store the scan in the history database |

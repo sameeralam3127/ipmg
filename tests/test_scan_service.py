@@ -186,3 +186,25 @@ def test_run_scan_warns_when_comparing_without_history(tmp_path, stub_scan, caps
     run_scan(scan_args(tmp_path, history=False, compare=True))
 
     assert "Change detection needs scan history" in capsys.readouterr().out
+
+
+def test_run_scan_streams_each_host_as_it_finishes(tmp_path, stub_scan, capsys):
+    stub_scan["statuses"] = {
+        "10.0.0.1": ("Active", 1.0),
+        "10.0.0.2": ("Timeout", None),
+    }
+
+    run_scan(scan_args(tmp_path, history=False, stream=True, stream_all=True))
+
+    out = capsys.readouterr().out
+    assert "Live" in out
+    assert "10.0.0.1" in out
+    assert "10.0.0.2" in out
+
+
+def test_run_scan_without_streaming_prints_no_per_host_rows(tmp_path, stub_scan, capsys):
+    stub_scan["statuses"] = {"10.0.0.1": ("Active", 1.0)}
+
+    run_scan(scan_args(tmp_path, history=False))
+
+    assert "10.0.0.1" not in capsys.readouterr().out

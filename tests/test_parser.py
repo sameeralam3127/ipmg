@@ -40,3 +40,18 @@ def test_parser_accepts_custom_port_list():
 def test_parser_rejects_invalid_port():
     with pytest.raises(SystemExit):
         build_parser().parse_args(["--ports", "not-a-port"])
+
+
+def test_parser_streaming_defaults_off():
+    args = build_parser().parse_args([])
+
+    assert args.stream is False
+    assert args.stream_all is False
+    assert args.stream_refresh == 0.25
+
+
+def test_parser_accepts_streaming_flags():
+    args = build_parser().parse_args(["--stream-all", "--stream-refresh", "1"])
+
+    assert args.stream_all is True
+    assert args.stream_refresh == 1.0
