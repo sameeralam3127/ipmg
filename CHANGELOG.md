@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v1.13.0 (2026-09-10)
+
+### Features
+
+- **cli**: Stream scan results as each host finishes
+  ([#29](https://github.com/sameeralam3127/ipmg/pull/29),
+  [`0f57dfa`](https://github.com/sameeralam3127/ipmg/commit/0f57dfaa189b5317e40c49bacf25ccbd4e3137be))
+
+
 ## v1.12.2 (2026-09-09)
 
 ### Bug Fixes
