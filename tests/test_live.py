@@ -11,6 +11,20 @@ from ipmg.utils.helpers import RICH_THEME, console
 
 
 @pytest.fixture(autouse=True)
+def unicode_glyphs():
+    """Pin the glyph set so rows render identically on every platform.
+
+    Windows consoles cannot encode the Unicode set and fall back to ASCII,
+    which makes the em dash and the hyphen printed for a missing latency
+    indistinguishable. The fallback itself is covered in test_ui.py.
+    """
+    ui.reset_glyphs()
+    ui._glyphs = ui._UNICODE_GLYPHS
+    yield
+    ui.reset_glyphs()
+
+
+@pytest.fixture(autouse=True)
 def wide_console():
     """Keep rich from truncating streamed rows in captured output."""
     previous = console.width
