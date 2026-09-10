@@ -19,7 +19,21 @@ concurrency:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # Every Python version and OS the package claims to support, so a
+    # "works on my 3.10" change cannot ship a broken install to anyone else.
+    name: test (${{ matrix.os }}, py${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+        include:
+          - os: macos-latest
+            python-version: "3.12"
+          - os: windows-latest
+            python-version: "3.12"
 
     steps:
       - name: Checkout repository
@@ -28,7 +42,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: ${{ matrix.python-version }}
           cache: "pip"
 
       - name: Install dependencies
@@ -42,7 +56,13 @@ jobs:
           PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
         run: pytest -q
 
+      - name: Smoke-test the installed CLI
+        run: |
+          ipmg --version
+          ipmg --input 127.0.0.1 --no-history --formats csv --output smoke
+
       - name: Build package
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
         run: python -m build
 
   release:

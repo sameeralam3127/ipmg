@@ -5,6 +5,7 @@ from __future__ import annotations
 import ipaddress
 import platform
 import re
+import shutil
 import subprocess  # nosec B404
 from typing import List, Optional, Tuple
 
@@ -14,7 +15,12 @@ from ipmg.exceptions import PingError
 _MILLISECOND_TIMEOUT_SYSTEMS = frozenset({"darwin", "freebsd", "openbsd", "netbsd"})
 
 _WINDOWS_LATENCY = re.compile(r"Average = (\d+)ms")
-_POSIX_LATENCY = re.compile(r"min/avg/max/[^=]+=\s*[\d.]+/([\d.]+)/")
+#: Localised Windows builds translate "Average", but every locale keeps the
+#: Minimum/Maximum/Average order, so the last "= NNms" is still the average.
+_WINDOWS_LATENCY_FALLBACK = re.compile(r"[=<]\s*(\d+)\s*ms")
+#: iputils prints "rtt min/avg/max/mdev = ...", busybox (Alpine, OpenWrt)
+#: prints "round-trip min/avg/max = ..." with no mdev field.
+_POSIX_LATENCY = re.compile(r"min/avg/max(?:/[^\s=]+)?\s*=\s*[\d.]+/([\d.]+)/")
 
 
 def validate_ip(ip: str) -> bool:
@@ -25,10 +31,23 @@ def validate_ip(ip: str) -> bool:
         return False
 
 
-def parse_latency(output: str) -> Optional[float]:
-    system = platform.system().lower()
-    pattern = _WINDOWS_LATENCY if system == "windows" else _POSIX_LATENCY
-    match = pattern.search(output)
+def parse_latency(output: str, system: Optional[str] = None) -> Optional[float]:
+    """Pull the average round-trip time out of a ping's summary line.
+
+    The wording differs by ping implementation and by system language, so
+    each platform gets a precise pattern plus a looser fallback.
+    """
+    system = (system or platform.system()).lower()
+
+    if system == "windows":
+        match = _WINDOWS_LATENCY.search(output)
+        if match is None:
+            # Non-English Windows: take the last "= NNms" instead.
+            matches = _WINDOWS_LATENCY_FALLBACK.findall(output)
+            return float(matches[-1]) if matches else None
+        return float(match.group(1))
+
+    match = _POSIX_LATENCY.search(output)
     return float(match.group(1)) if match else None
 
 
@@ -48,6 +67,32 @@ def build_ping_command(
 
     wait = timeout * 1000 if system in _MILLISECOND_TIMEOUT_SYSTEMS else timeout
     return ["ping", "-c", str(count), "-W", str(wait), ip]
+
+
+#: How to install ping, keyed by the package manager that is present. Minimal
+#: Ubuntu, RHEL, and SUSE images all ship without it, and "not available" on
+#: its own leaves the operator guessing at the package name.
+_PING_INSTALL_HINTS = (
+    ("apt-get", "sudo apt-get install -y iputils-ping"),
+    ("dnf", "sudo dnf install -y iputils"),
+    ("yum", "sudo yum install -y iputils"),
+    ("zypper", "sudo zypper install -y iputils"),
+    ("pacman", "sudo pacman -S --noconfirm iputils"),
+    ("apk", "sudo apk add iputils"),
+)
+
+
+def missing_ping_message() -> str:
+    """Explain that ping is missing, and how to install it on this machine."""
+    base = "The system 'ping' command is not available."
+
+    if platform.system().lower() == "windows":  # pragma: no cover - platform specific
+        return f"{base} Reinstall it from Windows optional features."
+
+    for manager, hint in _PING_INSTALL_HINTS:
+        if shutil.which(manager):
+            return f"{base} Install it with: {hint}"
+    return f"{base} Install your distribution's iputils package."
 
 
 def ping_ip(ip: str, timeout: int, count: int) -> Tuple[str, Optional[float]]:
@@ -82,4 +127,4 @@ def ping_ip(ip: str, timeout: int, count: int) -> Tuple[str, Optional[float]]:
     except subprocess.TimeoutExpired:
         return "Timeout", None
     except FileNotFoundError as exc:
-        raise PingError("The system 'ping' command is not available.") from exc
+        raise PingError(missing_ping_message()) from exc
