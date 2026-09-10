@@ -7,6 +7,7 @@ import argparse
 from ipmg import __version__
 from ipmg.core.portscan import DEFAULT_PORTS, parse_port_list
 from ipmg.reporting.diff_report import DIFF_FORMATS
+from ipmg.reporting.live import DEFAULT_REFRESH_S, MAX_REFRESH_S, MIN_REFRESH_S
 
 PROG = "IPMG - IP Management & Ping Monitoring Tool"
 
@@ -120,6 +121,28 @@ def build_parser() -> argparse.ArgumentParser:
         default=1.0,
         metavar="SECONDS",
         help="Connect timeout per port when --scan-ports is set (default: 1).",
+    )
+
+    live = parser.add_argument_group("live output")
+    live.add_argument(
+        "--stream",
+        action="store_true",
+        help="Print each host that answers as soon as its probe finishes.",
+    )
+    live.add_argument(
+        "--stream-all",
+        action="store_true",
+        help="Stream every result, including hosts that did not answer (implies --stream).",
+    )
+    live.add_argument(
+        "--stream-refresh",
+        type=float,
+        default=DEFAULT_REFRESH_S,
+        metavar="SECONDS",
+        help=(
+            "Seconds between progress-bar redraws while streaming "
+            f"(default: {DEFAULT_REFRESH_S}, range {MIN_REFRESH_S}-{MAX_REFRESH_S})."
+        ),
     )
 
     history = parser.add_argument_group("scan history")
