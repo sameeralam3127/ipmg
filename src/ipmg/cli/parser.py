@@ -11,6 +11,23 @@ from ipmg.reporting.live import DEFAULT_REFRESH_S, MAX_REFRESH_S, MIN_REFRESH_S
 
 PROG = "IPMG - IP Management & Ping Monitoring Tool"
 
+#: Subcommands, named here so an argument error can point at them. argparse
+#: prints the epilog on --help but never on an error, which is exactly when
+#: someone who typed "--dashboard" needs to see them.
+COMMANDS_HINT = (
+    "Commands: 'ipmg dashboard' (web UI), 'ipmg history' (stored scans), "
+    "'ipmg diff' (compare two scans)."
+)
+
+
+class ScanParser(argparse.ArgumentParser):
+    """Argument parser that mentions the subcommands when a flag misses."""
+
+    def error(self, message: str):  # pragma: no cover - exercised via parse_args
+        if "unrecognized arguments" in message:
+            message = f"{message}\n\n{COMMANDS_HINT}"
+        super().error(message)
+
 
 def _port_list(value: str) -> tuple:
     try:
@@ -64,31 +81,70 @@ def _add_diff_export_arguments(parser) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        PROG,
-        epilog=(
-            "Commands: 'ipmg dashboard' (web UI), 'ipmg history' (stored scans), "
-            "'ipmg diff' (compare two scans)."
-        ),
+    parser = ScanParser(
+        prog="ipmg",
+        description=PROG,
+        epilog=COMMANDS_HINT,
     )
     parser.add_argument(
         "--version",
         action="version",
-        version=f"%(prog)s {__version__}",
+        version=f"{PROG} {__version__}",
     )
-    parser.add_argument("--input", default="ip_list.xlsx")
-    parser.add_argument("--output", default="results")
-    parser.add_argument("--timeout", type=int, default=2)
-    parser.add_argument("--count", type=int, default=1)
-    parser.add_argument("--threads", type=int, default=50)
+    parser.add_argument(
+        "--input",
+        default="ip_list.xlsx",
+        metavar="TARGETS",
+        help=(
+            "What to scan: a file (.xlsx, .xls, .csv, .txt, .list), a single IP, "
+            "a CIDR block, or a range like 10.0.0.1-10.0.0.50 (default: ip_list.xlsx)."
+        ),
+    )
+    parser.add_argument(
+        "--output",
+        default="results",
+        metavar="PREFIX",
+        help="Report file name prefix; the timestamp is appended (default: results).",
+    )
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=2,
+        metavar="SECONDS",
+        help="Seconds to wait for a reply from each host (default: 2).",
+    )
+    parser.add_argument(
+        "--count",
+        type=int,
+        default=1,
+        metavar="N",
+        help="Pings per host; raise it on a lossy link (default: 1).",
+    )
+    parser.add_argument(
+        "--threads",
+        type=int,
+        default=50,
+        metavar="N",
+        help="How many hosts to probe at once (default: 50).",
+    )
     parser.add_argument(
         "--formats",
         nargs="+",
         default=["xlsx"],
         choices=["xlsx", "csv", "json", "md"],
+        metavar="FORMAT",
+        help="One or more report formats: xlsx, csv, json, md (default: xlsx).",
     )
-    parser.add_argument("--discover", action="store_true")
-    parser.add_argument("--resolve", action="store_true")
+    parser.add_argument(
+        "--discover",
+        action="store_true",
+        help="Auto-detect this machine's subnet and scan it instead of --input.",
+    )
+    parser.add_argument(
+        "--resolve",
+        action="store_true",
+        help="Look up each host's name with a reverse DNS (PTR) query.",
+    )
     parser.add_argument(
         "--dns-cache-ttl",
         type=int,
@@ -96,8 +152,23 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="SECONDS",
         help="Cache reverse DNS results for this many seconds (default: 300).",
     )
-    parser.add_argument("--interval", type=int)
-    parser.add_argument("--verbose", action="store_true")
+    parser.add_argument(
+        "--interval",
+        type=int,
+        metavar="MINUTES",
+        help="Repeat the whole scan every N minutes until interrupted.",
+    )
+    parser.add_argument("--verbose", action="store_true", help="Debug logging.")
+
+    # People reach for a flag before a subcommand, so accept both spellings
+    # rather than answering "unrecognized arguments: --dashboard".
+    parser.add_argument(
+        "--dashboard",
+        "--web",
+        dest="dashboard",
+        action="store_true",
+        help="Start the local web dashboard (same as 'ipmg dashboard').",
+    )
 
     ports_group = parser.add_argument_group("TCP service discovery")
     ports_group.add_argument(
