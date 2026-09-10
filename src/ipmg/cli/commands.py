@@ -107,12 +107,32 @@ _COMMANDS: Dict[str, Callable[[List[str]], int]] = {
     "compare": _diff_command,
 }
 
+#: Flag spellings of a command. Reaching for "--dashboard" before
+#: "dashboard" is the obvious guess, and refusing it teaches nothing.
+_COMMAND_FLAGS: Dict[str, Callable[[List[str]], int]] = {
+    "--dashboard": _dashboard_command,
+    "--web": _dashboard_command,
+}
+
+
+def _dispatch(argv: List[str]):
+    """Pick the handler for this command line, and the arguments it keeps."""
+    if argv and argv[0] in _COMMANDS:
+        return _COMMANDS[argv[0]], argv[1:]
+
+    for index, argument in enumerate(argv):
+        if argument in _COMMAND_FLAGS:
+            # Everything else is passed through, so `ipmg --dashboard --port
+            # 9000` reaches the dashboard parser intact.
+            return _COMMAND_FLAGS[argument], argv[:index] + argv[index + 1 :]
+
+    return _scan_command, argv
+
 
 def run(argv: Optional[List[str]] = None) -> int:
     """Entry point: returns the process exit code."""
     argv = list(sys.argv[1:] if argv is None else argv)
-    command = _COMMANDS.get(argv[0]) if argv else None
-    handler, handler_argv = (command, argv[1:]) if command else (_scan_command, argv)
+    handler, handler_argv = _dispatch(argv)
 
     try:
         return handler(handler_argv)

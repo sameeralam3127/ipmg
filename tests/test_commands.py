@@ -150,3 +150,56 @@ def test_scan_arguments_are_forwarded(monkeypatch):
     assert captured["input"] == "targets.csv"
     assert captured["compare"] is True
     assert captured["history"] is False
+
+
+def dashboard_calls(monkeypatch):
+    """Capture what run_dashboard would have been started with."""
+    calls = []
+    monkeypatch.setattr(
+        "ipmg.web.server.run_dashboard",
+        lambda **kwargs: calls.append(kwargs),
+    )
+    return calls
+
+
+@pytest.mark.parametrize("argv", [["dashboard"], ["web"], ["--dashboard"], ["--web"]])
+def test_every_spelling_of_the_dashboard_starts_it(argv, monkeypatch):
+    """A flag is the obvious guess; refusing it only teaches frustration."""
+    calls = dashboard_calls(monkeypatch)
+
+    assert commands.run(argv) == commands.EXIT_OK
+    assert calls == [{"host": "127.0.0.1", "port": 8080, "open_browser": True, "db_path": None}]
+
+
+def test_dashboard_flag_still_takes_the_dashboard_options(monkeypatch):
+    calls = dashboard_calls(monkeypatch)
+
+    assert commands.run(["--dashboard", "--port", "9000", "--no-browser"]) == commands.EXIT_OK
+    assert calls[0]["port"] == 9000
+    assert calls[0]["open_browser"] is False
+
+
+def test_an_unknown_flag_points_at_the_commands(capsys):
+    with pytest.raises(SystemExit):
+        commands.run(["--bogus"])
+
+    assert "ipmg dashboard" in capsys.readouterr().err
+
+
+def test_scan_flags_are_documented(capsys):
+    """Bare flags with no help text are invisible to anyone reading --help."""
+    with pytest.raises(SystemExit):
+        commands.run(["--help"])
+
+    # argparse wraps to the terminal width, so compare against flattened text.
+    out = " ".join(capsys.readouterr().out.split())
+    for phrase in (
+        "What to scan",
+        "Report file name prefix",
+        "Seconds to wait",
+        "Pings per host",
+        "How many hosts to probe",
+        "Repeat the whole scan",
+        "same as 'ipmg dashboard'",
+    ):
+        assert phrase in out

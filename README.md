@@ -232,7 +232,7 @@ creates a sample file for you if it does not exist yet.
 | Keep scanning every 5 minutes | `ipmg --input targets.txt --interval 5` |
 | Look back at earlier scans | `ipmg history` |
 | Compare two specific scans | `ipmg diff 12 14` |
-| Use the web dashboard instead | `ipmg dashboard` |
+| Use the web dashboard instead | `ipmg dashboard` (or `ipmg --dashboard`) |
 | See every available flag | `ipmg --help` |
 
 ---
@@ -327,6 +327,9 @@ scanning engine:
 ```bash
 ipmg dashboard          # starts http://127.0.0.1:8080 and opens your browser
 ```
+
+`ipmg web`, `ipmg --dashboard`, and `ipmg --web` all do the same thing, so
+whichever one you reach for first works.
 
 It runs fully offline — every stylesheet and script is bundled with the
 package, nothing is loaded from a CDN. It gives you:
