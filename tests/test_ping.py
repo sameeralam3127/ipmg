@@ -9,8 +9,10 @@ def test_ip_validation():
 
 
 def test_latency_parse():
+    # Name the platform: without it this reads the host's own OS, so the
+    # assertion silently changed meaning depending on where CI ran.
     sample = "min/avg/max/mdev = 10.0/20.5/30.0/1.0 ms"
-    assert parse_latency(sample) == 20.5
+    assert parse_latency(sample, system="Linux") == 20.5
 
 
 # One real summary line per ping implementation IPMG can end up talking to.
