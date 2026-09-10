@@ -193,7 +193,7 @@ ipmg --input targets.txt              # a file of hosts
 Here is what a finished scan looks like:
 
 ```text
-  ipmg 1.12.1  ·  scan
+  ipmg 1.13.0  ·  scan
   ICMP probes only — scan only networks you are authorized to scan.
 
   Source   targets.txt
