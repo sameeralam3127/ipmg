@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v1.13.1 (2026-09-10)
+
+### Bug Fixes
+
+- **install**: Make installation work on every supported OS and Python
+  ([#30](https://github.com/sameeralam3127/ipmg/pull/30),
+  [`1c653fc`](https://github.com/sameeralam3127/ipmg/commit/1c653fc21a1eeb318b0b1cb879c4700a0f2ed7d6))
+
+
 ## v1.13.0 (2026-09-10)
 
 ### Features
