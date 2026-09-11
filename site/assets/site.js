@@ -338,93 +338,249 @@ function initTerminal() {
 
 // ---------------------------------------------------------- builder
 
+// Shell-quotes a value, leaving plain paths (including a leading ~/) readable.
 function shellQuote(value) {
-  return /^[\w.\/:,@%+=-]+$/.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`;
+  if (/^(~\/)?[\w.\/:,@%+=-]+$/.test(value)) return value;
+  return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
 function describeTarget(target) {
-  if (/\.(xlsx|xls|csv)$/i.test(target)) return "Read hosts from the “IP Address” column of this spreadsheet.";
-  if (/\.(txt|list)$/i.test(target)) return "Read one IP or CIDR per line from this file.";
+  if (/\.(xlsx|xls|csv)$/i.test(target)) return "Read hosts from the “IP Address” column of this spreadsheet, which must already exist.";
+  if (/\.(txt|list)$/i.test(target)) return "Read one IP, CIDR block, or range per line from this file, which must already exist.";
   if (target.includes("/")) return "Scan every host in this CIDR block.";
   if (target.includes("-")) return "Scan every address in this range.";
   return "Scan this single host.";
 }
 
-function positiveInt(value, fallback, { min = 1, max = 100000 } = {}) {
-  const number = Number.parseInt(value, 10);
-  return Number.isFinite(number) && number >= min && number <= max ? number : fallback;
+function integerIn(value, fallback, { min = 1, max = 1e9 } = {}) {
+  const number = Number(value);
+  return String(value).trim() !== "" && Number.isInteger(number) && number >= min && number <= max ? number : fallback;
+}
+
+function decimalIn(value, fallback, { min = 0, max = 1e9 } = {}) {
+  const number = Number(value);
+  return String(value).trim() !== "" && Number.isFinite(number) && number >= min && number <= max ? number : fallback;
 }
 
 const FORMAT_NAMES = { xlsx: "Excel", csv: "CSV", json: "JSON", md: "Markdown" };
+const DEFAULT_PORTS = "21,22,25,53,80,443,445,1433,3306,3389,5432";
+const listPhrase = (items) => (items.length > 1 ? `${items.slice(0, -1).join(", ")} and ${items.at(-1)}` : items[0]);
+const formatPhrase = (formats) => listPhrase(formats.map((format) => FORMAT_NAMES[format]));
+
+function parsePorts(text) {
+  const cleaned = text.replace(/\s+/g, "");
+  if (!cleaned) return { ports: null };
+  const parts = cleaned.split(",");
+  const valid = parts.every((part) => /^\d{1,5}$/.test(part) && Number(part) >= 1 && Number(part) <= 65535);
+  return valid ? { ports: parts.map(Number).join(",") } : { error: true };
+}
+
+// Collects the command's tokens and a plain-language note for each flag.
+function commandLine(...words) {
+  const tokens = words.map((word) => [word, "tok-cmd"]);
+  const notes = [];
+  return {
+    tokens,
+    notes,
+    flag(name, note, value) {
+      tokens.push([name, "tok-flag"]);
+      if (value != null) tokens.push([String(value), "tok-val"]);
+      notes.push({ key: value != null ? `${name} ${value}` : name, note });
+    },
+    args(values, note) {
+      values.forEach((value) => tokens.push([String(value), "tok-val"]));
+      notes.push({ key: values.join(" "), note });
+    },
+    info(note, key = "(default)") {
+      notes.push({ key, note });
+    },
+    warn(note) {
+      notes.push({ key: "heads-up", note, warn: true });
+    },
+  };
+}
+
+function addLatency(form, line, prefix) {
+  const ms = decimalIn(form.value(`${prefix}-latencyMs`), 5);
+  const pct = decimalIn(form.value(`${prefix}-latencyPct`), 25);
+  if (ms !== 5) line.flag("--latency-threshold", `Report a latency change only if it moved by at least ${ms} ms (and by the percentage).`, ms);
+  if (pct !== 25) line.flag("--latency-pct", `Report a latency change only if it moved by at least ${pct}% (and by the milliseconds).`, pct);
+}
+
+function addCommon(form, line, prefix) {
+  const db = form.value(`${prefix}-db`);
+  if (db) line.flag("--db", "Use this history database instead of ~/.ipmg/dashboard.db.", shellQuote(db));
+  if (form.on(`${prefix}-verbose`)) line.flag("--verbose", "Print debug logging.");
+}
+
+const BUILDERS = {
+  scan(form, line) {
+    if (form.value("scan-mode") === "discover") {
+      line.flag("--discover", "Find this machine's address and scan the /24 network around it.");
+    } else {
+      const target = form.target() || "192.168.1.0/24";
+      line.flag("--input", describeTarget(target), shellQuote(target));
+    }
+
+    if (form.on("scan-resolve")) {
+      line.flag("--resolve", "Look up each host's name with reverse DNS.");
+      const ttl = integerIn(form.value("scan-dnsTtl"), 300, { min: 0, max: 86400 });
+      if (ttl !== 300) line.flag("--dns-cache-ttl", ttl === 0 ? "Don't cache names; look each one up again." : `Cache looked-up names for ${ttl} seconds.`, ttl);
+    }
+
+    if (form.on("scan-scanPorts")) {
+      line.flag("--scan-ports", "Check TCP ports on every host that answers the ping.");
+      const { ports, error } = parsePorts(form.value("scan-ports"));
+      if (error) line.warn("Ports must be comma-separated numbers from 1 to 65535, so the default list is used.");
+      else if (ports && ports !== DEFAULT_PORTS) line.flag("--ports", `Probe only port${ports.includes(",") ? "s" : ""} ${ports.replaceAll(",", ", ")}.`, ports);
+      else line.info("Probe FTP, SSH, SMTP, DNS, HTTP, HTTPS, SMB, SQL Server, MySQL, RDP, and PostgreSQL.", "(default ports)");
+      const portTimeout = decimalIn(form.value("scan-portTimeout"), 1, { min: 0.1, max: 60 });
+      if (portTimeout !== 1) line.flag("--port-timeout", `Give each port ${portTimeout} s to accept a connection.`, portTimeout);
+    }
+
+    const streamAll = form.on("scan-streamAll");
+    const streaming = streamAll || form.on("scan-stream");
+    if (streamAll) line.flag("--stream-all", "Print every result as it arrives, including hosts that didn't answer.");
+    else if (streaming) line.flag("--stream", "Print each host that answers the moment its probe finishes.");
+    if (streaming) {
+      const refresh = decimalIn(form.value("scan-refresh"), 0.25, { min: 0.05, max: 5 });
+      if (refresh !== 0.25) line.flag("--stream-refresh", `Redraw the progress bar every ${refresh} s.`, refresh);
+    }
+
+    if (form.on("scan-compare")) {
+      line.flag("--compare", "After the scan, report what changed since the previous scan of the same input.");
+      if (form.on("scan-anySource")) line.flag("--compare-any-source", "Compare with the previous scan even if it scanned a different input.");
+      const diffFormats = form.all("scan-diffFormats");
+      if (diffFormats.length) line.flag("--diff-formats", `Also save the change summary as ${formatPhrase(diffFormats)}.`, diffFormats.join(" "));
+      addLatency(form, line, "scan");
+    }
+
+    if (form.on("scan-noHistory")) {
+      line.flag("--no-history", "Don't store this scan in the history database.");
+      if (form.on("scan-compare")) line.warn("Change detection needs scan history, so --compare is skipped when --no-history is set.");
+    }
+
+    const formats = form.all("scan-formats");
+    const defaultFormat = !formats.length || (formats.length === 1 && formats[0] === "xlsx");
+    if (!defaultFormat) line.flag("--formats", `Write the report as ${formatPhrase(formats)}.`, formats.join(" "));
+    const prefix = form.value("scan-output") || "results";
+    if (prefix !== "results") {
+      const folder = prefix.includes("/") ? " The folder must already exist." : "";
+      line.flag("--output", `Name the report files ${prefix}_<timestamp>.<format>.${folder}`, shellQuote(prefix));
+    }
+
+    const threads = integerIn(form.value("scan-threads"), 50, { max: 1000 });
+    const timeout = integerIn(form.value("scan-timeout"), 2, { max: 60 });
+    const count = integerIn(form.value("scan-count"), 1, { max: 20 });
+    const interval = integerIn(form.value("scan-interval"), 0, { min: 0, max: 1440 });
+    if (threads !== 50) line.flag("--threads", `Probe ${threads} hosts at once.`, threads);
+    if (timeout !== 2) line.flag("--timeout", `Wait up to ${timeout} second${timeout === 1 ? "" : "s"} for each reply.`, timeout);
+    if (count !== 1) line.flag("--count", `Send ${count} pings to each host.`, count);
+    if (interval > 0) line.flag("--interval", `Repeat the whole scan every ${interval} minute${interval === 1 ? "" : "s"}, until Ctrl+C.`, interval);
+
+    addCommon(form, line, "scan");
+    if (defaultFormat) line.info(`An Excel report is saved as ${prefix}_<timestamp>.xlsx when the scan finishes.`);
+  },
+
+  diff(form, line) {
+    const target = integerIn(form.value("diff-target"), null);
+    const baseline = integerIn(form.value("diff-baseline"), null);
+    if (target && baseline) {
+      line.args([baseline, target], `Compare scan ${baseline} (the baseline) with scan ${target}.`);
+    } else if (target) {
+      line.args([target], `Compare scan ${target} with the scan before it.`);
+    } else {
+      line.info("Compare the two most recent scans.");
+      if (baseline) line.warn("Fill in “Scan id” too: a baseline needs a scan to compare it with.");
+    }
+
+    const source = form.value("diff-source");
+    if (source && !(target && baseline)) line.flag("--source", `Only consider scans of ${source} when picking scans automatically.`, shellQuote(source));
+
+    const limit = integerIn(form.value("diff-limit"), 0, { min: 0 });
+    if (limit > 0) line.flag("--limit", `Print at most ${limit} change${limit === 1 ? "" : "s"}; exports still include every change.`, limit);
+    if (form.on("diff-failOnChange")) line.flag("--fail-on-change", "Exit with code 2 when anything changed, so cron or CI can react.");
+
+    const formats = form.all("diff-formats");
+    if (formats.length) {
+      line.flag("--diff-formats", `Save the change summary as ${formatPhrase(formats)}.`, formats.join(" "));
+      const name = form.value("diff-output") || "changes";
+      if (name !== "changes") line.flag("--diff-output", `Name the exports ${name}_<timestamp>.<format>.`, shellQuote(name));
+    }
+
+    addLatency(form, line, "diff");
+    addCommon(form, line, "diff");
+  },
+
+  history(form, line) {
+    const limit = integerIn(form.value("history-limit"), 20);
+    if (limit === 20) line.info("List the 20 most recent scans.");
+    else line.flag("--limit", `List the ${limit} most recent scan${limit === 1 ? "" : "s"}.`, limit);
+    const source = form.value("history-source");
+    if (source) line.flag("--source", `Only list scans of ${source}.`, shellQuote(source));
+    addCommon(form, line, "history");
+  },
+
+  dashboard(form, line) {
+    const port = integerIn(form.value("dash-port"), 8080, { max: 65535 });
+    if (form.value("dash-host") === "0.0.0.0") {
+      line.flag("--host", "Listen on every network interface, not only this machine.", "0.0.0.0");
+      line.warn("The dashboard has no login: anyone who can reach this machine can start scans and read results. Prefer an SSH tunnel, or put an authenticating reverse proxy in front.");
+    }
+    if (port !== 8080) line.flag("--port", `Serve on port ${port}.`, port);
+    if (form.on("dash-noBrowser")) line.flag("--no-browser", "Don't open a browser, for servers and SSH sessions.");
+    addCommon(form, line, "dash");
+    line.info(`Then open http://127.0.0.1:${port} in a browser on this machine.`, "then");
+  },
+};
 
 function initBuilder() {
   const form = $("[data-builder]");
   if (!form) return;
   const output = $("[data-command]");
   const explain = $("[data-explain]");
-  const targetInput = form.elements.target;
-  let previous = new Set();
+  const panels = $$("[data-panel]", form);
+  const targetInput = form.elements["scan-target"];
+  let previous = null;
 
   const render = () => {
     const data = new FormData(form);
-    const tokens = [["ipmg", "tok-cmd"]];
-    const notes = [];
-    const flag = (name, note, value) => {
-      tokens.push([name, "tok-flag"]);
-      if (value != null) tokens.push([String(value), "tok-val"]);
-      notes.push([value != null ? `${name} ${value}` : name, note]);
+    const reader = {
+      value: (name) => String(data.get(name) ?? "").trim(),
+      on: (name) => data.has(name),
+      all: (name) => data.getAll(name).map(String),
+      target: () => targetInput.value.trim(), // read directly: disabled inputs are left out of FormData
     };
 
-    const discover = data.get("mode") === "discover";
-    targetInput.disabled = discover;
-    if (discover) {
-      flag("--discover", "Find this machine's address and scan the /24 network around it.");
-    } else {
-      const target = String(data.get("target") || "").trim() || "192.168.1.0/24";
-      flag("--input", describeTarget(target), shellQuote(target));
-    }
+    const command = reader.value("command") || "scan";
+    panels.forEach((panel) => {
+      panel.hidden = panel.dataset.panel !== command;
+    });
+    $$("[data-show-if]", form).forEach((node) => {
+      node.hidden = !reader.on(node.dataset.showIf);
+    });
+    targetInput.disabled = reader.value("scan-mode") === "discover";
 
-    if (data.has("resolve")) flag("--resolve", "Look up each host's name with reverse DNS.");
-    if (data.has("stream")) flag("--stream", "Print each host that answers the moment its probe finishes.");
-    if (data.has("scanPorts")) flag("--scan-ports", "Probe common TCP ports (SSH, HTTP, HTTPS, RDP, SMB, databases) on hosts that answer.");
-    if (data.has("compare")) flag("--compare", "After the scan, report what changed since the previous scan of the same targets.");
-
-    const formats = data.getAll("formats");
-    if (formats.length && !(formats.length === 1 && formats[0] === "xlsx")) {
-      const names = formats.map((format) => FORMAT_NAMES[format]);
-      const list = names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : names[0];
-      flag("--formats", `Write the report as ${list}.`, formats.join(" "));
-    }
-
-    const threads = positiveInt(data.get("threads"), 50, { max: 1000 });
-    const timeout = positiveInt(data.get("timeout"), 2, { max: 60 });
-    const count = positiveInt(data.get("count"), 1, { max: 20 });
-    const interval = positiveInt(data.get("interval"), 0, { min: 0, max: 1440 });
-    if (threads !== 50) flag("--threads", `Probe ${threads} hosts at once.`, threads);
-    if (timeout !== 2) flag("--timeout", `Wait up to ${timeout} seconds for each reply.`, timeout);
-    if (count !== 1) flag("--count", `Send ${count} pings to each host.`, count);
-    if (interval > 0) flag("--interval", `Repeat the whole scan every ${interval} minute${interval === 1 ? "" : "s"}.`, interval);
-
-    if (!formats.length || (formats.length === 1 && formats[0] === "xlsx")) {
-      notes.push(["report", "An Excel report is saved when the scan finishes (the default)."]);
-    }
+    const line = commandLine(...(command === "scan" ? ["ipmg"] : ["ipmg", command]));
+    BUILDERS[command](reader, line);
 
     const pieces = [];
-    tokens.forEach(([text, className], index) => {
+    line.tokens.forEach(([text, className], index) => {
       if (index) pieces.push(document.createTextNode(" "));
       pieces.push(el("span", className, text));
     });
     output.replaceChildren(...pieces);
 
-    const current = new Set(notes.map(([key]) => key));
+    const keys = line.notes.map((note) => `${command}:${note.key}`);
     explain.replaceChildren(
-      ...notes.map(([key, note]) => {
-        const item = el("li", previous.has(key) || reduceMotion ? "" : "enter");
-        item.append(el("code", "", key === "report" ? "(default)" : key), el("span", "", note));
+      ...line.notes.map((note, index) => {
+        const isNew = previous && !previous.has(keys[index]) && !reduceMotion;
+        const item = el("li", [note.warn ? "warn" : "", isNew ? "enter" : ""].filter(Boolean).join(" "));
+        item.append(el("code", "", note.key), el("span", "", note.note));
         return item;
       })
     );
-    previous = current;
+    previous = new Set(keys);
   };
 
   form.addEventListener("input", render);
@@ -432,13 +588,12 @@ function initBuilder() {
   form.addEventListener("submit", (event) => event.preventDefault());
   $$("[data-target]", form).forEach((chip) =>
     chip.addEventListener("click", () => {
-      form.elements.mode.value = "input";
+      form.elements["scan-mode"].value = "input";
       targetInput.value = chip.dataset.target;
       render();
       targetInput.focus();
     })
   );
-  previous = new Set(["--input", "--stream", "report"]);
   render();
 }
 
