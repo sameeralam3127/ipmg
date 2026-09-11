@@ -216,7 +216,8 @@ configured, how the hosts answered, a one-line scorecard, and the report file
 IPMG wrote for you.
 
 Running plain `ipmg` with no arguments uses `ip_list.xlsx` as its input, and
-creates a sample file for you if it does not exist yet.
+creates it with two sample targets (`8.8.8.8` and `1.1.1.1`) if it does not
+exist yet. A file you name with `--input` must already exist.
 
 ---
 

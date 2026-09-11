@@ -170,3 +170,23 @@ def test_save_results_neutralizes_formulas_in_csv_and_xlsx(tmp_path, monkeypatch
     # JSON is data interchange, not a spreadsheet: it keeps the raw value.
     raw = json.loads((tmp_path / "scan_20260628_120000.json").read_text(encoding="utf-8"))
     assert raw[0]["Hostname"] == HOSTILE_HOSTNAME
+
+
+@pytest.mark.parametrize(
+    "name", ["targts.txt", "hosts.list", "hosts.csv", "hosts.xlsx", "hosts.xls"]
+)
+def test_load_targets_reports_a_missing_input_file(tmp_path, name):
+    from ipmg.exceptions import FileIOError
+
+    missing = tmp_path / name
+
+    with pytest.raises(FileIOError, match="was not found"):
+        load_targets(str(missing))
+    assert not missing.exists()
+
+
+def test_load_targets_still_rejects_text_that_is_not_a_target():
+    from ipmg.exceptions import FileIOError
+
+    with pytest.raises(FileIOError, match="neither a readable file"):
+        load_targets("not-a-target")

@@ -150,3 +150,21 @@ def test_scan_arguments_are_forwarded(monkeypatch):
     assert captured["input"] == "targets.csv"
     assert captured["compare"] is True
     assert captured["history"] is False
+
+
+def test_scan_without_input_leaves_the_default_to_the_scan_service(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(commands, "run_scan", lambda args: captured.update(vars(args)))
+
+    assert commands.run([]) == commands.EXIT_OK
+    assert captured["input"] is None
+
+
+def test_missing_input_file_is_an_error_not_a_sample(tmp_path, capsys):
+    missing = tmp_path / "targts.txt"
+
+    exit_code = commands.run(["--input", str(missing), "--no-history", "--formats", "csv"])
+
+    assert exit_code == commands.EXIT_ERROR
+    assert "was not found" in capsys.readouterr().out
+    assert not missing.exists()

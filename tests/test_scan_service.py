@@ -208,3 +208,55 @@ def test_run_scan_without_streaming_prints_no_per_host_rows(tmp_path, stub_scan,
     run_scan(scan_args(tmp_path, history=False))
 
     assert "10.0.0.1" not in capsys.readouterr().out
+
+
+def record_pings(monkeypatch):
+    """Answer every ping and remember which hosts were probed."""
+    pinged = []
+
+    def fake_ping(ip, _timeout, _count):
+        pinged.append(ip)
+        return "Active", 1.0
+
+    monkeypatch.setattr("ipmg.core.engine.ping_ip", fake_ping)
+    monkeypatch.setattr("ipmg.services.scan_service.save_results", lambda *_args: None)
+    monkeypatch.setattr("ipmg.services.scan_service.print_summary", lambda *_args: None)
+    return pinged
+
+
+def test_run_scan_rejects_a_missing_input_file_instead_of_creating_it(tmp_path, monkeypatch):
+    from ipmg.exceptions import FileIOError
+
+    pinged = record_pings(monkeypatch)
+    missing = tmp_path / "targts.txt"
+
+    with pytest.raises(FileIOError, match="was not found"):
+        run_scan(scan_args(tmp_path, input=str(missing), history=False))
+
+    # A typo used to create this file with sample public addresses and scan them.
+    assert not missing.exists()
+    assert pinged == []
+
+
+def test_run_scan_without_input_creates_the_default_sample_file(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    pinged = record_pings(monkeypatch)
+    args = scan_args(tmp_path, input=None, history=False)
+
+    run_scan(args)
+
+    assert args.input == "ip_list.xlsx"
+    assert (tmp_path / "ip_list.xlsx").exists()
+    assert sorted(pinged) == ["1.1.1.1", "8.8.8.8"]
+    assert "Created ip_list.xlsx" in capsys.readouterr().out
+
+
+def test_run_scan_without_input_reuses_an_existing_default_file(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    pd.DataFrame({"IP Address": ["10.0.0.1"]}).to_excel(tmp_path / "ip_list.xlsx", index=False)
+    pinged = record_pings(monkeypatch)
+
+    run_scan(scan_args(tmp_path, input=None, history=False))
+
+    assert pinged == ["10.0.0.1"]
+    assert "Created" not in capsys.readouterr().out
