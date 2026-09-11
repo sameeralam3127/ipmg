@@ -3,8 +3,7 @@
 // access; this file only adds motion, live data, and interactivity.
 
 const REPO = "sameeralam3127/ipmg";
-const FALLBACK_VERSION = "1.13.1";
-const CACHE_MS = 30 * 60 * 1000;
+const CACHE_MS = 10 * 60 * 1000;
 
 const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -209,7 +208,14 @@ const DEMO_HOSTS = [
 ];
 const TOTAL_HOSTS = 254;
 const SPINNER = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏";
-let terminalVersion = FALLBACK_VERSION;
+let terminalVersion = null; // filled in from PyPI/GitHub; never hard-coded, so it can't go stale
+
+// The header is drawn before the version is known; showVersion() updates it in place.
+function terminalTitle() {
+  const title = el("span", "t-bold", terminalVersion ? `ipmg ${terminalVersion}` : "ipmg");
+  title.dataset.terminalTitle = "";
+  return title;
+}
 let terminalRun = 0;
 
 function termLine(...parts) {
@@ -270,7 +276,7 @@ async function playTerminal() {
 
   [
     termLine(""),
-    termLine("  ", [`ipmg ${terminalVersion}`, "t-bold"], ["  ·  scan", "t-dim"]),
+    termLine("  ", terminalTitle(), ["  ·  scan", "t-dim"]),
     termLine(["  ICMP probes only — scan only networks you are authorized to scan.", "t-dim"]),
     termLine(""),
     termLine(["  Source   ", "t-dim"], "192.168.1.0/24"),
@@ -615,8 +621,13 @@ function initChangeFilter() {
 
 // -------------------------------------------------------- live data
 
+// Bump the prefix whenever what is cached changes meaning, so browsers ignore
+// entries written by an older version of this file.
+const CACHE_PREFIX = "ipmg-site-v2:";
+
 async function cachedJson(key, url, pick) {
-  const cached = store.get(key);
+  const storageKey = CACHE_PREFIX + key;
+  const cached = store.get(storageKey);
   if (cached) {
     try {
       const { at, data } = JSON.parse(cached);
@@ -628,42 +639,81 @@ async function cachedJson(key, url, pick) {
   const response = await fetch(url, { headers: { Accept: "application/json" }, referrerPolicy: "no-referrer" });
   if (!response.ok) throw new Error(`${url} answered ${response.status}`);
   const data = pick(await response.json());
-  store.set(key, JSON.stringify({ at: Date.now(), data }));
+  store.set(storageKey, JSON.stringify({ at: Date.now(), data }));
   return data;
 }
 
+// Counts calendar days in the viewer's time zone rather than rounding elapsed
+// hours, so a release at 23:50 last night reads "yesterday", not "today".
 function relativeDate(iso) {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
-  const days = Math.round((date.getTime() - Date.now()) / 86400000);
+  const startOfDay = (value) => new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime();
+  const days = Math.round((startOfDay(date) - startOfDay(new Date())) / 86400000);
   const rtf = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
   if (Math.abs(days) < 30) return rtf.format(days, "day");
   if (Math.abs(days) < 365) return rtf.format(Math.round(days / 30), "month");
   return rtf.format(Math.round(days / 365), "year");
 }
 
-async function loadVersion() {
-  try {
-    const { version, released } = await cachedJson("ipmg-site-pypi", "https://pypi.org/pypi/ipmg/json", (json) => ({
-      version: String(json.info?.version || ""),
-      released: json.urls?.[0]?.upload_time_iso_8601 || null,
-    }));
-    if (!/^\d+\.\d+\.\d+/.test(version)) return;
-    terminalVersion = version;
-    const when = released ? ` · released ${relativeDate(released)}` : "";
-    $("[data-release-label]").textContent = `v${version} on PyPI${when}`;
-    const chip = $("[data-version]");
-    chip.textContent = `latest: ${version}`;
-    chip.hidden = false;
-    $("[data-version-footer]").textContent = `v${version}`;
-  } catch {
-    /* keep the static label */
+const SEMVER = /^\d+\.\d+\.\d+$/;
+
+function compareVersions(a, b) {
+  const left = a.split(".").map(Number);
+  const right = b.split(".").map(Number);
+  for (let index = 0; index < 3; index += 1) {
+    if (left[index] !== right[index]) return left[index] - right[index];
   }
+  return 0;
+}
+
+function fetchPypiRelease() {
+  return cachedJson("pypi", "https://pypi.org/pypi/ipmg/json", (json) => ({
+    version: String(json.info?.version || ""),
+    released: json.urls?.[0]?.upload_time_iso_8601 || null,
+  }));
+}
+
+function fetchGithubReleases() {
+  return cachedJson("releases", `https://api.github.com/repos/${REPO}/releases?per_page=3`, (json) =>
+    json.map((release) => ({
+      tag: String(release.tag_name),
+      url: String(release.html_url),
+      published: release.published_at,
+      sections: parseNotes(release.body || ""),
+    }))
+  );
+}
+
+// PyPI's JSON API can trail a new release, and either answer may come from a
+// cache, so the page shows the newest version that either source reports.
+// The same release job publishes to both, so the newer one is always on PyPI.
+function latestVersion(pypi, releases) {
+  const candidates = [];
+  if (pypi && SEMVER.test(pypi.version)) candidates.push({ version: pypi.version, released: pypi.released });
+  const newest = releases?.[0];
+  const tag = newest ? newest.tag.replace(/^v/, "") : "";
+  if (SEMVER.test(tag)) candidates.push({ version: tag, released: newest.published });
+  return candidates.reduce((best, candidate) => (!best || compareVersions(candidate.version, best.version) > 0 ? candidate : best), null);
+}
+
+function showVersion(latest) {
+  if (!latest) return; // keep the static labels
+  terminalVersion = latest.version;
+  $$("[data-terminal-title]").forEach((node) => {
+    node.textContent = `ipmg ${latest.version}`;
+  });
+  const when = latest.released ? ` · released ${relativeDate(latest.released)}` : "";
+  $("[data-release-label]").textContent = `v${latest.version} on PyPI${when}`;
+  const chip = $("[data-version]");
+  chip.textContent = `latest: ${latest.version}`;
+  chip.hidden = false;
+  $("[data-version-footer]").textContent = `v${latest.version}`;
 }
 
 async function loadStars() {
   try {
-    const { stars } = await cachedJson("ipmg-site-repo", `https://api.github.com/repos/${REPO}`, (json) => ({
+    const { stars } = await cachedJson("repo", `https://api.github.com/repos/${REPO}`, (json) => ({
       stars: Number(json.stargazers_count),
     }));
     if (!Number.isFinite(stars)) return;
@@ -717,62 +767,62 @@ function cleanNote(text) {
   return { scope: scope ? scope[1] : null, text: plain.replace(/[*_`]/g, "").trim(), pr };
 }
 
-async function loadReleases() {
+function renderReleases(releases) {
   const grid = $("[data-releases]");
   if (!grid) return;
-  try {
-    const releases = await cachedJson("ipmg-site-releases", `https://api.github.com/repos/${REPO}/releases?per_page=3`, (json) =>
-      json.map((release) => ({
-        tag: String(release.tag_name),
-        url: String(release.html_url),
-        published: release.published_at,
-        sections: parseNotes(release.body || ""),
-      }))
-    );
-    if (!releases.length) throw new Error("no releases");
-
-    grid.replaceChildren(
-      ...releases.map((release, index) => {
-        const card = el("article", index === 0 ? "release latest" : "release");
-        const top = el("div", "release-top");
-        const link = el("a", "", release.tag);
-        link.href = release.url.startsWith("https://github.com/") ? release.url : `https://github.com/${REPO}/releases`;
-        link.rel = "noopener";
-        const time = el("time", "", relativeDate(release.published));
-        time.dateTime = release.published;
-        top.append(link, time);
-        card.append(top);
-
-        let budget = 4;
-        for (const section of release.sections) {
-          if (budget <= 0) break;
-          const list = el("ul");
-          for (const note of section.items.slice(0, budget)) {
-            const li = el("li");
-            if (note.scope) li.append(el("span", "scope", note.scope));
-            li.append(document.createTextNode(note.text));
-            if (note.pr && /^\d+$/.test(note.pr)) {
-              const pr = el("a", "", `#${note.pr}`);
-              pr.href = `https://github.com/${REPO}/pull/${note.pr}`;
-              pr.rel = "noopener";
-              li.append(pr);
-            }
-            list.append(li);
-            budget -= 1;
-          }
-          card.append(el("h4", "", section.title), list);
-        }
-        if (!release.sections.length) card.append(el("p", "muted", "Maintenance release."));
-        return card;
-      })
-    );
-  } catch {
+  if (!releases?.length) {
     const message = el("p", "release-error", "Release notes couldn't be loaded right now. ");
     const link = el("a", "", "See every release on GitHub.");
     link.href = `https://github.com/${REPO}/releases`;
     message.append(link);
     grid.replaceChildren(message);
+    return;
   }
+
+  grid.replaceChildren(
+    ...releases.map((release, index) => {
+      const card = el("article", index === 0 ? "release latest" : "release");
+      const top = el("div", "release-top");
+      const link = el("a", "", release.tag);
+      link.href = release.url.startsWith("https://github.com/") ? release.url : `https://github.com/${REPO}/releases`;
+      link.rel = "noopener";
+      const time = el("time", "", relativeDate(release.published));
+      time.dateTime = release.published;
+      top.append(link, time);
+      card.append(top);
+
+      let budget = 4;
+      for (const section of release.sections) {
+        if (budget <= 0) break;
+        const list = el("ul");
+        for (const note of section.items.slice(0, budget)) {
+          const li = el("li");
+          if (note.scope) li.append(el("span", "scope", note.scope));
+          li.append(document.createTextNode(note.text));
+          if (note.pr && /^\d+$/.test(note.pr)) {
+            const pr = el("a", "", `#${note.pr}`);
+            pr.href = `https://github.com/${REPO}/pull/${note.pr}`;
+            pr.rel = "noopener";
+            li.append(pr);
+          }
+          list.append(li);
+          budget -= 1;
+        }
+        card.append(el("h4", "", section.title), list);
+      }
+      if (!release.sections.length) card.append(el("p", "muted", "Maintenance release."));
+      return card;
+    })
+  );
+}
+
+// Both sources are awaited together so the version pill and the release cards
+// are always drawn from the same data.
+async function loadProjectData() {
+  const [pypi, releases] = await Promise.allSettled([fetchPypiRelease(), fetchGithubReleases()]);
+  const releaseList = releases.status === "fulfilled" ? releases.value : null;
+  showVersion(latestVersion(pypi.status === "fulfilled" ? pypi.value : null, releaseList));
+  renderReleases(releaseList);
 }
 
 // ------------------------------------------------------------- boot
@@ -786,6 +836,5 @@ initTabs();
 initBuilder();
 initChangeFilter();
 initTerminal();
-loadVersion();
+loadProjectData();
 loadStars();
-loadReleases();
