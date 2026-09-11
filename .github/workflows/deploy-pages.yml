@@ -1,9 +1,10 @@
-name: Deploy dashboard demo to GitHub Pages
+name: Deploy site to GitHub Pages
 
 on:
   push:
     branches: [main]
     paths:
+      - "site/**"
       - "src/ipmg/web/static/**"
       - ".github/workflows/deploy-pages.yml"
   workflow_dispatch:
@@ -27,8 +28,12 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
-      - name: Assemble static dashboard
-        run: cp -R src/ipmg/web/static/. _site/
+      # Project site at the root, dashboard demo (seeded data) under demo/.
+      - name: Assemble site and dashboard demo
+        run: |
+          mkdir -p _site/demo
+          cp -R site/. _site/
+          cp -R src/ipmg/web/static/. _site/demo/
       - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5.0.0
         with:
           enablement: true

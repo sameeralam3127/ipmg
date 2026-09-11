@@ -80,3 +80,6 @@ src/ipmg.egg-info
 dist/
 build/
 *.egg-info/
+
+# Local GitHub Pages preview (see README)
+_site/

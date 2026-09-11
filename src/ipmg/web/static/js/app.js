@@ -1,27 +1,25 @@
 // App shell: hash router, theme toggle, and WebSocket bootstrap.
 
-import { connect } from "./api.js?v=20260822.1";
+import { connect } from "./api.js?v=20260911.1";
 import {
   aboutView,
   changesView,
   dashboardView,
   historyView,
   inventoryView,
-  landingView,
   monitorView,
   newScanView,
   scanDetailView,
-} from "./views.js?v=20260822.1";
+} from "./views.js?v=20260911.1";
 
-// The GitHub Pages demo is a marketing surface, so it opens on the landing
-// page; a real local dashboard is a tool the user already chose to run, so
-// it should open straight into the app instead.
+// The GitHub Pages demo opens on the seeded dashboard so visitors see data
+// immediately; a real local dashboard opens straight into a new scan.
 const isDemo =
   location.hostname.endsWith(".github.io") || new URLSearchParams(location.search).has("demo");
 
 const routes = [
   isDemo
-    ? { pattern: /^#?\/?$/, name: "home", view: landingView }
+    ? { pattern: /^#?\/?$/, name: "dashboard", view: dashboardView }
     : { pattern: /^#?\/?$/, name: "new", view: newScanView },
   { pattern: /^#\/dashboard$/, name: "dashboard", view: dashboardView },
   { pattern: /^#\/new$/, name: "new", view: newScanView },
@@ -42,7 +40,6 @@ async function render() {
   const hash = location.hash || "#/";
   const route = routes.find((candidate) => candidate.pattern.test(hash)) || routes[0];
   const match = hash.match(route.pattern);
-  root.classList.toggle("public-view", route.name === "home");
 
   document.querySelectorAll(".nav a").forEach((link) => {
     link.classList.toggle("active", link.dataset.route === route.name);
@@ -84,15 +81,14 @@ function initTheme() {
   });
 }
 
-function initPublicNav() {
+function initDemoBadge() {
   document.querySelector(".demo-badge").hidden = !isDemo;
-  document.querySelector('.nav a[data-route="home"]').hidden = !isDemo;
 }
 
 // -------------------------------------------------------------- boot
 
 window.addEventListener("hashchange", render);
 initTheme();
-initPublicNav();
+initDemoBadge();
 connect();
 render();
