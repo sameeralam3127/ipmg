@@ -35,9 +35,8 @@ ipmg --discover        # scan the network you are on, right now
 [Reports](#reports) ·
 [All options](#all-options) ·
 [Security](#security) ·
-[Troubleshooting](#troubleshooting) ·
-[FAQ](#faq) ·
-[Development](#development)
+[More help](#more-help) ·
+[Contributing](#contributing)
 
 ---
 
@@ -512,134 +511,26 @@ Found a vulnerability? See [SECURITY.md](SECURITY.md) for how to report it.
 
 ---
 
-## Troubleshooting
+## More help
 
-**`error: externally-managed-environment` when running `pip install ipmg`**
-Your distribution blocks installs into the system Python (Ubuntu 23.04+,
-Debian 12+, Fedora 38+). Use the one-line installer, `uv tool install ipmg`, or
-`pipx install ipmg` — see [Installing with pip](#installing-with-pip).
-
-**`command not found: ipmg` right after installing**
-The install directory is not on your `PATH` yet. Open a new terminal first —
-the installer adds it to your shell profile. Still missing? Run it directly
-from `~/.local/bin/ipmg`, or `python -m ipmg` if you installed with pip.
-
-**The installer fails on a minimal image**
-Bare container and cloud images often lack `curl`, `tar`, or `gzip`. The
-installer names exactly what is missing and the command that installs it, or
-you can let it do the work: add `--with-deps`. On Alpine, run it with `bash`
-(`apk add bash`) — the script needs more than busybox `sh` provides.
-
-**`The system 'ping' command is not available`**
-IPMG installed fine, but your image has no ping. Install it with the command
-for your distribution — see
-[The one thing IPMG needs](#the-one-thing-ipmg-needs-from-your-system).
-
-**Every host comes back `Timeout`**
-Something is dropping ICMP — a host firewall, a VPN, or a cloud security group.
-Confirm by running `ping` by hand against one of the addresses: if that fails
-too, it is the network and not IPMG. Note that `--scan-ports` will not help
-here — ports are only probed on hosts that already answered a ping.
-
-**The scan is slower than I expected**
-Unreachable hosts cost you the full `--timeout` each. On a big range, raise
-`--threads` and lower `--timeout`:
-
-```bash
-ipmg --input 10.0.0.0/16 --threads 200 --timeout 1
-```
-
-**`--discover` scanned the wrong network**
-It uses the interface your machine routes out of, which on a VPN is the VPN.
-Pass the network you meant explicitly: `ipmg --input 192.168.1.0/24`.
-
-**Hostname shows `Unresolvable`**
-That host has no DNS PTR record. Nothing is broken — there is simply no name to
-look up.
-
-**My input file was rejected**
-Check the extension is one IPMG reads (`.xlsx`, `.xls`, `.csv`, `.txt`,
-`.list`), and that spreadsheets and CSVs have a column named exactly
-`IP Address`.
-
-**The dashboard port is already in use**
-`ipmg dashboard --port 9000`.
+- **[Troubleshooting](https://github.com/sameeralam3127/ipmg/blob/main/docs/TROUBLESHOOTING.md)** —
+  install errors, `command not found`, every host timing out, slow scans,
+  rejected input files
+- **[FAQ](https://github.com/sameeralam3127/ipmg/blob/main/docs/FAQ.md)** —
+  root rights, Python versions, where history lives, running on a schedule
+- **[Issues](https://github.com/sameeralam3127/ipmg/issues)** — report a bug or
+  request a feature
 
 ---
 
-## FAQ
+## Contributing
 
-**Do I need root or administrator rights?**
-No. IPMG calls the same `ping` command you would run by hand. The installer
-only writes to `~/.local/bin`, unless you run it as root — then it installs
-system-wide to `/usr/local/bin` on purpose.
-
-**Do I need a specific Python version installed?**
-No. The one-line installer brings its own Python, which is why it works on
-RHEL 8 (system Python 3.6) and on openSUSE images with no Python at all. If you
-install with pip instead, you need Python 3.9 or newer.
-
-**Does it change anything on the hosts it scans?**
-No. It sends ICMP echo requests, and with `--scan-ports` it opens and
-immediately closes TCP connections. Nothing is written, and nothing is logged in
-on.
-
-**Where does my scan history live?**
-In `~/.ipmg/dashboard.db`, on your machine only. Nothing is uploaded anywhere.
-Point it elsewhere with `--db`, or skip storing a scan with `--no-history`.
-
-**Can I run it on a schedule?**
-Yes — `--interval 5` repeats the scan every 5 minutes in the foreground. For
-unattended runs, use cron or a systemd timer with `--compare --fail-on-change`
-so a change shows up as a non-zero exit code.
-
-**How big a range can I scan?**
-Up to 65,536 hosts per scan. Anything larger is rejected before the scan starts.
-
-**Does the dashboard need internet access?**
-No. Everything it serves is bundled with the package.
-
----
-
-## Development
-
-```bash
-pip install -e ".[dev]"
-PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -q
-```
-
-Releases are automated: merging a conventional commit (`feat: ...`,
-`fix: ...`) to `main` triggers GitHub Actions to run tests, create a
-semantic-release tag, and publish to [PyPI](https://pypi.org/project/ipmg/).
-
-### Website and dashboard demo
-
-The project website at
-[sameeralam3127.github.io/ipmg](https://sameeralam3127.github.io/ipmg/) lives
-in `site/`: a dependency-free static page with live release data, an install
-guide, and an interactive command builder.
-
-The dashboard demo is served beneath it at
-[`/demo/`](https://sameeralam3127.github.io/ipmg/demo/). GitHub Pages cannot run
-the Python scanner or access a local SQLite database, so the demo transparently
-uses realistic seeded network inventory and scan history. Search, filters,
-comparison, exports, theme switching, and a manual demo scan all work in the
-browser. The local `ipmg dashboard` command always uses the real FastAPI API
-and scan engine instead.
-
-The `Deploy site to GitHub Pages` workflow publishes both after changes to
-`site/` or `src/ipmg/web/static/` on `main`. In repository settings, select
-**GitHub Actions** as the GitHub Pages source once; no secrets are required.
-
-To preview locally, assemble the same layout the workflow builds:
-
-```bash
-rm -rf _site && mkdir -p _site/demo
-cp -R site/. _site/
-cp -R src/ipmg/web/static/. _site/demo/
-python3 -m http.server 4173 -d _site
-# site: http://127.0.0.1:4173/   demo: http://127.0.0.1:4173/demo/?demo=1
-```
+Contributions are welcome.
+[CONTRIBUTING.md](https://github.com/sameeralam3127/ipmg/blob/main/CONTRIBUTING.md)
+covers setting up a development environment, running the tests, the commit
+message format that drives automated releases, and how the project website and
+dashboard demo are built. Everyone taking part is expected to follow the
+[Code of Conduct](https://github.com/sameeralam3127/ipmg/blob/main/CODE_OF_CONDUCT.md).
 
 ---
 
