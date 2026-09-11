@@ -345,8 +345,8 @@ function shellQuote(value) {
 }
 
 function describeTarget(target) {
-  if (/\.(xlsx|xls|csv)$/i.test(target)) return "Read hosts from the “IP Address” column of this spreadsheet.";
-  if (/\.(txt|list)$/i.test(target)) return "Read one IP, CIDR block, or range per line from this file.";
+  if (/\.(xlsx|xls|csv)$/i.test(target)) return "Read hosts from the “IP Address” column of this spreadsheet, which must already exist.";
+  if (/\.(txt|list)$/i.test(target)) return "Read one IP, CIDR block, or range per line from this file, which must already exist.";
   if (target.includes("/")) return "Scan every host in this CIDR block.";
   if (target.includes("-")) return "Scan every address in this range.";
   return "Scan this single host.";
@@ -457,7 +457,7 @@ const BUILDERS = {
 
     if (form.on("scan-noHistory")) {
       line.flag("--no-history", "Don't store this scan in the history database.");
-      if (form.on("scan-compare")) line.warn("This scan isn't saved, so later comparisons can't use it as a baseline.");
+      if (form.on("scan-compare")) line.warn("Change detection needs scan history, so --compare is skipped when --no-history is set.");
     }
 
     const formats = form.all("scan-formats");

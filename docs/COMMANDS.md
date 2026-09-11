@@ -142,11 +142,12 @@ hostname) are skipped.
 - **One scan covers at most 65,536 hosts.** `10.0.0.0/16` (65,534 hosts) is
   accepted; `10.0.0.0/15` is rejected before anything is sent.
 - **A range must go upwards:** `192.168.1.100-192.168.1.1` is rejected.
-- **If the input file does not exist, IPMG creates it** with two sample
-  addresses (`8.8.8.8` and `1.1.1.1`) and scans those. This is also why plain
-  `ipmg`, whose default input is `ip_list.xlsx`, creates a sample
-  `ip_list.xlsx` on its first run. Check the file name if a scan shows those two
-  hosts unexpectedly.
+- **A file named with `--input` must exist.** A missing file is reported as
+  `Input file '<name>' was not found.` before anything is scanned (since
+  1.13.2; earlier versions created the file with sample addresses and scanned
+  those). Only plain `ipmg`, run without `--input`, creates its default
+  `ip_list.xlsx` — with two sample targets, `8.8.8.8` and `1.1.1.1` — if it
+  does not exist yet.
 
 ---
 
@@ -380,6 +381,7 @@ Invalid input is rejected before any host is contacted.
 | `ipmg --input 192.168.1.0/99` | `Unsupported target input: 192.168.1.0/99` | `1` |
 | `ipmg --input 192.168.1.100-192.168.1.1` | `Invalid IP range: 192.168.1.100-192.168.1.1` | `1` |
 | `ipmg --input 10.0.0.0/15` | `CIDR target '10.0.0.0/15' expands to too many hosts. Maximum allowed hosts: 65536.` | `1` |
+| `ipmg --input targts.txt` (no such file) | `Input file 'targts.txt' was not found.` | `1` |
 | `ipmg --input notes.pdf` | `Unsupported input file type '.pdf'. Supported types: .csv, .list, .txt, .xls, .xlsx.` | `1` |
 | `ipmg --input empty.txt` | `No valid IP targets were found in 'empty.txt'.` | `1` |
 | `ipmg --input hosts.csv` (no `IP Address` column) | `Input file 'hosts.csv' must contain an 'IP Address' column.` | `1` |
