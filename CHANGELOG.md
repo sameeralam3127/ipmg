@@ -2,6 +2,52 @@
 
 <!-- version list -->
 
+## v1.13.2 (2026-09-11)
+
+### Bug Fixes
+
+- **cli**: Report a missing input file instead of scanning sample hosts
+  ([#57](https://github.com/sameeralam3127/ipmg/pull/57),
+  [`717f0d4`](https://github.com/sameeralam3127/ipmg/commit/717f0d4f49da5a8be4c976ceef898eeab1cdc0f6))
+
+### Chores
+
+- Remove redundant tooling config and legacy import shims
+  ([#54](https://github.com/sameeralam3127/ipmg/pull/54),
+  [`26763fa`](https://github.com/sameeralam3127/ipmg/commit/26763fa3fd4606e4e6a6bc88d6220ad27c4a1032))
+
+### Continuous Integration
+
+- Bump the actions group across 1 directory with 7 updates
+  ([#53](https://github.com/sameeralam3127/ipmg/pull/53),
+  [`3cb98da`](https://github.com/sameeralam3127/ipmg/commit/3cb98da641f59221a16064eb7ba150ef95f28969))
+
+- Harden workflows for a public repository ([#52](https://github.com/sameeralam3127/ipmg/pull/52),
+  [`9419bee`](https://github.com/sameeralam3127/ipmg/commit/9419beea41b5f68e6cd4acbe0c8722c0abcf20c6))
+
+### Documentation
+
+- Add a command reference and cover every command in the site builder
+  ([#56](https://github.com/sameeralam3127/ipmg/pull/56),
+  [`0e39bfd`](https://github.com/sameeralam3127/ipmg/commit/0e39bfd5c0d31c2ffdff80cf5074a670e1abdbb6))
+
+- Add contributing guide and code of conduct, split README help docs
+  ([#55](https://github.com/sameeralam3127/ipmg/pull/55),
+  [`279c6e0`](https://github.com/sameeralam3127/ipmg/commit/279c6e003909091e38706c8b39af749f05b5442d))
+
+- Describe the missing-input-file fix and correct a builder warning
+  ([#56](https://github.com/sameeralam3127/ipmg/pull/56),
+  [`0e39bfd`](https://github.com/sameeralam3127/ipmg/commit/0e39bfd5c0d31c2ffdff80cf5074a670e1abdbb6))
+
+- **site**: Add a project website and serve the dashboard demo at /demo
+  ([#54](https://github.com/sameeralam3127/ipmg/pull/54),
+  [`26763fa`](https://github.com/sameeralam3127/ipmg/commit/26763fa3fd4606e4e6a6bc88d6220ad27c4a1032))
+
+- **site**: Project website, dashboard demo at /demo, and cleanup
+  ([#54](https://github.com/sameeralam3127/ipmg/pull/54),
+  [`26763fa`](https://github.com/sameeralam3127/ipmg/commit/26763fa3fd4606e4e6a6bc88d6220ad27c4a1032))
+
+
 ## v1.13.1 (2026-09-10)
 
 ### Bug Fixes
