@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src https://pypi.org https://api.github.com; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <title>IPMG — IP Management &amp; Ping Monitoring</title>
+  <meta name="description" content="IPMG pings hosts in parallel, resolves their names, remembers every scan, and tells you what changed. Open source, from the terminal or a private local dashboard.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="IPMG — know which hosts are up, and what changed">
+  <meta property="og:description" content="Parallel ping scanning, change detection, and reports from the terminal or a local dashboard.">
+  <meta property="og:url" content="https://sameeralam3127.github.io/ipmg/">
+  <meta name="theme-color" content="#2a78d6">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='%232a78d6' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='5' fill='%232a78d6'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="assets/site.css">
+  <script src="assets/boot.js"></script>
+  <script src="assets/site.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <p id="sr-status" class="sr-only" aria-live="polite"></p>
+
+  <header class="topbar">
+    <div class="wrap topbar-inner">
+      <a class="brand" href="#main" aria-label="IPMG, back to top">
+        <svg viewBox="0 0 32 32" width="24" height="24" aria-hidden="true"><circle cx="16" cy="16" r="13" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="16" cy="16" r="5" fill="currentColor"/></svg>
+        <span>IPMG</span>
+      </a>
+      <nav class="topnav" aria-label="Sections">
+        <a href="#features">Features</a>
+        <a href="#install">Install</a>
+        <a href="#builder">Command builder</a>
+        <a href="#changes">Change detection</a>
+        <a href="#dashboard">Dashboard</a>
+        <a href="#releases">Releases</a>
+      </nav>
+      <div class="topbar-actions">
+        <a class="gh-link" href="https://github.com/sameeralam3127/ipmg" rel="noopener">
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          <span>GitHub</span>
+          <span class="gh-stars" data-stars hidden></span>
+        </a>
+        <button class="icon-btn" type="button" data-theme-toggle aria-label="Toggle light or dark theme">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- ------------------------------------------------------------ hero -->
+    <section class="hero">
+      <div class="hero-bg" aria-hidden="true"></div>
+      <div class="wrap hero-grid">
+        <div class="hero-copy reveal">
+          <a class="release-pill" href="#releases">
+            <span class="live-dot" aria-hidden="true"></span>
+            <span data-release-label>Open source · MIT licensed</span>
+          </a>
+          <h1>Know which hosts are up — <span class="accent-text">and what changed</span> since last time.</h1>
+          <p class="lede">IPMG pings hosts in parallel, resolves their names, remembers every scan, and tells you what moved. Run it from the terminal or from a private dashboard on your own machine.</p>
+          <div class="cta-row">
+            <a class="btn primary" href="#install">Install IPMG</a>
+            <a class="btn" href="demo/">Try the live demo <span aria-hidden="true">→</span></a>
+          </div>
+          <div class="copy-line">
+            <span class="prompt" aria-hidden="true">$</span>
+            <code>uv tool install ipmg</code>
+            <button class="copy-btn" type="button" data-copy="uv tool install ipmg">Copy</button>
+          </div>
+          <ul class="hero-meta">
+            <li>Python 3.9 – 3.14</li>
+            <li>Linux · macOS · Windows</li>
+            <li>No root required</li>
+          </ul>
+        </div>
+
+        <div class="terminal reveal" role="img" aria-label="Animated example: IPMG streams live results while scanning 192.168.1.0/24, then prints a summary and saves a report.">
+          <div class="terminal-bar">
+            <span class="light"></span><span class="light"></span><span class="light"></span>
+            <p>ipmg — scan</p>
+            <button class="replay" type="button" data-replay aria-label="Replay the terminal animation">
+              <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4"/></svg>
+            </button>
+          </div>
+          <div class="terminal-body" data-terminal aria-hidden="true"><div><span class="t-accent">$</span> ipmg --input 192.168.1.0/24 --stream --resolve</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ----------------------------------------------------------- stats -->
+    <section class="wrap stats reveal" aria-label="IPMG at a glance">
+      <div class="stat"><strong data-count="65536">65,536</strong><span>hosts in a single scan</span></div>
+      <div class="stat"><strong data-count="4">4</strong><span>report formats</span></div>
+      <div class="stat"><strong data-count="8">8</strong><span>kinds of change detected</span></div>
+      <div class="stat"><strong data-count="0">0</strong><span>CDN assets — works offline</span></div>
+    </section>
+
+    <!-- -------------------------------------------------------- features -->
+    <section id="features" class="section">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <p class="kicker">Features</p>
+          <h2>Everything you need to answer “what's on this network?”</h2>
+          <p>One tool for the quick check and the scheduled audit — the same engine powers the CLI and the dashboard.</p>
+        </div>
+        <div class="feature-grid">
+          <article class="feature reveal">
+            <div class="icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg></div>
+            <h3>Scan anything you can name</h3>
+            <p>A single IP, a CIDR block, a range, or a text, CSV, or Excel file. <code>--discover</code> finds the network you're on and scans it.</p>
+          </article>
+          <article class="feature reveal">
+            <div class="icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></div>
+            <h3>Watch results arrive</h3>
+            <p><code>--stream</code> prints each host the moment it answers, above a live progress bar — and writes clean lines when piped to a log.</p>
+          </article>
+          <article class="feature reveal">
+            <div class="icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 7h14l-3-3M20 17H6l3 3"/></svg></div>
+            <h3>Spot what changed</h3>
+            <p>Every scan is kept in local SQLite. <code>--compare</code> and <code>ipmg diff</code> report outages, new hosts, and moved names.</p>
+          </article>
+          <article class="feature reveal">
+            <div class="icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></svg></div>
+            <h3>See listening services</h3>
+            <p><code>--scan-ports</code> checks SSH, HTTP, HTTPS, RDP, SMB, databases, and more on every host that answers — or the ports you choose.</p>
+          </article>
+          <article class="feature reveal">
+            <div class="icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></svg></div>
+            <h3>Reports people can read</h3>
+            <p>Excel, CSV, JSON, or Markdown, one row per host. Spreadsheet formulas in exported values are neutralized.</p>
+          </article>
+          <article class="feature reveal">
+            <div class="icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg></div>
+            <h3>A private local dashboard</h3>
+            <p><code>ipmg dashboard</code> serves live monitoring, history, and inventory on <code>127.0.0.1</code> — fully offline, nothing uploaded.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- --------------------------------------------------------- install -->
+    <section id="install" class="section alt">
+      <div class="wrap install-grid">
+        <div class="section-head reveal">
+          <p class="kicker">Install</p>
+          <h2>Up and running in under a minute</h2>
+          <p>The installer brings its own Python through <a href="https://docs.astral.sh/uv/" rel="noopener">uv</a>, so your system Python doesn't matter — it works on RHEL 8 and on images with no Python at all.</p>
+          <p class="note">IPMG uses your system's <code>ping</code>. Minimal Linux images may need it: <code>sudo apt-get install -y iputils-ping</code> (or <code>dnf</code>, <code>zypper</code>, <code>apk</code>).</p>
+        </div>
+
+        <div class="tabs reveal" data-tabs>
+          <div class="tab-list" role="tablist" aria-label="Installation method">
+            <button role="tab" id="tab-unix" aria-controls="panel-unix" aria-selected="true" type="button">Linux &amp; macOS</button>
+            <button role="tab" id="tab-windows" aria-controls="panel-windows" aria-selected="false" tabindex="-1" type="button" data-os="windows">Windows</button>
+            <button role="tab" id="tab-tool" aria-controls="panel-tool" aria-selected="false" tabindex="-1" type="button">uv / pipx</button>
+            <button role="tab" id="tab-pip" aria-controls="panel-pip" aria-selected="false" tabindex="-1" type="button">pip</button>
+          </div>
+
+          <div class="tab-panel" role="tabpanel" id="panel-unix" aria-labelledby="tab-unix">
+            <div class="code-block">
+              <pre><code id="cmd-unix">curl -sSL https://raw.githubusercontent.com/sameeralam3127/ipmg/main/install.sh | bash</code></pre>
+              <button class="copy-btn" type="button" data-copy-from="#cmd-unix">Copy</button>
+            </div>
+            <p>On a minimal server or container, add <code>-s -- --with-deps</code> after <code>bash</code> to install <code>curl</code>, <code>tar</code>, <code>gzip</code>, and <code>ping</code> too.</p>
+          </div>
+
+          <div class="tab-panel" role="tabpanel" id="panel-windows" aria-labelledby="tab-windows" hidden>
+            <div class="code-block">
+              <pre><code id="cmd-windows">powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+uv tool install ipmg</code></pre>
+              <button class="copy-btn" type="button" data-copy-from="#cmd-windows">Copy</button>
+            </div>
+            <p>Run both lines in PowerShell. <code>ping</code> ships with Windows, and CI runs the full test suite and a live scan on Windows for every change.</p>
+          </div>
+
+          <div class="tab-panel" role="tabpanel" id="panel-tool" aria-labelledby="tab-tool" hidden>
+            <div class="code-block">
+              <pre><code id="cmd-tool">uv tool install ipmg     # or: pipx install ipmg</code></pre>
+              <button class="copy-btn" type="button" data-copy="uv tool install ipmg">Copy</button>
+            </div>
+            <p>Installs IPMG as an isolated application. Upgrade later with <code>uv tool upgrade ipmg</code>.</p>
+          </div>
+
+          <div class="tab-panel" role="tabpanel" id="panel-pip" aria-labelledby="tab-pip" hidden>
+            <div class="code-block">
+              <pre><code id="cmd-pip">python3 -m venv ~/.venvs/ipmg
+~/.venvs/ipmg/bin/pip install ipmg</code></pre>
+              <button class="copy-btn" type="button" data-copy-from="#cmd-pip">Copy</button>
+            </div>
+            <p>Use a virtual environment: Ubuntu 23.04+, Debian 12+, and Fedora 38+ block <code>pip</code> installs into the system Python.</p>
+          </div>
+
+          <div class="verify">
+            <span>Then check it works:</span>
+            <code>ipmg --version</code>
+            <span class="version-chip" data-version hidden></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- --------------------------------------------------------- builder -->
+    <section id="builder" class="section">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <p class="kicker">Command builder</p>
+          <h2>Build your scan, copy the command</h2>
+          <p>Pick what you want to know. Every flag is explained, so the command you copy is one you understand.</p>
+        </div>
+
+        <div class="builder reveal">
+          <form class="builder-form" data-builder>
+            <fieldset>
+              <legend>What to scan</legend>
+              <div class="segmented">
+                <label><input type="radio" name="mode" value="input" checked><span>Specific targets</span></label>
+                <label><input type="radio" name="mode" value="discover"><span>My current network</span></label>
+              </div>
+              <label class="field" for="target">
+                <span>Target</span>
+                <input id="target" name="target" type="text" value="192.168.1.0/24" autocomplete="off" spellcheck="false" maxlength="200">
+              </label>
+              <div class="chips" aria-label="Example targets">
+                <button type="button" class="chip" data-target="8.8.8.8">8.8.8.8</button>
+                <button type="button" class="chip" data-target="192.168.1.0/24">192.168.1.0/24</button>
+                <button type="button" class="chip" data-target="10.0.0.1-10.0.0.50">10.0.0.1-10.0.0.50</button>
+                <button type="button" class="chip" data-target="targets.xlsx">targets.xlsx</button>
+              </div>
+            </fieldset>
+
+            <fieldset>
+              <legend>What to find out</legend>
+              <div class="toggles">
+                <label class="toggle"><input type="checkbox" name="resolve"><span>Hostnames <small>reverse DNS</small></span></label>
+                <label class="toggle"><input type="checkbox" name="stream" checked><span>Live results <small>as hosts answer</small></span></label>
+                <label class="toggle"><input type="checkbox" name="scanPorts"><span>Open ports <small>common TCP services</small></span></label>
+                <label class="toggle"><input type="checkbox" name="compare"><span>Changes <small>vs. previous scan</small></span></label>
+              </div>
+            </fieldset>
+
+            <fieldset>
+              <legend>Reports</legend>
+              <div class="chips">
+                <label class="chip check"><input type="checkbox" name="formats" value="xlsx" checked><span>Excel</span></label>
+                <label class="chip check"><input type="checkbox" name="formats" value="csv"><span>CSV</span></label>
+                <label class="chip check"><input type="checkbox" name="formats" value="json"><span>JSON</span></label>
+                <label class="chip check"><input type="checkbox" name="formats" value="md"><span>Markdown</span></label>
+              </div>
+            </fieldset>
+
+            <fieldset>
+              <legend>Speed</legend>
+              <div class="numbers">
+                <label class="field" for="threads"><span>Threads</span><input id="threads" name="threads" type="number" min="1" max="1000" value="50"></label>
+                <label class="field" for="timeout"><span>Timeout (s)</span><input id="timeout" name="timeout" type="number" min="1" max="60" value="2"></label>
+                <label class="field" for="count"><span>Pings / host</span><input id="count" name="count" type="number" min="1" max="20" value="1"></label>
+                <label class="field" for="interval"><span>Repeat every (min)</span><input id="interval" name="interval" type="number" min="0" max="1440" value="0"></label>
+              </div>
+            </fieldset>
+          </form>
+
+          <div class="builder-output">
+            <div class="output-card">
+              <div class="output-head">
+                <span>Your command</span>
+                <button class="copy-btn" type="button" data-copy-from="[data-command]">Copy</button>
+              </div>
+              <pre class="command"><code data-command>ipmg --input 192.168.1.0/24 --stream</code></pre>
+              <ul class="explain" data-explain></ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- --------------------------------------------------------- changes -->
+    <section id="changes" class="section alt">
+      <div class="wrap changes-grid">
+        <div class="section-head reveal">
+          <p class="kicker">Change detection</p>
+          <h2>The question you actually have: what moved?</h2>
+          <p>IPMG compares a scan with the previous scan of the same targets and ranks every difference. Latency only counts when it clears both an absolute and a relative threshold, so normal jitter stays out of the report.</p>
+          <div class="code-block compact">
+            <pre><code>ipmg diff                    # two latest scans
+ipmg diff 12 14              # two specific scans
+ipmg diff --fail-on-change   # exit 2 for cron or CI</code></pre>
+          </div>
+        </div>
+
+        <div class="changes-card reveal">
+          <div class="filter" role="group" aria-label="Filter by severity">
+            <button type="button" class="chip" data-severity-filter="all" aria-pressed="true">All <span>8</span></button>
+            <button type="button" class="chip sev-critical" data-severity-filter="critical" aria-pressed="false">Critical <span>1</span></button>
+            <button type="button" class="chip sev-warning" data-severity-filter="warning" aria-pressed="false">Warning <span>4</span></button>
+            <button type="button" class="chip sev-info" data-severity-filter="info" aria-pressed="false">Info <span>3</span></button>
+          </div>
+          <ul class="change-list">
+            <li data-severity="critical"><span class="sev critical">critical</span><div><strong>Host offline</strong><p>Reachable in the baseline, not reachable now</p></div></li>
+            <li data-severity="warning"><span class="sev warning">warning</span><div><strong>New host</strong><p>An IP address the baseline never saw</p></div></li>
+            <li data-severity="warning"><span class="sev warning">warning</span><div><strong>Host removed</strong><p>An IP the current scan no longer covers</p></div></li>
+            <li data-severity="warning"><span class="sev warning">warning</span><div><strong>IP address changed</strong><p>A known hostname moved to a different IP</p></div></li>
+            <li data-severity="warning"><span class="sev warning">warning</span><div><strong>Service changed</strong><p>Status moved between failure modes, e.g. Timeout → Unreachable</p></div></li>
+            <li data-severity="info"><span class="sev info">info</span><div><strong>Host back online</strong><p>Recovered since the baseline</p></div></li>
+            <li data-severity="info"><span class="sev info">info</span><div><strong>Hostname changed</strong><p>Same IP, different PTR record</p></div></li>
+            <li data-severity="info"><span class="sev info">info</span><div><strong>Latency changed</strong><p>Moved past both thresholds (5 ms and 25% by default)</p></div></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ------------------------------------------------------- dashboard -->
+    <section id="dashboard" class="section">
+      <div class="wrap">
+        <div class="section-head center reveal">
+          <p class="kicker">Dashboard</p>
+          <h2>Prefer clicking? Same engine, in your browser.</h2>
+          <p><code>ipmg dashboard</code> starts a private server on <code>127.0.0.1:8080</code> with live progress over WebSockets, scan history, change reports, and a host inventory. The demo below runs entirely in your browser with sample data.</p>
+          <div class="cta-row center">
+            <a class="btn primary" href="demo/">Open the full demo</a>
+            <a class="btn" href="https://github.com/sameeralam3127/ipmg#web-dashboard" rel="noopener">Dashboard docs</a>
+          </div>
+        </div>
+        <div class="browser reveal">
+          <div class="browser-bar">
+            <span class="light"></span><span class="light"></span><span class="light"></span>
+            <p class="address">127.0.0.1:8080 <span>sample data</span></p>
+          </div>
+          <iframe src="demo/?demo=1" title="Interactive IPMG dashboard demo with sample data" loading="lazy"></iframe>
+        </div>
+      </div>
+    </section>
+
+    <!-- -------------------------------------------------------- releases -->
+    <section id="releases" class="section alt">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <p class="kicker">Releases</p>
+          <h2>Shipped recently</h2>
+          <p>Every merge to <code>main</code> is tested on six Python versions and three operating systems, then released automatically to PyPI.</p>
+        </div>
+        <div class="release-grid" data-releases aria-live="polite">
+          <article class="release skeleton" aria-hidden="true"><span></span><span></span><span></span></article>
+          <article class="release skeleton" aria-hidden="true"><span></span><span></span><span></span></article>
+          <article class="release skeleton" aria-hidden="true"><span></span><span></span><span></span></article>
+        </div>
+        <p class="more-link"><a href="https://github.com/sameeralam3127/ipmg/releases" rel="noopener">All releases on GitHub →</a></p>
+      </div>
+    </section>
+
+    <!-- ------------------------------------------------------------- faq -->
+    <section id="faq" class="section">
+      <div class="wrap faq-grid">
+        <div class="section-head reveal">
+          <p class="kicker">FAQ</p>
+          <h2>Good questions</h2>
+          <p>More answers, and troubleshooting, in the <a href="https://github.com/sameeralam3127/ipmg#faq" rel="noopener">README</a>.</p>
+        </div>
+        <div class="faq reveal">
+          <details>
+            <summary>Do I need root or administrator rights?</summary>
+            <p>No. IPMG runs the same <code>ping</code> command you would run by hand — no raw sockets, no special capabilities.</p>
+          </details>
+          <details>
+            <summary>Does it change anything on the hosts it scans?</summary>
+            <p>No. It sends ICMP echo requests, and with <code>--scan-ports</code> it opens and immediately closes TCP connections. Nothing is written and nothing logs in.</p>
+          </details>
+          <details>
+            <summary>Where does my scan history live?</summary>
+            <p>In <code>~/.ipmg/dashboard.db</code>, on your machine only. Point it elsewhere with <code>--db</code>, or skip storing a scan with <code>--no-history</code>.</p>
+          </details>
+          <details>
+            <summary>Can I run it on a schedule?</summary>
+            <p><code>--interval 5</code> repeats a scan every five minutes. For unattended runs, use cron or a systemd timer with <code>--compare</code>, then <code>ipmg diff --fail-on-change</code> so a change shows up as exit code 2.</p>
+          </details>
+          <details>
+            <summary>Every host comes back as Timeout. Why?</summary>
+            <p>Something is dropping ICMP — a host firewall, a VPN, or a cloud security group. Try <code>ping</code> by hand against one address: if that fails too, it's the network, not IPMG.</p>
+          </details>
+          <details>
+            <summary>Is the dashboard safe to expose?</summary>
+            <p>It binds to <code>127.0.0.1</code> and has no authentication by design. To reach it from another machine, use an SSH tunnel, or put an authenticating reverse proxy in front of it.</p>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- ------------------------------------------------------------- cta -->
+    <section class="wrap final-cta reveal">
+      <h2>Scan your first network.</h2>
+      <div class="copy-line">
+        <span class="prompt" aria-hidden="true">$</span>
+        <code>ipmg --discover</code>
+        <button class="copy-btn" type="button" data-copy="ipmg --discover">Copy</button>
+      </div>
+      <p class="responsible">Only scan networks you are authorized to scan. Unauthorized scanning may violate your organization's policies or the law.</p>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap footer-inner">
+      <div class="brand small">
+        <svg viewBox="0 0 32 32" width="18" height="18" aria-hidden="true"><circle cx="16" cy="16" r="13" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="16" cy="16" r="5" fill="currentColor"/></svg>
+        <span>IPMG</span>
+        <span class="muted">MIT licensed · <span data-version-footer>open source</span></span>
+      </div>
+      <nav class="footer-links" aria-label="Project links">
+        <a href="https://github.com/sameeralam3127/ipmg" rel="noopener">GitHub</a>
+        <a href="https://pypi.org/project/ipmg/" rel="noopener">PyPI</a>
+        <a href="https://github.com/sameeralam3127/ipmg#readme" rel="noopener">Documentation</a>
+        <a href="https://github.com/sameeralam3127/ipmg/blob/main/CHANGELOG.md" rel="noopener">Changelog</a>
+        <a href="https://github.com/sameeralam3127/ipmg/blob/main/SECURITY.md" rel="noopener">Security</a>
+        <a href="https://github.com/sameeralam3127/ipmg/issues" rel="noopener">Issues</a>
+      </nav>
+    </div>
+  </footer>
+</body>
+</html>

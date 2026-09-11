@@ -59,7 +59,7 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/sameeralam3127/ipmg"
+Homepage = "https://sameeralam3127.github.io/ipmg/"
 Documentation = "https://github.com/sameeralam3127/ipmg#readme"
 Repository = "https://github.com/sameeralam3127/ipmg"
 Issues = "https://github.com/sameeralam3127/ipmg/issues"
@@ -68,7 +68,6 @@ Changelog = "https://github.com/sameeralam3127/ipmg/releases"
 [project.optional-dependencies]
 dev = [
     "pytest>=7.4",
-    "black>=24.0",
     "ruff>=0.4",
     "pre-commit>=3.5.0",
     "python-semantic-release>=10.5.3",
@@ -86,7 +85,6 @@ ipmg = "ipmg.cli.commands:run"
 [dependency-groups]
 dev = [
     "pytest>=7.4",
-    "black>=24.0",
     "ruff>=0.4",
     "pre-commit>=3.5.0",
     "python-semantic-release>=10.5.3",
@@ -98,6 +96,8 @@ dev = [
 # Semantic Release Configuration
 # ==========================================================
 
+# Publishing is done by the workflow (pypa/gh-action-pypi-publish), not by
+# semantic-release itself.
 [tool.semantic_release]
 branch = "main"
 version_toml = ["pyproject.toml:project.version"]
@@ -105,8 +105,6 @@ version_variables = ["src/ipmg/__init__.py:__version__"]
 tag_format = "v{version}"
 commit_message = "chore(release): {version}"
 build_command = "python -m build"
-upload_to_pypi = true
-upload_to_repository = "pypi"
 major_on_zero = false
 
 

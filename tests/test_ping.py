@@ -1,6 +1,6 @@
 import pytest
 
-from ipmg.ping import parse_latency, validate_ip
+from ipmg.core.ping import parse_latency, validate_ip
 
 
 def test_ip_validation():

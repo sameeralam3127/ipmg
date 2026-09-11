@@ -1,7 +1,7 @@
 import pytest
 
 from ipmg.core import discovery
-from ipmg.discover import discover_local_subnet
+from ipmg.core.discovery import discover_local_subnet
 from ipmg.exceptions import DiscoveryError
 
 
