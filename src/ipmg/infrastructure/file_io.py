@@ -11,6 +11,7 @@ from ipmg.utils.helpers import markdown_cell, spreadsheet_escape, timestamp_str
 
 SUPPORTED_INPUT_SUFFIXES = {".xlsx", ".xls", ".csv", ".txt", ".list"}
 MAX_EXPANDED_TARGETS = 65_536
+DEFAULT_INPUT_FILE = "ip_list.xlsx"
 
 
 def _deduplicate(targets: Iterable[str]) -> list[str]:
@@ -152,6 +153,9 @@ def load_targets(source: str) -> list[str]:
             f"Unsupported input file type '{suffix or '<none>'}'. "
             f"Supported types: {', '.join(sorted(SUPPORTED_INPUT_SUFFIXES))}."
         )
+
+    if path.suffix.lower() in SUPPORTED_INPUT_SUFFIXES:
+        raise FileIOError(f"Input file '{source}' was not found.")
 
     expanded = _expand_target(source.strip())
     if expanded:

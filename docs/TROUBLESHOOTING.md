@@ -75,6 +75,13 @@ look up.
 
 ## Input files
 
+### `Input file 'targets.txt' was not found`
+
+IPMG could not find the file you passed to `--input`. Check the spelling and
+the folder you are running from — a relative path is looked up from your
+current directory. Only plain `ipmg`, run without `--input`, creates a sample
+file (`ip_list.xlsx`) for you.
+
 ### My input file was rejected
 
 Check the extension is one IPMG reads (`.xlsx`, `.xls`, `.csv`, `.txt`,

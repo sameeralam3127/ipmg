@@ -7,7 +7,6 @@ import os
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
-from pathlib import Path
 from typing import List, Optional, Tuple
 
 import pandas as pd
@@ -18,7 +17,7 @@ from ipmg.core.engine import HostResult, ScanConfig, execute_scan
 from ipmg.core.portscan import DEFAULT_PORTS
 from ipmg.exceptions import HistoryError
 from ipmg.infrastructure.file_io import (
-    SUPPORTED_INPUT_SUFFIXES,
+    DEFAULT_INPUT_FILE,
     create_sample_file,
     load_targets,
     save_results,
@@ -99,10 +98,22 @@ def _config_from_args(args) -> ScanConfig:
 
 
 def _ensure_input_file(args) -> None:
-    if args.discover or os.path.exists(args.input):
+    """Fall back to the default input file, creating a sample only for that default.
+
+    An explicit ``--input`` that does not exist is deliberately left alone:
+    creating it would silently scan the sample addresses instead of the hosts
+    the user meant, so ``load_targets`` reports it as missing.
+    """
+    if args.discover or args.input is not None:
         return
-    if Path(args.input).suffix.lower() in SUPPORTED_INPUT_SUFFIXES:
-        create_sample_file(args.input)
+    args.input = DEFAULT_INPUT_FILE
+    if not os.path.exists(DEFAULT_INPUT_FILE):
+        create_sample_file(DEFAULT_INPUT_FILE)
+        ui.blank()
+        ui.note(
+            f"Created {DEFAULT_INPUT_FILE} with sample targets (8.8.8.8, 1.1.1.1). "
+            "Edit it, or pass --input to scan your own hosts."
+        )
 
 
 def _print_configuration(source: str, targets: int, config: ScanConfig) -> None:

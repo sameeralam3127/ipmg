@@ -6,6 +6,7 @@ import argparse
 
 from ipmg import __version__
 from ipmg.core.portscan import DEFAULT_PORTS, parse_port_list
+from ipmg.infrastructure.file_io import DEFAULT_INPUT_FILE
 from ipmg.reporting.diff_report import DIFF_FORMATS
 from ipmg.reporting.live import DEFAULT_REFRESH_S, MAX_REFRESH_S, MIN_REFRESH_S
 
@@ -76,7 +77,17 @@ def build_parser() -> argparse.ArgumentParser:
         action="version",
         version=f"%(prog)s {__version__}",
     )
-    parser.add_argument("--input", default="ip_list.xlsx")
+    # No default here, so the scan service can tell "no --input given" (use the
+    # sample file) apart from an explicit file name that does not exist (error).
+    parser.add_argument(
+        "--input",
+        default=None,
+        help=(
+            "IP, CIDR block, range, or target file (.txt, .list, .csv, .xls, .xlsx). "
+            f"Without --input or --discover, {DEFAULT_INPUT_FILE} is used and "
+            "created with sample targets if it does not exist."
+        ),
+    )
     parser.add_argument("--output", default="results")
     parser.add_argument("--timeout", type=int, default=2)
     parser.add_argument("--count", type=int, default=1)
