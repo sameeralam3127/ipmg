@@ -206,59 +206,198 @@ uv tool install ipmg</code></pre>
       <div class="wrap">
         <div class="section-head reveal">
           <p class="kicker">Command builder</p>
-          <h2>Build your scan, copy the command</h2>
-          <p>Pick what you want to know. Every flag is explained, so the command you copy is one you understand.</p>
+          <h2>Build any command, copy it</h2>
+          <p>Pick a command and what you want to know. Every flag is explained, so the command you copy is one you understand. Prefer to read? Every command is also in the <a href="https://github.com/sameeralam3127/ipmg/blob/main/docs/COMMANDS.md" rel="noopener">command reference</a>.</p>
         </div>
 
         <div class="builder reveal">
           <form class="builder-form" data-builder>
             <fieldset>
-              <legend>What to scan</legend>
-              <div class="segmented">
-                <label><input type="radio" name="mode" value="input" checked><span>Specific targets</span></label>
-                <label><input type="radio" name="mode" value="discover"><span>My current network</span></label>
-              </div>
-              <label class="field" for="target">
-                <span>Target</span>
-                <input id="target" name="target" type="text" value="192.168.1.0/24" autocomplete="off" spellcheck="false" maxlength="200">
-              </label>
-              <div class="chips" aria-label="Example targets">
-                <button type="button" class="chip" data-target="8.8.8.8">8.8.8.8</button>
-                <button type="button" class="chip" data-target="192.168.1.0/24">192.168.1.0/24</button>
-                <button type="button" class="chip" data-target="10.0.0.1-10.0.0.50">10.0.0.1-10.0.0.50</button>
-                <button type="button" class="chip" data-target="targets.xlsx">targets.xlsx</button>
+              <legend>Command</legend>
+              <div class="segmented commands">
+                <label><input type="radio" name="command" value="scan" checked><span>Scan</span></label>
+                <label><input type="radio" name="command" value="diff"><span>Compare</span></label>
+                <label><input type="radio" name="command" value="history"><span>History</span></label>
+                <label><input type="radio" name="command" value="dashboard"><span>Dashboard</span></label>
               </div>
             </fieldset>
 
-            <fieldset>
-              <legend>What to find out</legend>
-              <div class="toggles">
-                <label class="toggle"><input type="checkbox" name="resolve"><span>Hostnames <small>reverse DNS</small></span></label>
-                <label class="toggle"><input type="checkbox" name="stream" checked><span>Live results <small>as hosts answer</small></span></label>
-                <label class="toggle"><input type="checkbox" name="scanPorts"><span>Open ports <small>common TCP services</small></span></label>
-                <label class="toggle"><input type="checkbox" name="compare"><span>Changes <small>vs. previous scan</small></span></label>
-              </div>
-            </fieldset>
+            <!-- ipmg (scan) -->
+            <div class="panel" data-panel="scan">
+              <fieldset>
+                <legend>What to scan</legend>
+                <div class="segmented">
+                  <label><input type="radio" name="scan-mode" value="input" checked><span>Specific targets</span></label>
+                  <label><input type="radio" name="scan-mode" value="discover"><span>My current network</span></label>
+                </div>
+                <label class="field" for="scan-target">
+                  <span>Target <small class="field-hint">IP, CIDR, range, or file</small></span>
+                  <input id="scan-target" name="scan-target" type="text" value="192.168.1.0/24" autocomplete="off" spellcheck="false" maxlength="200">
+                </label>
+                <div class="chips" aria-label="Example targets">
+                  <button type="button" class="chip" data-target="8.8.8.8">8.8.8.8</button>
+                  <button type="button" class="chip" data-target="192.168.1.0/24">192.168.1.0/24</button>
+                  <button type="button" class="chip" data-target="10.0.0.1-10.0.0.50">10.0.0.1-10.0.0.50</button>
+                  <button type="button" class="chip" data-target="targets.txt">targets.txt</button>
+                  <button type="button" class="chip" data-target="targets.xlsx">targets.xlsx</button>
+                </div>
+              </fieldset>
 
-            <fieldset>
-              <legend>Reports</legend>
-              <div class="chips">
-                <label class="chip check"><input type="checkbox" name="formats" value="xlsx" checked><span>Excel</span></label>
-                <label class="chip check"><input type="checkbox" name="formats" value="csv"><span>CSV</span></label>
-                <label class="chip check"><input type="checkbox" name="formats" value="json"><span>JSON</span></label>
-                <label class="chip check"><input type="checkbox" name="formats" value="md"><span>Markdown</span></label>
-              </div>
-            </fieldset>
+              <fieldset>
+                <legend>What to find out</legend>
+                <div class="toggles">
+                  <label class="toggle"><input type="checkbox" name="scan-resolve"><span>Hostnames <small>reverse DNS</small></span></label>
+                  <label class="toggle"><input type="checkbox" name="scan-scanPorts"><span>Open ports <small>TCP services</small></span></label>
+                  <label class="toggle"><input type="checkbox" name="scan-stream" checked><span>Live results <small>hosts that answer</small></span></label>
+                  <label class="toggle"><input type="checkbox" name="scan-streamAll"><span>Every result live <small>including timeouts</small></span></label>
+                  <label class="toggle"><input type="checkbox" name="scan-compare"><span>Changes <small>vs. previous scan</small></span></label>
+                  <label class="toggle"><input type="checkbox" name="scan-noHistory"><span>Don't save <small>skip scan history</small></span></label>
+                </div>
 
-            <fieldset>
-              <legend>Speed</legend>
-              <div class="numbers">
-                <label class="field" for="threads"><span>Threads</span><input id="threads" name="threads" type="number" min="1" max="1000" value="50"></label>
-                <label class="field" for="timeout"><span>Timeout (s)</span><input id="timeout" name="timeout" type="number" min="1" max="60" value="2"></label>
-                <label class="field" for="count"><span>Pings / host</span><input id="count" name="count" type="number" min="1" max="20" value="1"></label>
-                <label class="field" for="interval"><span>Repeat every (min)</span><input id="interval" name="interval" type="number" min="0" max="1440" value="0"></label>
-              </div>
-            </fieldset>
+                <div class="subfields" data-show-if="scan-scanPorts" hidden>
+                  <label class="field span-2" for="scan-ports">
+                    <span>Ports <small class="field-hint">comma-separated · empty = default list</small></span>
+                    <input id="scan-ports" name="scan-ports" type="text" placeholder="21,22,25,53,80,443,445,1433,3306,3389,5432" autocomplete="off" spellcheck="false" maxlength="200">
+                  </label>
+                  <label class="field" for="scan-portTimeout"><span>Port timeout (s)</span><input id="scan-portTimeout" name="scan-portTimeout" type="number" min="0.1" max="60" step="0.1" value="1"></label>
+                </div>
+
+                <div class="subfields" data-show-if="scan-compare" hidden>
+                  <label class="toggle span-2"><input type="checkbox" name="scan-anySource"><span>Any previous scan <small>not only of the same input</small></span></label>
+                  <div class="span-2">
+                    <span class="field-label">Also export the changes as</span>
+                    <div class="chips">
+                      <label class="chip check"><input type="checkbox" name="scan-diffFormats" value="md"><span>Markdown</span></label>
+                      <label class="chip check"><input type="checkbox" name="scan-diffFormats" value="json"><span>JSON</span></label>
+                      <label class="chip check"><input type="checkbox" name="scan-diffFormats" value="csv"><span>CSV</span></label>
+                    </div>
+                  </div>
+                  <label class="field" for="scan-latencyMs"><span>Latency change (ms)</span><input id="scan-latencyMs" name="scan-latencyMs" type="number" min="0" step="0.5" value="5"></label>
+                  <label class="field" for="scan-latencyPct"><span>Latency change (%)</span><input id="scan-latencyPct" name="scan-latencyPct" type="number" min="0" step="1" value="25"></label>
+                </div>
+              </fieldset>
+
+              <fieldset>
+                <legend>Reports</legend>
+                <div class="chips">
+                  <label class="chip check"><input type="checkbox" name="scan-formats" value="xlsx" checked><span>Excel</span></label>
+                  <label class="chip check"><input type="checkbox" name="scan-formats" value="csv"><span>CSV</span></label>
+                  <label class="chip check"><input type="checkbox" name="scan-formats" value="json"><span>JSON</span></label>
+                  <label class="chip check"><input type="checkbox" name="scan-formats" value="md"><span>Markdown</span></label>
+                </div>
+                <label class="field" for="scan-output">
+                  <span>File name prefix <small class="field-hint">saved as prefix_timestamp.format</small></span>
+                  <input id="scan-output" name="scan-output" type="text" value="results" autocomplete="off" spellcheck="false" maxlength="200">
+                </label>
+              </fieldset>
+
+              <fieldset>
+                <legend>Speed</legend>
+                <div class="numbers">
+                  <label class="field" for="scan-threads"><span>Threads</span><input id="scan-threads" name="scan-threads" type="number" min="1" max="1000" value="50"></label>
+                  <label class="field" for="scan-timeout"><span>Timeout (s)</span><input id="scan-timeout" name="scan-timeout" type="number" min="1" max="60" value="2"></label>
+                  <label class="field" for="scan-count"><span>Pings / host</span><input id="scan-count" name="scan-count" type="number" min="1" max="20" value="1"></label>
+                  <label class="field" for="scan-interval"><span>Repeat every (min)</span><input id="scan-interval" name="scan-interval" type="number" min="0" max="1440" value="0"></label>
+                </div>
+              </fieldset>
+
+              <details class="advanced">
+                <summary>More options</summary>
+                <div class="advanced-grid">
+                  <label class="field" for="scan-dnsTtl"><span>DNS cache (s) <small class="field-hint">with hostnames</small></span><input id="scan-dnsTtl" name="scan-dnsTtl" type="number" min="0" max="86400" value="300"></label>
+                  <label class="field" for="scan-refresh"><span>Progress redraw (s) <small class="field-hint">when live</small></span><input id="scan-refresh" name="scan-refresh" type="number" min="0.05" max="5" step="0.05" value="0.25"></label>
+                  <label class="field span-2" for="scan-db"><span>History database <small class="field-hint">empty = ~/.ipmg/dashboard.db</small></span><input id="scan-db" name="scan-db" type="text" placeholder="~/.ipmg/dashboard.db" autocomplete="off" spellcheck="false" maxlength="300"></label>
+                  <label class="toggle span-2"><input type="checkbox" name="scan-verbose"><span>Debug logging <small>--verbose</small></span></label>
+                </div>
+              </details>
+            </div>
+
+            <!-- ipmg diff -->
+            <div class="panel" data-panel="diff" hidden>
+              <fieldset>
+                <legend>Which scans</legend>
+                <p class="fieldset-note">Leave both empty to compare the two most recent scans. Scan ids are listed by <code>ipmg history</code>.</p>
+                <div class="numbers two">
+                  <label class="field" for="diff-target"><span>Scan id</span><input id="diff-target" name="diff-target" type="number" min="1" placeholder="latest"></label>
+                  <label class="field" for="diff-baseline"><span>Compare with id</span><input id="diff-baseline" name="diff-baseline" type="number" min="1" placeholder="the scan before"></label>
+                </div>
+                <label class="field" for="diff-source"><span>Only scans of input <small class="field-hint">e.g. targets.txt or auto-discovery</small></span><input id="diff-source" name="diff-source" type="text" autocomplete="off" spellcheck="false" maxlength="200"></label>
+              </fieldset>
+
+              <fieldset>
+                <legend>Output</legend>
+                <div class="toggles">
+                  <label class="toggle span-2"><input type="checkbox" name="diff-failOnChange"><span>Fail on change <small>exit code 2 for cron and CI</small></span></label>
+                </div>
+                <span class="field-label spaced">Export the changes as</span>
+                <div class="chips">
+                  <label class="chip check"><input type="checkbox" name="diff-formats" value="md"><span>Markdown</span></label>
+                  <label class="chip check"><input type="checkbox" name="diff-formats" value="json"><span>JSON</span></label>
+                  <label class="chip check"><input type="checkbox" name="diff-formats" value="csv"><span>CSV</span></label>
+                </div>
+                <div class="numbers two spaced">
+                  <label class="field" for="diff-output"><span>Export name prefix</span><input id="diff-output" name="diff-output" type="text" value="changes" autocomplete="off" spellcheck="false" maxlength="200"></label>
+                  <label class="field" for="diff-limit"><span>Print at most</span><input id="diff-limit" name="diff-limit" type="number" min="0" placeholder="all changes"></label>
+                </div>
+              </fieldset>
+
+              <fieldset>
+                <legend>Latency sensitivity</legend>
+                <p class="fieldset-note">A latency change is reported only when it clears both thresholds.</p>
+                <div class="numbers two">
+                  <label class="field" for="diff-latencyMs"><span>At least (ms)</span><input id="diff-latencyMs" name="diff-latencyMs" type="number" min="0" step="0.5" value="5"></label>
+                  <label class="field" for="diff-latencyPct"><span>And at least (%)</span><input id="diff-latencyPct" name="diff-latencyPct" type="number" min="0" step="1" value="25"></label>
+                </div>
+              </fieldset>
+
+              <details class="advanced">
+                <summary>More options</summary>
+                <div class="advanced-grid">
+                  <label class="field span-2" for="diff-db"><span>History database <small class="field-hint">empty = ~/.ipmg/dashboard.db</small></span><input id="diff-db" name="diff-db" type="text" placeholder="~/.ipmg/dashboard.db" autocomplete="off" spellcheck="false" maxlength="300"></label>
+                  <label class="toggle span-2"><input type="checkbox" name="diff-verbose"><span>Debug logging <small>--verbose</small></span></label>
+                </div>
+              </details>
+            </div>
+
+            <!-- ipmg history -->
+            <div class="panel" data-panel="history" hidden>
+              <fieldset>
+                <legend>Which scans</legend>
+                <div class="numbers two">
+                  <label class="field" for="history-limit"><span>How many</span><input id="history-limit" name="history-limit" type="number" min="1" value="20"></label>
+                  <label class="field" for="history-source"><span>Only of input</span><input id="history-source" name="history-source" type="text" placeholder="any" autocomplete="off" spellcheck="false" maxlength="200"></label>
+                </div>
+                <label class="field" for="history-db"><span>History database <small class="field-hint">empty = ~/.ipmg/dashboard.db</small></span><input id="history-db" name="history-db" type="text" placeholder="~/.ipmg/dashboard.db" autocomplete="off" spellcheck="false" maxlength="300"></label>
+                <div class="toggles spaced">
+                  <label class="toggle span-2"><input type="checkbox" name="history-verbose"><span>Debug logging <small>--verbose</small></span></label>
+                </div>
+              </fieldset>
+            </div>
+
+            <!-- ipmg dashboard -->
+            <div class="panel" data-panel="dashboard" hidden>
+              <fieldset>
+                <legend>Where it listens</legend>
+                <div class="segmented">
+                  <label><input type="radio" name="dash-host" value="127.0.0.1" checked><span>This machine only</span></label>
+                  <label><input type="radio" name="dash-host" value="0.0.0.0"><span>Whole network</span></label>
+                </div>
+                <div class="numbers two spaced">
+                  <label class="field" for="dash-port"><span>Port</span><input id="dash-port" name="dash-port" type="number" min="1" max="65535" value="8080"></label>
+                </div>
+                <div class="toggles spaced">
+                  <label class="toggle span-2"><input type="checkbox" name="dash-noBrowser"><span>Don't open a browser <small>for servers and SSH sessions</small></span></label>
+                </div>
+              </fieldset>
+
+              <details class="advanced">
+                <summary>More options</summary>
+                <div class="advanced-grid">
+                  <label class="field span-2" for="dash-db"><span>History database <small class="field-hint">empty = ~/.ipmg/dashboard.db</small></span><input id="dash-db" name="dash-db" type="text" placeholder="~/.ipmg/dashboard.db" autocomplete="off" spellcheck="false" maxlength="300"></label>
+                  <label class="toggle span-2"><input type="checkbox" name="dash-verbose"><span>Debug logging <small>--verbose</small></span></label>
+                </div>
+              </details>
+            </div>
           </form>
 
           <div class="builder-output">

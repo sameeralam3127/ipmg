@@ -513,6 +513,9 @@ Found a vulnerability? See [SECURITY.md](SECURITY.md) for how to report it.
 
 ## More help
 
+- **[Command reference](https://github.com/sameeralam3127/ipmg/blob/main/docs/COMMANDS.md)** —
+  every command and flag with copy-paste examples, a safe session that tries
+  everything on your own machine, exit codes, and error messages
 - **[Troubleshooting](https://github.com/sameeralam3127/ipmg/blob/main/docs/TROUBLESHOOTING.md)** —
   install errors, `command not found`, every host timing out, slow scans,
   rejected input files

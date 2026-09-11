@@ -434,6 +434,53 @@ button.chip { font-family: var(--mono); font-weight: 500; }
 .explain li { display: grid; grid-template-columns: minmax(96px, auto) 1fr; gap: 12px; padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, 0.07); font-size: 14px; color: #bdbdb7; }
 .explain code { color: var(--term-accent); font-size: 13px; }
 .explain li.enter { animation: slide-in 0.25s ease; }
+.explain li.warn { color: #f5d27f; }
+.explain li.warn code { color: var(--term-yellow); }
+
+/* Multi-command builder: command picker, per-command panels, conditional fields. */
+.segmented.commands { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.panel { display: grid; gap: 14px; min-width: 0; }
+.span-2 { grid-column: 1 / -1; }
+.spaced { margin-top: 14px; }
+.field-hint { margin-left: 4px; color: var(--muted); font-size: 12px; font-weight: 500; }
+.field-label { display: block; font-size: 13.5px; font-weight: 600; color: var(--text-2); }
+.field-label + .chips { margin-top: 8px; }
+.fieldset-note { margin-bottom: 12px; color: var(--muted); font-size: 14px; }
+.numbers.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.subfields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+  padding: 14px;
+  border-radius: 10px;
+  border: 1px dashed color-mix(in srgb, var(--accent) 35%, var(--border));
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
+}
+.subfields .field, .advanced-grid .field { margin-top: 0; }
+.advanced { border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface); }
+.advanced summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  list-style: none;
+}
+.advanced summary::-webkit-details-marker { display: none; }
+.advanced summary::after { content: "+"; font-size: 18px; line-height: 1; }
+.advanced[open] summary::after { content: "−"; }
+.advanced-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 0 20px 20px; }
+
+@media (max-width: 760px) {
+  .segmented.commands { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
+  .subfields, .advanced-grid { grid-template-columns: minmax(0, 1fr); }
+}
 @keyframes slide-in { from { opacity: 0; transform: translateY(-4px); } }
 
 /* --------------------------------------------------------- changes */
