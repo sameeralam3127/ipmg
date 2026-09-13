@@ -59,6 +59,17 @@ the handful of system packages it needs (`curl`, `tar`, `gzip`, `ping`) for you:
 curl -sSL https://raw.githubusercontent.com/sameeralam3127/ipmg/main/install.sh | bash -s -- --with-deps
 ```
 
+**macOS and Linux with Homebrew:**
+
+```bash
+brew install sameeralam3127/tap/ipmg
+```
+
+The formula lives in
+[sameeralam3127/homebrew-tap](https://github.com/sameeralam3127/homebrew-tap)
+and is updated with every release. Upgrade with `brew upgrade ipmg`, remove
+with `brew uninstall ipmg`.
+
 **Windows — two commands in PowerShell:**
 
 ```powershell
