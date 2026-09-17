@@ -231,7 +231,7 @@ the file name prefix with `--output`:
 ```bash
 ipmg --input targets.txt                                    # results_<timestamp>.xlsx
 ipmg --input targets.txt --formats csv                      # results_<timestamp>.csv
-ipmg --input targets.txt --formats xlsx csv json md --output audit
+ipmg --input targets.txt --formats xlsx csv json jsonl md --output audit
 ```
 
 Files are always named `<prefix>_<YYYYMMDD>_<HHMMSS>.<format>`, so repeated
@@ -250,7 +250,30 @@ Each file has one row per host with `IP Address`, `Status`, `Latency`,
 `Hostname` (with `--resolve`), `Open Ports` (with `--scan-ports`),
 `Batch Timestamp`, and `Scan Duration (s)`. `Status` is one of `Active`,
 `Inactive`, `Timeout`, `Unreachable`, `Invalid IP`, or `Error`. The `md` format
-adds a status summary, ready to paste into a ticket.
+adds a status summary, ready to paste into a ticket, and `jsonl` writes one
+JSON object per line for `jq` and log pipelines.
+
+### Interrupted scans
+
+Reports are written while the scan runs, so an interrupted pass still leaves a
+valid report of the hosts it reached:
+
+| Format | Written | After a Ctrl+C |
+| --- | --- | --- |
+| `csv`, `jsonl` | One row per host, as it answers | Every host scanned so far |
+| `xlsx`, `json`, `md` | Re-saved every `--autosave` seconds | Everything up to the last save, plus a final save on the way out |
+
+```bash
+ipmg --input 10.0.0.0/16 --formats csv          # a row lands per host
+ipmg --input 10.0.0.0/16 --autosave 10          # re-save xlsx/json/md every 10s
+ipmg --input 10.0.0.0/16 --no-incremental       # only write once the scan ends
+```
+
+Each row of an unfinished report carries the time that host answered in
+`Scan Duration (s)`; when the scan finishes, the file is replaced by the
+complete report, in which that column is the duration of the whole pass. The
+file name never changes, so a finished scan produces exactly what it always
+did.
 
 ---
 

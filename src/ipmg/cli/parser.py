@@ -7,6 +7,12 @@ import argparse
 from ipmg import __version__
 from ipmg.core.portscan import DEFAULT_PORTS, parse_port_list
 from ipmg.infrastructure.file_io import DEFAULT_INPUT_FILE
+from ipmg.infrastructure.incremental import (
+    DEFAULT_AUTOSAVE_S,
+    MAX_AUTOSAVE_S,
+    MIN_AUTOSAVE_S,
+    REPORT_FORMATS,
+)
 from ipmg.reporting.diff_report import DIFF_FORMATS
 from ipmg.reporting.live import DEFAULT_REFRESH_S, MAX_REFRESH_S, MIN_REFRESH_S
 
@@ -135,9 +141,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--formats",
         nargs="+",
         default=["xlsx"],
-        choices=["xlsx", "csv", "json", "md"],
+        choices=list(REPORT_FORMATS),
         metavar="FORMAT",
-        help="One or more report formats: xlsx, csv, json, md (default: xlsx).",
+        help=f"One or more report formats: {', '.join(REPORT_FORMATS)} (default: xlsx).",
     )
     parser.add_argument(
         "--discover",
@@ -194,6 +200,24 @@ def build_parser() -> argparse.ArgumentParser:
         default=1.0,
         metavar="SECONDS",
         help="Connect timeout per port when --scan-ports is set (default: 1).",
+    )
+
+    reports = parser.add_argument_group("report writing")
+    reports.add_argument(
+        "--no-incremental",
+        action="store_true",
+        help="Only write the report once the scan has finished.",
+    )
+    reports.add_argument(
+        "--autosave",
+        type=float,
+        default=DEFAULT_AUTOSAVE_S,
+        metavar="SECONDS",
+        help=(
+            "How often a running scan re-saves the xlsx, json, and md reports "
+            f"(default: {DEFAULT_AUTOSAVE_S:g}, range: {MIN_AUTOSAVE_S:g}-{MAX_AUTOSAVE_S:g}). "
+            "csv and jsonl are written per host regardless."
+        ),
     )
 
     live = parser.add_argument_group("live output")

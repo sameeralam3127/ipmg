@@ -17,7 +17,7 @@ def wide_console():
     console.width = previous
 
 
-def test_run_scan_handles_worker_errors(monkeypatch):
+def test_run_scan_handles_worker_errors(tmp_path, monkeypatch):
     captured = {}
 
     def fake_load_targets(_source):
@@ -28,7 +28,7 @@ def test_run_scan_handles_worker_errors(monkeypatch):
             raise RuntimeError("boom")
         return "Active", 10.5
 
-    def fake_save_results(df, _base, _formats):
+    def fake_save_results(df, _base, _formats, timestamp=None):
         captured["df"] = df.copy()
 
     def fake_print_summary(df, batch_timestamp, duration_seconds):
@@ -41,7 +41,7 @@ def test_run_scan_handles_worker_errors(monkeypatch):
 
     args = SimpleNamespace(
         input="targets.csv",
-        output="results",
+        output=str(tmp_path / "results"),
         timeout=1,
         count=1,
         threads=2,
@@ -66,7 +66,7 @@ def test_run_scan_handles_worker_errors(monkeypatch):
     assert (df["Scan Duration (s)"] >= 0).all()
 
 
-def test_run_scan_clamps_resource_limits(monkeypatch):
+def test_run_scan_clamps_resource_limits(tmp_path, monkeypatch):
     captured = {}
 
     def fake_ping_ip(_ip, timeout, count):
@@ -75,12 +75,12 @@ def test_run_scan_clamps_resource_limits(monkeypatch):
 
     monkeypatch.setattr("ipmg.services.scan_service.load_targets", lambda _source: ["8.8.8.8"])
     monkeypatch.setattr("ipmg.core.engine.ping_ip", fake_ping_ip)
-    monkeypatch.setattr("ipmg.services.scan_service.save_results", lambda *_args: None)
-    monkeypatch.setattr("ipmg.services.scan_service.print_summary", lambda *_args: None)
+    monkeypatch.setattr("ipmg.services.scan_service.save_results", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("ipmg.services.scan_service.print_summary", lambda *_args, **_kwargs: None)
 
     args = SimpleNamespace(
         input="targets.csv",
-        output="results",
+        output=str(tmp_path / "results"),
         timeout=999,
         count=999,
         threads=999,
@@ -130,8 +130,8 @@ def stub_scan(monkeypatch):
         "ipmg.services.scan_service.load_targets",
         lambda _source: list(state["statuses"]),
     )
-    monkeypatch.setattr("ipmg.services.scan_service.save_results", lambda *_args: None)
-    monkeypatch.setattr("ipmg.services.scan_service.print_summary", lambda *_args: None)
+    monkeypatch.setattr("ipmg.services.scan_service.save_results", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("ipmg.services.scan_service.print_summary", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         "ipmg.core.engine.ping_ip",
         lambda ip, _timeout, _count: state["statuses"][ip],
@@ -219,8 +219,8 @@ def record_pings(monkeypatch):
         return "Active", 1.0
 
     monkeypatch.setattr("ipmg.core.engine.ping_ip", fake_ping)
-    monkeypatch.setattr("ipmg.services.scan_service.save_results", lambda *_args: None)
-    monkeypatch.setattr("ipmg.services.scan_service.print_summary", lambda *_args: None)
+    monkeypatch.setattr("ipmg.services.scan_service.save_results", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("ipmg.services.scan_service.print_summary", lambda *_args, **_kwargs: None)
     return pinged
 
 
