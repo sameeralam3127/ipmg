@@ -2,6 +2,27 @@
 
 <!-- version list -->
 
+## v2.0.0 (2026-09-17)
+
+### Documentation
+
+- Document the Homebrew tap install ([#69](https://github.com/sameeralam3127/ipmg/pull/69),
+  [`fd21a04`](https://github.com/sameeralam3127/ipmg/commit/fd21a04d382c753d704fe312dfebf8a8baa883e1))
+
+- **site**: Always show the latest version, with calendar-day dates
+  ([#58](https://github.com/sameeralam3127/ipmg/pull/58),
+  [`228de1f`](https://github.com/sameeralam3127/ipmg/commit/228de1fc4f8be661ce66ded0b1332055b0bc1175))
+
+### Features
+
+- **cli**: Rename the dashboard to IPMG Web ([#70](https://github.com/sameeralam3127/ipmg/pull/70),
+  [`f6d73cd`](https://github.com/sameeralam3127/ipmg/commit/f6d73cde5bea3c562e3169787a48b63cb25abb8c))
+
+### Breaking Changes
+
+- **cli**: `ipmg dashboard` no longer exists; use `ipmg web`.
+
+
 ## v1.13.2 (2026-09-11)
 
 ### Bug Fixes
