@@ -44,6 +44,8 @@ MAX_AUTOSAVE_S = 3600.0
 
 #: Every report format ``--formats`` accepts, in the order they are offered.
 REPORT_FORMATS = ("xlsx", "csv", "json", "jsonl", "md")
+#: What a scan writes when it is not told which formats to write.
+DEFAULT_FORMAT = "xlsx"
 #: Formats written one row at a time, and kept valid between rows.
 STREAMING_FORMATS = ("csv", "jsonl")
 #: Formats that only exist as a whole file, so they are re-snapshotted.

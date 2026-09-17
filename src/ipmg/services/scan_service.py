@@ -24,9 +24,11 @@ from ipmg.infrastructure.file_io import (
 )
 from ipmg.infrastructure.incremental import (
     DEFAULT_AUTOSAVE_S,
+    DEFAULT_FORMAT,
     IncrementalOptions,
     IncrementalReport,
 )
+from ipmg.infrastructure.resume import PartialReport, load_partial_report
 from ipmg.reporting import ui
 from ipmg.reporting.diff_report import export_diff, print_diff
 from ipmg.reporting.frames import results_dataframe
@@ -39,6 +41,20 @@ log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
+class ReportTarget:
+    """Where one pass writes its report, and in which formats.
+
+    The base name and stamp are shared by the incremental writes and the final
+    save, so both land on the same files. A resumed pass takes them from the
+    report it was handed instead of starting a new set.
+    """
+
+    base: str
+    timestamp: str
+    formats: Tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class ScanOutcome:
     """Everything one scan pass produced."""
 
@@ -47,8 +63,7 @@ class ScanOutcome:
     batch_timestamp: datetime
     duration_s: float
     source: str
-    #: File-name stamp shared by the incremental writes and the final report.
-    timestamp: str
+    target: ReportTarget
 
 
 @dataclass(frozen=True)
@@ -172,21 +187,40 @@ def _scan_with_progress(
         return execute_scan(ip_list, config, on_result=on_result)
 
 
+def _report_target(args, partial: Optional[PartialReport]) -> ReportTarget:
+    """Decide where this pass writes, honouring a report being resumed."""
+    formats = list(dict.fromkeys(getattr(args, "formats", None) or ()))
+
+    if partial is None:
+        return ReportTarget(args.output, timestamp_str(), tuple(formats or [DEFAULT_FORMAT]))
+
+    if not formats:
+        # Resuming without --formats finishes the report it was handed, rather
+        # than also starting a default xlsx nobody asked for.
+        formats = [partial.fmt]
+    elif partial.fmt not in formats:
+        # Whatever --formats says, the file being resumed has to keep being
+        # written: it is the one holding the hosts already scanned.
+        formats.insert(0, partial.fmt)
+    return ReportTarget(partial.base, partial.timestamp, tuple(formats))
+
+
 def _open_report(
-    args,
+    target: ReportTarget,
     incremental: IncrementalOptions,
-    timestamp: str,
     batch_timestamp: datetime,
+    partial: Optional[PartialReport],
 ) -> Optional[IncrementalReport]:
     """Start writing this pass's report, unless incremental writing is off."""
-    if not incremental.enabled or not args.formats:
+    if not incremental.enabled or not target.formats:
         return None
     return IncrementalReport(
-        base=args.output,
-        formats=args.formats,
-        timestamp=timestamp,
+        base=target.base,
+        formats=target.formats,
+        timestamp=target.timestamp,
         batch_timestamp=batch_timestamp,
         options=incremental,
+        previous=partial.results if partial else None,
     )
 
 
@@ -219,22 +253,39 @@ def _run_pass(
         raise
 
 
+def _announce_resume(partial: PartialReport, remaining: int) -> None:
+    ui.blank()
+    ui.note(
+        f"Resuming {partial.path}: {ui.plural(len(partial.results), 'host')} already scanned, "
+        f"{ui.plural(remaining, 'host')} left."
+    )
+
+
 def _run_single_pass(
     args,
     config: ScanConfig,
     stream: StreamOptions,
     incremental: IncrementalOptions,
+    partial: Optional[PartialReport] = None,
 ) -> ScanOutcome:
     batch_timestamp = current_timestamp()
-    timestamp = timestamp_str()
+    target = _report_target(args, partial)
     started_at = time.perf_counter()
 
     ip_list = discover_local_subnet() if args.discover else load_targets(args.input)
     source = "auto-discovery" if args.discover else args.input
 
+    if partial is not None:
+        ip_list = partial.remaining(ip_list)
+
     _print_configuration(source, len(ip_list), config)
-    report = _open_report(args, incremental, timestamp, batch_timestamp)
-    results = _run_pass(ip_list, config, stream, report)
+    if partial is not None:
+        _announce_resume(partial, len(ip_list))
+
+    report = _open_report(target, incremental, batch_timestamp, partial)
+    # The hosts carried over come first, so the report reads in scan order.
+    results = list(partial.results) if partial else []
+    results.extend(_run_pass(ip_list, config, stream, report))
     duration = time.perf_counter() - started_at
 
     return ScanOutcome(
@@ -243,7 +294,7 @@ def _run_single_pass(
         batch_timestamp=batch_timestamp,
         duration_s=duration,
         source=source,
-        timestamp=timestamp,
+        target=target,
     )
 
 
@@ -307,13 +358,23 @@ def run_scan(args) -> None:
     incremental = _incremental_options(args)
     _ensure_input_file(args)
 
+    # Only the first pass resumes: --interval repeats are scans of their own.
+    resume_from = getattr(args, "resume", None)
+    partial = load_partial_report(resume_from) if resume_from else None
+
     while True:
-        outcome = _run_single_pass(args, config, stream, incremental)
+        outcome = _run_single_pass(args, config, stream, incremental, partial)
+        partial = None
 
         print_summary(outcome.frame, outcome.batch_timestamp, outcome.duration_s)
         # Overwrites whatever the incremental writer left on those same paths,
         # so a finished scan produces exactly the report it always did.
-        save_results(outcome.frame, args.output, args.formats, timestamp=outcome.timestamp)
+        save_results(
+            outcome.frame,
+            outcome.target.base,
+            list(outcome.target.formats),
+            timestamp=outcome.target.timestamp,
+        )
         _store_and_compare(history_options, config, outcome)
 
         if not args.interval:

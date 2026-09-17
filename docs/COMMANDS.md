@@ -275,6 +275,29 @@ complete report, in which that column is the duration of the whole pass. The
 file name never changes, so a finished scan produces exactly what it always
 did.
 
+### Resuming a scan
+
+Give the interrupted report back to IPMG and it scans only what is missing:
+
+```bash
+ipmg --input 10.0.0.0/16 --formats csv                          # interrupted
+ipmg --input 10.0.0.0/16 --resume results_20260628_120000.csv   # finish it
+```
+
+- Only `csv` and `jsonl` reports can be resumed; they are the formats that stay
+  readable after an abrupt exit.
+- The resumed scan writes back to that same file, keeping its name and
+  timestamp, so you end up with one complete report rather than two partial
+  ones. Without `--formats`, nothing else is written; with it, the extra
+  formats are written alongside.
+- A last line cut off mid-write is ignored, so that host is scanned again.
+- Hosts carried over keep the status and latency the earlier pass recorded;
+  `Scan Duration (s)` becomes the duration of the resumed pass.
+- The merged result is what goes into the scan history, so `--compare` still
+  works on a resumed scan.
+- With `--interval`, only the first pass resumes; the repeats are ordinary
+  scans.
+
 ---
 
 ## Scan history

@@ -9,6 +9,7 @@ from ipmg.core.portscan import DEFAULT_PORTS, parse_port_list
 from ipmg.infrastructure.file_io import DEFAULT_INPUT_FILE
 from ipmg.infrastructure.incremental import (
     DEFAULT_AUTOSAVE_S,
+    DEFAULT_FORMAT,
     MAX_AUTOSAVE_S,
     MIN_AUTOSAVE_S,
     REPORT_FORMATS,
@@ -137,13 +138,18 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="N",
         help="How many hosts to probe at once (default: 50).",
     )
+    # No default here, so a resumed scan can tell "no --formats given" (write
+    # only the report being resumed) from an explicit list to write as well.
     parser.add_argument(
         "--formats",
         nargs="+",
-        default=["xlsx"],
+        default=None,
         choices=list(REPORT_FORMATS),
         metavar="FORMAT",
-        help=f"One or more report formats: {', '.join(REPORT_FORMATS)} (default: xlsx).",
+        help=(
+            f"One or more report formats: {', '.join(REPORT_FORMATS)} "
+            f"(default: {DEFAULT_FORMAT}, or the format of a --resume report)."
+        ),
     )
     parser.add_argument(
         "--discover",
@@ -207,6 +213,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-incremental",
         action="store_true",
         help="Only write the report once the scan has finished.",
+    )
+    reports.add_argument(
+        "--resume",
+        default=None,
+        metavar="REPORT",
+        help=(
+            "Continue an interrupted scan from its .csv or .jsonl report: the hosts "
+            "it already covers are skipped and the rest are appended to that file."
+        ),
     )
     reports.add_argument(
         "--autosave",
