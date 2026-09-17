@@ -9,7 +9,7 @@ See also the [FAQ](FAQ.md).
 [Installing](#installing) ·
 [Scanning](#scanning) ·
 [Input files](#input-files) ·
-[Dashboard](#dashboard)
+[IPMG Web](#ipmg-web)
 
 ---
 
@@ -90,8 +90,8 @@ Check the extension is one IPMG reads (`.xlsx`, `.xls`, `.csv`, `.txt`,
 
 ---
 
-## Dashboard
+## IPMG Web
 
-### The dashboard port is already in use
+### The IPMG Web port is already in use
 
-Pick another port: `ipmg dashboard --port 9000`.
+Pick another port: `ipmg web --port 9000`.

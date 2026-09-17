@@ -3,7 +3,7 @@
 Every IPMG command and flag, with examples you can copy. To put together a
 single scan command interactively — with every flag explained as you pick it —
 use the [command builder](https://sameeralam3127.github.io/ipmg/#builder) on the
-website. `ipmg --help` (and `ipmg dashboard --help`, `ipmg history --help`,
+website. `ipmg --help` (and `ipmg web --help`, `ipmg history --help`,
 `ipmg diff --help`) always shows the options of the version you have installed.
 
 > Only scan networks you are authorized to scan. Examples below that use
@@ -24,7 +24,7 @@ website. `ipmg --help` (and `ipmg dashboard --help`, `ipmg history --help`,
 [Scan history](#scan-history) ·
 [Change detection](#change-detection) ·
 [Automation and exit codes](#automation-and-exit-codes) ·
-[Dashboard](#dashboard) ·
+[IPMG Web](#ipmg-web) ·
 [Errors and what they mean](#errors-and-what-they-mean)
 
 ---
@@ -34,7 +34,7 @@ website. `ipmg --help` (and `ipmg dashboard --help`, `ipmg history --help`,
 | Command | What it does |
 | --- | --- |
 | `ipmg [options]` | Scan targets and save a report (the default command) |
-| `ipmg dashboard [options]` | Start the local web dashboard (`ipmg web` is an alias) |
+| `ipmg web [options]` | Start IPMG Web, the local browser UI (`ipmg --web` also works) |
 | `ipmg history [options]` | List scans stored in the local history database |
 | `ipmg diff [SCAN_ID ...] [options]` | Compare two stored scans |
 | `ipmg --version` | Print the installed version |
@@ -256,8 +256,8 @@ adds a status summary, ready to paste into a ticket.
 
 ## Scan history
 
-Every scan is stored in `~/.ipmg/dashboard.db`, shared by the CLI and the
-dashboard.
+Every scan is stored in `~/.ipmg/dashboard.db`, shared by the CLI and IPMG
+Web.
 
 ```bash
 ipmg history                          # the 20 most recent scans
@@ -270,7 +270,7 @@ ipmg history --db ./project.db
 ```
 
 `--db` works the same way on `ipmg`, `ipmg history`, `ipmg diff`, and
-`ipmg dashboard`.
+`ipmg web`.
 
 ---
 
@@ -345,14 +345,14 @@ exit "$status"
 
 ---
 
-## Dashboard
+## IPMG Web
 
 ```bash
-ipmg dashboard                          # http://127.0.0.1:8080, opens your browser
-ipmg dashboard --no-browser             # don't open a browser
-ipmg dashboard --port 9000              # another port
-ipmg dashboard --db ./project.db        # another history database
-ipmg web                                # alias for ipmg dashboard
+ipmg web                                # http://127.0.0.1:8080, opens your browser
+ipmg web --no-browser                   # don't open a browser
+ipmg web --port 9000                    # another port
+ipmg web --db ./project.db              # another history database
+ipmg --web                              # same as ipmg web
 ```
 
 On a server without a browser, keep the default local-only binding and reach it
@@ -360,13 +360,13 @@ through an SSH tunnel from your workstation:
 
 ```bash
 # on the server
-ipmg dashboard --no-browser
+ipmg web --no-browser
 
 # on your workstation, then open http://127.0.0.1:8080
 ssh -L 8080:127.0.0.1:8080 user@server
 ```
 
-`--host 0.0.0.0` makes the dashboard reachable from the network. It has no
+`--host 0.0.0.0` makes IPMG Web reachable from the network. It has no
 authentication, so only do that behind a reverse proxy that adds it.
 
 ---

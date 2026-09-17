@@ -168,3 +168,59 @@ def test_missing_input_file_is_an_error_not_a_sample(tmp_path, capsys):
     assert exit_code == commands.EXIT_ERROR
     assert "was not found" in capsys.readouterr().out
     assert not missing.exists()
+
+
+def web_calls(monkeypatch):
+    """Capture what run_dashboard would have been started with."""
+    calls = []
+    monkeypatch.setattr(
+        "ipmg.web.server.run_dashboard",
+        lambda **kwargs: calls.append(kwargs),
+    )
+    return calls
+
+
+@pytest.mark.parametrize("argv", [["web"], ["--web"]])
+def test_both_spellings_of_web_start_it(argv, monkeypatch):
+    """A flag is the obvious guess; refusing it only teaches frustration."""
+    calls = web_calls(monkeypatch)
+
+    assert commands.run(argv) == commands.EXIT_OK
+    assert calls == [{"host": "127.0.0.1", "port": 8080, "open_browser": True, "db_path": None}]
+
+
+def test_web_flag_still_takes_the_web_options(monkeypatch):
+    calls = web_calls(monkeypatch)
+
+    assert commands.run(["--web", "--port", "9000", "--no-browser"]) == commands.EXIT_OK
+    assert calls[0]["port"] == 9000
+    assert calls[0]["open_browser"] is False
+
+
+@pytest.mark.parametrize("argv", [["dashboard"], ["--dashboard"]])
+def test_dashboard_is_no_longer_a_command(argv, monkeypatch, capsys):
+    calls = web_calls(monkeypatch)
+
+    with pytest.raises(SystemExit):
+        commands.run(argv)
+
+    assert calls == []
+    assert "ipmg web" in capsys.readouterr().err
+
+
+def test_scan_flags_are_documented(capsys):
+    """Bare flags with no help text are invisible to anyone reading --help."""
+    with pytest.raises(SystemExit):
+        commands.run(["--help"])
+
+    # argparse wraps to the terminal width, so compare against flattened text.
+    out = " ".join(capsys.readouterr().out.split())
+    for phrase in (
+        "Report file name prefix",
+        "Seconds to wait",
+        "Pings per host",
+        "How many hosts to probe",
+        "Repeat the whole scan",
+        "same as 'ipmg web'",
+    ):
+        assert phrase in out

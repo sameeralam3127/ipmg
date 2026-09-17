@@ -10,7 +10,7 @@
     /* storage blocked: follow the system theme */
   }
 
-  // The dashboard demo used to live at the site root with hash routes such as
+  // The IPMG Web demo used to live at the site root with hash routes such as
   // #/history. Keep those shared links working now that it lives at demo/.
   if (/^#\/.+/.test(location.hash)) location.replace("demo/" + location.hash);
 })();

@@ -373,7 +373,7 @@ def create_app(db: Optional[Database] = None) -> FastAPI:
         manager.attach_loop(asyncio.get_running_loop())
         yield
 
-    app = FastAPI(title="IPMG Dashboard", version=__version__, lifespan=lifespan)
+    app = FastAPI(title="IPMG Web", version=__version__, lifespan=lifespan)
     app.state.db = database
     app.state.manager = manager
     app.state.history = history

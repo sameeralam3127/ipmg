@@ -6,10 +6,10 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src https://pypi.org https://api.github.com; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
   <meta name="referrer" content="strict-origin-when-cross-origin">
   <title>IPMG — IP Management &amp; Ping Monitoring</title>
-  <meta name="description" content="IPMG pings hosts in parallel, resolves their names, remembers every scan, and tells you what changed. Open source, from the terminal or a private local dashboard.">
+  <meta name="description" content="IPMG pings hosts in parallel, resolves their names, remembers every scan, and tells you what changed. Open source, from the terminal or IPMG Web, a private browser UI.">
   <meta property="og:type" content="website">
   <meta property="og:title" content="IPMG — know which hosts are up, and what changed">
-  <meta property="og:description" content="Parallel ping scanning, change detection, and reports from the terminal or a local dashboard.">
+  <meta property="og:description" content="Parallel ping scanning, change detection, and reports from the terminal or IPMG Web in your browser.">
   <meta property="og:url" content="https://sameeralam3127.github.io/ipmg/">
   <meta name="theme-color" content="#2a78d6">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='%232a78d6' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='5' fill='%232a78d6'/%3E%3C/svg%3E">
@@ -32,7 +32,7 @@
         <a href="#install">Install</a>
         <a href="#builder">Command builder</a>
         <a href="#changes">Change detection</a>
-        <a href="#dashboard">Dashboard</a>
+        <a href="#web">IPMG Web</a>
         <a href="#releases">Releases</a>
       </nav>
       <div class="topbar-actions">
@@ -59,7 +59,7 @@
             <span data-release-label>Open source · MIT licensed</span>
           </a>
           <h1>Know which hosts are up — <span class="accent-text">and what changed</span> since last time.</h1>
-          <p class="lede">IPMG pings hosts in parallel, resolves their names, remembers every scan, and tells you what moved. Run it from the terminal or from a private dashboard on your own machine.</p>
+          <p class="lede">IPMG pings hosts in parallel, resolves their names, remembers every scan, and tells you what moved. Run it from the terminal or from IPMG Web, a private browser UI on your own machine.</p>
           <div class="cta-row">
             <a class="btn primary" href="#install">Install IPMG</a>
             <a class="btn" href="demo/">Try the live demo <span aria-hidden="true">→</span></a>
@@ -103,7 +103,7 @@
         <div class="section-head reveal">
           <p class="kicker">Features</p>
           <h2>Everything you need to answer “what's on this network?”</h2>
-          <p>One tool for the quick check and the scheduled audit — the same engine powers the CLI and the dashboard.</p>
+          <p>One tool for the quick check and the scheduled audit — the same engine powers the CLI and IPMG Web.</p>
         </div>
         <div class="feature-grid">
           <article class="feature reveal">
@@ -133,8 +133,8 @@
           </article>
           <article class="feature reveal">
             <div class="icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg></div>
-            <h3>A private local dashboard</h3>
-            <p><code>ipmg dashboard</code> serves live monitoring, history, and inventory on <code>127.0.0.1</code> — fully offline, nothing uploaded.</p>
+            <h3>IPMG Web, private and local</h3>
+            <p><code>ipmg web</code> serves live monitoring, history, and inventory on <code>127.0.0.1</code> — fully offline, nothing uploaded.</p>
           </article>
         </div>
       </div>
@@ -218,7 +218,7 @@ uv tool install ipmg</code></pre>
                 <label><input type="radio" name="command" value="scan" checked><span>Scan</span></label>
                 <label><input type="radio" name="command" value="diff"><span>Compare</span></label>
                 <label><input type="radio" name="command" value="history"><span>History</span></label>
-                <label><input type="radio" name="command" value="dashboard"><span>Dashboard</span></label>
+                <label><input type="radio" name="command" value="web"><span>Web</span></label>
               </div>
             </fieldset>
 
@@ -374,27 +374,27 @@ uv tool install ipmg</code></pre>
               </fieldset>
             </div>
 
-            <!-- ipmg dashboard -->
-            <div class="panel" data-panel="dashboard" hidden>
+            <!-- ipmg web -->
+            <div class="panel" data-panel="web" hidden>
               <fieldset>
                 <legend>Where it listens</legend>
                 <div class="segmented">
-                  <label><input type="radio" name="dash-host" value="127.0.0.1" checked><span>This machine only</span></label>
-                  <label><input type="radio" name="dash-host" value="0.0.0.0"><span>Whole network</span></label>
+                  <label><input type="radio" name="web-host" value="127.0.0.1" checked><span>This machine only</span></label>
+                  <label><input type="radio" name="web-host" value="0.0.0.0"><span>Whole network</span></label>
                 </div>
                 <div class="numbers two spaced">
-                  <label class="field" for="dash-port"><span>Port</span><input id="dash-port" name="dash-port" type="number" min="1" max="65535" value="8080"></label>
+                  <label class="field" for="web-port"><span>Port</span><input id="web-port" name="web-port" type="number" min="1" max="65535" value="8080"></label>
                 </div>
                 <div class="toggles spaced">
-                  <label class="toggle span-2"><input type="checkbox" name="dash-noBrowser"><span>Don't open a browser <small>for servers and SSH sessions</small></span></label>
+                  <label class="toggle span-2"><input type="checkbox" name="web-noBrowser"><span>Don't open a browser <small>for servers and SSH sessions</small></span></label>
                 </div>
               </fieldset>
 
               <details class="advanced">
                 <summary>More options</summary>
                 <div class="advanced-grid">
-                  <label class="field span-2" for="dash-db"><span>History database <small class="field-hint">empty = ~/.ipmg/dashboard.db</small></span><input id="dash-db" name="dash-db" type="text" placeholder="~/.ipmg/dashboard.db" autocomplete="off" spellcheck="false" maxlength="300"></label>
-                  <label class="toggle span-2"><input type="checkbox" name="dash-verbose"><span>Debug logging <small>--verbose</small></span></label>
+                  <label class="field span-2" for="web-db"><span>History database <small class="field-hint">empty = ~/.ipmg/dashboard.db</small></span><input id="web-db" name="web-db" type="text" placeholder="~/.ipmg/dashboard.db" autocomplete="off" spellcheck="false" maxlength="300"></label>
+                  <label class="toggle span-2"><input type="checkbox" name="web-verbose"><span>Debug logging <small>--verbose</small></span></label>
                 </div>
               </details>
             </div>
@@ -449,16 +449,16 @@ ipmg diff --fail-on-change   # exit 2 for cron or CI</code></pre>
       </div>
     </section>
 
-    <!-- ------------------------------------------------------- dashboard -->
-    <section id="dashboard" class="section">
+    <!-- ------------------------------------------------------------- web -->
+    <section id="web" class="section">
       <div class="wrap">
         <div class="section-head center reveal">
-          <p class="kicker">Dashboard</p>
+          <p class="kicker">IPMG Web</p>
           <h2>Prefer clicking? Same engine, in your browser.</h2>
-          <p><code>ipmg dashboard</code> starts a private server on <code>127.0.0.1:8080</code> with live progress over WebSockets, scan history, change reports, and a host inventory. The demo below runs entirely in your browser with sample data.</p>
+          <p><code>ipmg web</code> starts a private server on <code>127.0.0.1:8080</code> with live progress over WebSockets, scan history, change reports, and a host inventory. The demo below runs entirely in your browser with sample data.</p>
           <div class="cta-row center">
             <a class="btn primary" href="demo/">Open the full demo</a>
-            <a class="btn" href="https://github.com/sameeralam3127/ipmg#web-dashboard" rel="noopener">Dashboard docs</a>
+            <a class="btn" href="https://github.com/sameeralam3127/ipmg#ipmg-web" rel="noopener">IPMG Web docs</a>
           </div>
         </div>
         <div class="browser reveal">
@@ -466,7 +466,7 @@ ipmg diff --fail-on-change   # exit 2 for cron or CI</code></pre>
             <span class="light"></span><span class="light"></span><span class="light"></span>
             <p class="address">127.0.0.1:8080 <span>sample data</span></p>
           </div>
-          <iframe src="demo/?demo=1" title="Interactive IPMG dashboard demo with sample data" loading="lazy"></iframe>
+          <iframe src="demo/?demo=1" title="Interactive IPMG Web demo with sample data" loading="lazy"></iframe>
         </div>
       </div>
     </section>
@@ -518,7 +518,7 @@ ipmg diff --fail-on-change   # exit 2 for cron or CI</code></pre>
             <p>Something is dropping ICMP — a host firewall, a VPN, or a cloud security group. Try <code>ping</code> by hand against one address: if that fails too, it's the network, not IPMG.</p>
           </details>
           <details>
-            <summary>Is the dashboard safe to expose?</summary>
+            <summary>Is IPMG Web safe to expose?</summary>
             <p>It binds to <code>127.0.0.1</code> and has no authentication by design. To reach it from another machine, use an SSH tunnel, or put an authenticating reverse proxy in front of it.</p>
           </details>
         </div>

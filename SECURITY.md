@@ -26,7 +26,7 @@ IPMG sends ICMP ping traffic. Only use it on networks where you have
 explicit authorization — unauthorized scanning may violate your
 organization's policies or the law.
 
-The web dashboard is designed for local use: it binds to `127.0.0.1` by
+IPMG Web is designed for local use: it binds to `127.0.0.1` by
 default, origin-checks WebSocket connections, caps uploads and target
 expansion, and uses parameterized SQL throughout. It intentionally has no
 built-in authentication, so exposing it on a non-local interface without a
@@ -36,9 +36,9 @@ reverse proxy in front is outside the supported threat model.
 
 Tracked hardening items — see the linked issues for details:
 
-- Dashboard REST API has no authentication; keep it on `127.0.0.1` and do not
+- IPMG Web REST API has no authentication; keep it on `127.0.0.1` and do not
   expose it beyond localhost ([#21](https://github.com/sameeralam3127/ipmg/issues/21))
-- Unbounded live-event buffering, only reachable when the dashboard is exposed
+- Unbounded live-event buffering, only reachable when IPMG Web is exposed
   remotely ([#23](https://github.com/sameeralam3127/ipmg/issues/23))
 
 Please do not open a new public issue for anything already listed here. For

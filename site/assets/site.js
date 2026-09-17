@@ -47,7 +47,7 @@ function initTheme() {
     const current = document.documentElement.dataset.theme || (systemDark ? "dark" : "light");
     const next = current === "dark" ? "light" : "dark";
     document.documentElement.dataset.theme = next;
-    store.set("ipmg-theme", next); // shared with the dashboard demo
+    store.set("ipmg-theme", next); // shared with the IPMG Web demo
   });
 }
 
@@ -527,15 +527,15 @@ const BUILDERS = {
     addCommon(form, line, "history");
   },
 
-  dashboard(form, line) {
-    const port = integerIn(form.value("dash-port"), 8080, { max: 65535 });
-    if (form.value("dash-host") === "0.0.0.0") {
+  web(form, line) {
+    const port = integerIn(form.value("web-port"), 8080, { max: 65535 });
+    if (form.value("web-host") === "0.0.0.0") {
       line.flag("--host", "Listen on every network interface, not only this machine.", "0.0.0.0");
-      line.warn("The dashboard has no login: anyone who can reach this machine can start scans and read results. Prefer an SSH tunnel, or put an authenticating reverse proxy in front.");
+      line.warn("IPMG Web has no login: anyone who can reach this machine can start scans and read results. Prefer an SSH tunnel, or put an authenticating reverse proxy in front.");
     }
     if (port !== 8080) line.flag("--port", `Serve on port ${port}.`, port);
-    if (form.on("dash-noBrowser")) line.flag("--no-browser", "Don't open a browser, for servers and SSH sessions.");
-    addCommon(form, line, "dash");
+    if (form.on("web-noBrowser")) line.flag("--no-browser", "Don't open a browser, for servers and SSH sessions.");
+    addCommon(form, line, "web");
     line.info(`Then open http://127.0.0.1:${port} in a browser on this machine.`, "then");
   },
 };

@@ -1,1 +1,1 @@
-"""Local web dashboard for IPMG (FastAPI backend + bundled frontend)."""
+"""IPMG Web: the local browser UI for IPMG (FastAPI backend + bundled frontend)."""

@@ -17,7 +17,7 @@ Found a security problem? Please report it privately as described in
 [Commit messages](#commit-messages) ·
 [Pull requests](#pull-requests) ·
 [How releases happen](#how-releases-happen) ·
-[Website and dashboard demo](#website-and-dashboard-demo)
+[Website and IPMG Web demo](#website-and-ipmg-web-demo)
 
 ---
 
@@ -134,7 +134,7 @@ src/ipmg/
   infrastructure/  SQLite history and file input/output
   reporting/       terminal output, live streaming, reports
   services/        scan and history orchestration
-  web/             FastAPI dashboard; static/ holds its HTML, CSS, and JS
+  web/             IPMG Web (FastAPI); static/ holds its HTML, CSS, and JS
 tests/             pytest suite (one file per module, roughly)
 site/              project website published to GitHub Pages
 install.sh         one-line installer for Linux and macOS
@@ -171,7 +171,7 @@ Examples:
 
 ```text
 feat(cli): add --exclude to skip addresses in a range
-fix(dashboard): keep the history filter after a page reload
+fix(web): keep the history filter after a page reload
 docs: explain --latency-pct in the change detection section
 ```
 
@@ -179,7 +179,7 @@ docs: explain --latency-pct in the change detection section
 
 ## Pull requests
 
-1. Create a branch from `main` (for example `fix/dashboard-history-filter`).
+1. Create a branch from `main` (for example `fix/web-history-filter`).
 2. Keep the change focused; unrelated clean-ups belong in a separate pull
    request.
 3. Add or update tests for behaviour you change, and update the README or docs
@@ -218,19 +218,19 @@ ends with "No release will be made".
 
 ---
 
-## Website and dashboard demo
+## Website and IPMG Web demo
 
 The project website at
 [sameeralam3127.github.io/ipmg](https://sameeralam3127.github.io/ipmg/) lives
 in `site/`: a dependency-free static page with live release data, an install
 guide, and an interactive command builder.
 
-The dashboard demo is served beneath it at
+The IPMG Web demo is served beneath it at
 [`/demo/`](https://sameeralam3127.github.io/ipmg/demo/). GitHub Pages cannot run
 the Python scanner or access a local SQLite database, so the demo transparently
 uses realistic seeded network inventory and scan history. Search, filters,
 comparison, exports, theme switching, and a manual demo scan all work in the
-browser. The local `ipmg dashboard` command always uses the real FastAPI API
+browser. The local `ipmg web` command always uses the real FastAPI API
 and scan engine instead.
 
 The **Deploy site to GitHub Pages** workflow publishes both after changes to
