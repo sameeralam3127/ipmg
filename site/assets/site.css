@@ -501,7 +501,7 @@ button.chip { font-family: var(--mono); font-weight: 500; }
 .sev.warning { color: var(--warning); background: color-mix(in srgb, var(--warning) 15%, transparent); }
 .sev.info { color: var(--info); background: color-mix(in srgb, var(--info) 13%, transparent); }
 
-/* ------------------------------------------------------- dashboard */
+/* ------------------------------------------------------------- web */
 
 .browser { margin-top: 44px; border-color: var(--border-strong); }
 .browser-bar .address { display: inline-flex; justify-content: center; align-items: center; gap: 8px; max-width: 420px; margin: 0 auto; padding: 3px 12px; border-radius: 7px; background: rgba(255, 255, 255, 0.06); font-family: var(--mono); font-size: 12px; }

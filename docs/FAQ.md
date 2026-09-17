@@ -38,6 +38,6 @@ so a change shows up as a non-zero exit code.
 
 Up to 65,536 hosts per scan. Anything larger is rejected before the scan starts.
 
-### Does the dashboard need internet access?
+### Does IPMG Web need internet access?
 
 No. Everything it serves is bundled with the package.

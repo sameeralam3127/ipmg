@@ -219,7 +219,7 @@ def test_upload_rejects_oversized_files(client, monkeypatch):
 def test_index_served(client):
     response = client.get("/")
     assert response.status_code == 200
-    assert "IPMG Dashboard" in response.text
+    assert "IPMG Web" in response.text
 
 
 def test_report_rendering_neutralizes_formula_cells():

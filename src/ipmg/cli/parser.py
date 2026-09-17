@@ -12,6 +12,23 @@ from ipmg.reporting.live import DEFAULT_REFRESH_S, MAX_REFRESH_S, MIN_REFRESH_S
 
 PROG = "IPMG - IP Management & Ping Monitoring Tool"
 
+#: Subcommands, named here so an argument error can point at them. argparse
+#: prints the epilog on --help but never on an error, which is exactly when
+#: someone who typed an unknown flag needs to see them.
+COMMANDS_HINT = (
+    "Commands: 'ipmg web' (IPMG Web, the browser UI), 'ipmg history' (stored scans), "
+    "'ipmg diff' (compare two scans)."
+)
+
+
+class ScanParser(argparse.ArgumentParser):
+    """Argument parser that mentions the subcommands when a flag misses."""
+
+    def error(self, message: str):  # pragma: no cover - exercised via parse_args
+        if "unrecognized arguments" in message:
+            message = f"{message}\n\n{COMMANDS_HINT}"
+        super().error(message)
+
 
 def _port_list(value: str) -> tuple:
     try:
@@ -65,41 +82,73 @@ def _add_diff_export_arguments(parser) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        PROG,
-        epilog=(
-            "Commands: 'ipmg dashboard' (web UI), 'ipmg history' (stored scans), "
-            "'ipmg diff' (compare two scans)."
-        ),
+    parser = ScanParser(
+        prog="ipmg",
+        description=PROG,
+        epilog=COMMANDS_HINT,
     )
     parser.add_argument(
         "--version",
         action="version",
-        version=f"%(prog)s {__version__}",
+        version=f"{PROG} {__version__}",
     )
     # No default here, so the scan service can tell "no --input given" (use the
     # sample file) apart from an explicit file name that does not exist (error).
     parser.add_argument(
         "--input",
         default=None,
+        metavar="TARGETS",
         help=(
             "IP, CIDR block, range, or target file (.txt, .list, .csv, .xls, .xlsx). "
             f"Without --input or --discover, {DEFAULT_INPUT_FILE} is used and "
             "created with sample targets if it does not exist."
         ),
     )
-    parser.add_argument("--output", default="results")
-    parser.add_argument("--timeout", type=int, default=2)
-    parser.add_argument("--count", type=int, default=1)
-    parser.add_argument("--threads", type=int, default=50)
+    parser.add_argument(
+        "--output",
+        default="results",
+        metavar="PREFIX",
+        help="Report file name prefix; the timestamp is appended (default: results).",
+    )
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=2,
+        metavar="SECONDS",
+        help="Seconds to wait for a reply from each host (default: 2).",
+    )
+    parser.add_argument(
+        "--count",
+        type=int,
+        default=1,
+        metavar="N",
+        help="Pings per host; raise it on a lossy link (default: 1).",
+    )
+    parser.add_argument(
+        "--threads",
+        type=int,
+        default=50,
+        metavar="N",
+        help="How many hosts to probe at once (default: 50).",
+    )
     parser.add_argument(
         "--formats",
         nargs="+",
         default=["xlsx"],
         choices=["xlsx", "csv", "json", "md"],
+        metavar="FORMAT",
+        help="One or more report formats: xlsx, csv, json, md (default: xlsx).",
     )
-    parser.add_argument("--discover", action="store_true")
-    parser.add_argument("--resolve", action="store_true")
+    parser.add_argument(
+        "--discover",
+        action="store_true",
+        help="Auto-detect this machine's subnet and scan it instead of --input.",
+    )
+    parser.add_argument(
+        "--resolve",
+        action="store_true",
+        help="Look up each host's name with a reverse DNS (PTR) query.",
+    )
     parser.add_argument(
         "--dns-cache-ttl",
         type=int,
@@ -107,8 +156,21 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="SECONDS",
         help="Cache reverse DNS results for this many seconds (default: 300).",
     )
-    parser.add_argument("--interval", type=int)
-    parser.add_argument("--verbose", action="store_true")
+    parser.add_argument(
+        "--interval",
+        type=int,
+        metavar="MINUTES",
+        help="Repeat the whole scan every N minutes until interrupted.",
+    )
+    parser.add_argument("--verbose", action="store_true", help="Debug logging.")
+
+    # People reach for a flag before a subcommand, so accept both spellings
+    # rather than answering "unrecognized arguments: --web".
+    parser.add_argument(
+        "--web",
+        action="store_true",
+        help="Start IPMG Web, the local browser UI (same as 'ipmg web').",
+    )
 
     ports_group = parser.add_argument_group("TCP service discovery")
     ports_group.add_argument(
@@ -180,10 +242,10 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def build_dashboard_parser() -> argparse.ArgumentParser:
+def build_web_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        "ipmg dashboard",
-        description="Start the local IPMG web dashboard.",
+        "ipmg web",
+        description="Start IPMG Web, the local browser UI.",
     )
     parser.add_argument(
         "--host",
@@ -199,7 +261,7 @@ def build_dashboard_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--no-browser",
         action="store_true",
-        help="Do not open the dashboard in a browser automatically.",
+        help="Do not open IPMG Web in a browser automatically.",
     )
     _add_database_argument(parser)
     parser.add_argument("--verbose", action="store_true")

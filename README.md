@@ -9,11 +9,11 @@
 
 IPMG pings hosts in parallel, resolves their names, and hands you a report you
 can send to someone: Excel, CSV, JSON, or Markdown. It works from the command
-line or from a local web dashboard, and it remembers every scan so it can tell
+line or from IPMG Web, a local browser UI, and it remembers every scan so it can tell
 you what moved.
 
 **Website:** [sameeralam3127.github.io/ipmg](https://sameeralam3127.github.io/ipmg/) ·
-**Live demo:** [dashboard with sample data](https://sameeralam3127.github.io/ipmg/demo/)
+**Live demo:** [IPMG Web with sample data](https://sameeralam3127.github.io/ipmg/demo/)
 
 ```bash
 pip install ipmg
@@ -30,7 +30,7 @@ ipmg --discover        # scan the network you are on, right now
 [Common tasks](#common-tasks) ·
 [Live results](#live-results) ·
 [Change detection](#change-detection) ·
-[Web dashboard](#web-dashboard) ·
+[IPMG Web](#ipmg-web) ·
 [What you can scan](#what-you-can-scan) ·
 [Reports](#reports) ·
 [All options](#all-options) ·
@@ -246,7 +246,7 @@ exist yet. A file you name with `--input` must already exist.
 | Keep scanning every 5 minutes | `ipmg --input targets.txt --interval 5` |
 | Look back at earlier scans | `ipmg history` |
 | Compare two specific scans | `ipmg diff 12 14` |
-| Use the web dashboard instead | `ipmg dashboard` |
+| Use IPMG Web in your browser instead | `ipmg web` |
 | See every available flag | `ipmg --help` |
 
 ---
@@ -285,7 +285,7 @@ plain lines, which makes `ipmg --stream-all >> scan.log` a usable live log.
 ## Change detection
 
 Every scan is stored in a local SQLite history (`~/.ipmg/dashboard.db`), shared
-by the CLI and the dashboard. IPMG can then tell you what moved between any two
+by the CLI and IPMG Web. IPMG can then tell you what moved between any two
 scans — which is usually the question you actually have.
 
 ```bash
@@ -333,14 +333,16 @@ source**, so file-based and `--discover` runs do not get mixed up. Pass
 
 ---
 
-## Web dashboard
+## IPMG Web
 
-Prefer clicking to typing? The dashboard runs locally and shares the CLI's
+Prefer clicking to typing? IPMG Web runs locally and shares the CLI's
 scanning engine:
 
 ```bash
-ipmg dashboard          # starts http://127.0.0.1:8080 and opens your browser
+ipmg web               # starts http://127.0.0.1:8080 and opens your browser
 ```
+
+`ipmg --web` does the same thing, so whichever one you reach for first works.
 
 It runs fully offline — every stylesheet and script is bundled with the
 package, nothing is loaded from a CDN. It gives you:
@@ -362,13 +364,11 @@ package, nothing is loaded from a CDN. It gives you:
 | `--no-browser` | off | Don't open the browser automatically |
 | `--db` | `~/.ipmg/dashboard.db` | History database location |
 
-`ipmg web` is an alias for `ipmg dashboard`.
-
 ### On a server with no browser
 
 On a Linux server with no display (e.g. accessed over plain SSH), IPMG detects
 that no browser can be opened, skips the attempt, and prints a hint instead of
-failing silently. The dashboard still binds to `127.0.0.1` by default, so reach
+failing silently. IPMG Web still binds to `127.0.0.1` by default, so reach
 it from your workstation with an SSH tunnel:
 
 ```bash
@@ -507,10 +507,10 @@ itself is hardened accordingly:
 
 - Pings run as a direct process call (no shell), and every target is
   validated as an IP address first
-- The dashboard binds to `127.0.0.1` by default and serves everything
+- IPMG Web binds to `127.0.0.1` by default and serves everything
   locally — no CDN assets, no outbound requests
 - WebSocket connections are origin-checked, so a web page you happen to
-  visit cannot connect to the local dashboard and read your scan results
+  visit cannot connect to your local IPMG Web and read your scan results
 - Uploads are capped at 5 MB and one scan expands to at most 65,536 hosts,
   so a bad input file cannot exhaust memory
 - All database access uses parameterized SQL
@@ -544,7 +544,7 @@ Contributions are welcome.
 [CONTRIBUTING.md](https://github.com/sameeralam3127/ipmg/blob/main/CONTRIBUTING.md)
 covers setting up a development environment, running the tests, the commit
 message format that drives automated releases, and how the project website and
-dashboard demo are built. Everyone taking part is expected to follow the
+IPMG Web demo are built. Everyone taking part is expected to follow the
 [Code of Conduct](https://github.com/sameeralam3127/ipmg/blob/main/CODE_OF_CONDUCT.md).
 
 ---
