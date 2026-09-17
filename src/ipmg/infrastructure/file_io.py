@@ -1,3 +1,4 @@
+import io
 import ipaddress
 from pathlib import Path
 from typing import Iterable
@@ -6,6 +7,7 @@ import pandas as pd
 
 from ipmg.core.ping import validate_ip
 from ipmg.exceptions import FileIOError
+from ipmg.infrastructure.incremental import atomic_write_bytes, jsonl_record
 from ipmg.reporting import ui
 from ipmg.utils.helpers import markdown_cell, spreadsheet_escape, timestamp_str
 
@@ -270,24 +272,50 @@ def build_markdown_report(df: pd.DataFrame) -> str:
     return "\n".join(lines)
 
 
-def save_results(df, base: str, formats: list[str]) -> list[str]:
-    ts = timestamp_str()
+def write_report(df: pd.DataFrame, path: str, fmt: str) -> None:
+    """Write ``df`` to ``path`` in one format, replacing the file atomically.
+
+    The whole file is rendered in memory and swapped into place, so a reader
+    — or an incremental snapshot interrupted halfway — never finds a report
+    that is only partly written. Raises :class:`ValueError` for an unknown
+    format so callers can tell "not written" from "silently skipped".
+    """
+    if fmt == "xlsx":
+        buffer = io.BytesIO()
+        sanitize_export_frame(df).to_excel(buffer, index=False)
+        data = buffer.getvalue()
+    elif fmt == "csv":
+        data = sanitize_export_frame(df).to_csv(index=False).encode("utf-8")
+    elif fmt == "json":
+        data = df.to_json(orient="records").encode("utf-8")
+    elif fmt == "jsonl":
+        # Rendered row by row rather than through pandas, so the finished file
+        # is written exactly like the one a running scan appends to.
+        rows = df.astype(object).where(pd.notna(df), None).to_dict(orient="records")
+        data = "".join(jsonl_record(row) for row in rows).encode("utf-8")
+    elif fmt == "md":
+        data = build_markdown_report(df).encode("utf-8")
+    else:
+        raise ValueError(f"Unsupported report format: {fmt}")
+
+    atomic_write_bytes(path, data)
+
+
+def save_results(df, base: str, formats: list[str], timestamp: str | None = None) -> list[str]:
+    """Write the finished report in every requested format.
+
+    ``timestamp`` is passed in when a scan has already been writing reports
+    incrementally, so the final write lands on those same files instead of
+    creating a second, differently named set.
+    """
+    ts = timestamp or timestamp_str()
     saved_paths: list[str] = []
 
     for fmt in formats:
-        if fmt == "xlsx":
-            output_path = f"{base}_{ts}.xlsx"
-            sanitize_export_frame(df).to_excel(output_path, index=False)
-        elif fmt == "csv":
-            output_path = f"{base}_{ts}.csv"
-            sanitize_export_frame(df).to_csv(output_path, index=False)
-        elif fmt == "json":
-            output_path = f"{base}_{ts}.json"
-            df.to_json(output_path, orient="records")
-        elif fmt == "md":
-            output_path = f"{base}_{ts}.md"
-            Path(output_path).write_text(build_markdown_report(df), encoding="utf-8")
-        else:
+        output_path = f"{base}_{ts}.{fmt}"
+        try:
+            write_report(df, output_path, fmt)
+        except ValueError:
             continue
 
         saved_paths.append(output_path)

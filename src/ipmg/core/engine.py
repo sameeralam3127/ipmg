@@ -95,6 +95,12 @@ def execute_scan(
 
             if on_result is not None:
                 on_result(result, len(results), len(ips))
+    except BaseException:
+        # Ctrl+C must not be followed by minutes of queued pings: drop the
+        # hosts that have not started, and let the finally below wait only
+        # for the handful already in flight.
+        executor.shutdown(wait=False, cancel_futures=True)
+        raise
     finally:
         executor.shutdown(wait=True)
 

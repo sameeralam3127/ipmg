@@ -432,7 +432,16 @@ Status is one of `Active`, `Inactive`, `Timeout`, `Unreachable`, `Invalid IP`,
 or `Error`. `Hostname` is filled in when you pass `--resolve`.
 
 The `md` format produces a shareable Markdown report with a status summary
-table — handy for tickets, handoffs, and incident timelines.
+table — handy for tickets, handoffs, and incident timelines. `jsonl` writes one
+JSON object per line, which streams into `jq` and log pipelines.
+
+**Reports survive an interrupted scan.** A scan writes its report as it goes,
+so pressing Ctrl+C halfway through a /16 leaves a valid report of everything
+scanned so far instead of nothing at all. `csv` and `jsonl` are appended per
+host; `xlsx`, `json`, and `md` are re-saved every `--autosave` seconds (30 by
+default). A finished scan overwrites those files with the complete report, so
+the file names and contents are the same as they always were. Use
+`--no-incremental` to go back to writing only at the end.
 
 **Open ports.** `Open Ports` is only populated when `--scan-ports` is set: for
 each host that answers, IPMG probes a list of common TCP ports (SSH, HTTP,
@@ -461,7 +470,9 @@ them — so piping IPMG into a file or a log gives you clean text.
 | `--input` | `ip_list.xlsx` | What to scan: a file (`.xlsx`, `.xls`, `.csv`, `.txt`, `.list`), a single IP, a CIDR block, or a range (`10.0.0.1-10.0.0.50`) |
 | `--discover` | off | Auto-detect and scan the local subnet instead |
 | `--output` | `results` | Report file name prefix |
-| `--formats` | `xlsx` | One or more of `xlsx`, `csv`, `json`, `md` |
+| `--formats` | `xlsx` | One or more of `xlsx`, `csv`, `json`, `jsonl`, `md` |
+| `--no-incremental` | off | Only write the report once the scan has finished |
+| `--autosave` | `30` | How often a running scan re-saves `xlsx`, `json`, and `md` |
 
 **Speed and accuracy**
 

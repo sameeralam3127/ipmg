@@ -22,13 +22,18 @@ from ipmg.infrastructure.file_io import (
     load_targets,
     save_results,
 )
+from ipmg.infrastructure.incremental import (
+    DEFAULT_AUTOSAVE_S,
+    IncrementalOptions,
+    IncrementalReport,
+)
 from ipmg.reporting import ui
 from ipmg.reporting.diff_report import export_diff, print_diff
 from ipmg.reporting.frames import results_dataframe
 from ipmg.reporting.live import DEFAULT_REFRESH_S, StreamOptions, scan_display
 from ipmg.reporting.summary import print_summary
 from ipmg.services.history_service import HistoryService
-from ipmg.utils.helpers import current_timestamp
+from ipmg.utils.helpers import current_timestamp, timestamp_str
 
 log = logging.getLogger(__name__)
 
@@ -42,6 +47,8 @@ class ScanOutcome:
     batch_timestamp: datetime
     duration_s: float
     source: str
+    #: File-name stamp shared by the incremental writes and the final report.
+    timestamp: str
 
 
 @dataclass(frozen=True)
@@ -71,6 +78,14 @@ def _history_options(args) -> HistoryOptions:
             latency_pct=max(float(getattr(args, "latency_pct", 25.0)), 0.0),
         ),
     )
+
+
+def _incremental_options(args) -> IncrementalOptions:
+    """Read incremental-report settings off the parsed arguments."""
+    return IncrementalOptions(
+        enabled=not bool(getattr(args, "no_incremental", False)),
+        autosave_s=float(getattr(args, "autosave", DEFAULT_AUTOSAVE_S)),
+    ).clamped()
 
 
 def _stream_options(args) -> StreamOptions:
@@ -142,20 +157,84 @@ def _scan_with_progress(
     ip_list: List[str],
     config: ScanConfig,
     stream: StreamOptions,
+    report: Optional[IncrementalReport] = None,
 ) -> List[HostResult]:
-    with scan_display(len(ip_list), config, stream) as on_result:
+    with scan_display(len(ip_list), config, stream) as on_progress:
+        if report is None:
+            return execute_scan(ip_list, config, on_result=on_progress)
+
+        def on_result(result: HostResult, done: int, total: int) -> None:
+            # The report is written before the row is drawn, so what the
+            # operator sees on screen is never ahead of what is on disk.
+            report.record(result)
+            on_progress(result, done, total)
+
         return execute_scan(ip_list, config, on_result=on_result)
 
 
-def _run_single_pass(args, config: ScanConfig, stream: StreamOptions) -> ScanOutcome:
+def _open_report(
+    args,
+    incremental: IncrementalOptions,
+    timestamp: str,
+    batch_timestamp: datetime,
+) -> Optional[IncrementalReport]:
+    """Start writing this pass's report, unless incremental writing is off."""
+    if not incremental.enabled or not args.formats:
+        return None
+    return IncrementalReport(
+        base=args.output,
+        formats=args.formats,
+        timestamp=timestamp,
+        batch_timestamp=batch_timestamp,
+        options=incremental,
+    )
+
+
+def _announce_partial(report: IncrementalReport) -> None:
+    """Point at the reports an interrupted pass left behind."""
+    paths = report.written_paths
+    if not paths:
+        return
+    ui.blank()
+    ui.field_list("Partial report", paths)
+
+
+def _run_pass(
+    ip_list: List[str],
+    config: ScanConfig,
+    stream: StreamOptions,
+    report: Optional[IncrementalReport],
+) -> List[HostResult]:
+    """Scan every host, keeping the partial report if the pass is cut short."""
+    if report is None:
+        return _scan_with_progress(ip_list, config, stream)
+
+    try:
+        with report:
+            return _scan_with_progress(ip_list, config, stream, report)
+    except BaseException:
+        # BaseException, not Exception: Ctrl+C is the interruption this
+        # feature exists for, and it must not pass by unannounced.
+        _announce_partial(report)
+        raise
+
+
+def _run_single_pass(
+    args,
+    config: ScanConfig,
+    stream: StreamOptions,
+    incremental: IncrementalOptions,
+) -> ScanOutcome:
     batch_timestamp = current_timestamp()
+    timestamp = timestamp_str()
     started_at = time.perf_counter()
 
     ip_list = discover_local_subnet() if args.discover else load_targets(args.input)
     source = "auto-discovery" if args.discover else args.input
 
     _print_configuration(source, len(ip_list), config)
-    results = _scan_with_progress(ip_list, config, stream)
+    report = _open_report(args, incremental, timestamp, batch_timestamp)
+    results = _run_pass(ip_list, config, stream, report)
     duration = time.perf_counter() - started_at
 
     return ScanOutcome(
@@ -164,6 +243,7 @@ def _run_single_pass(args, config: ScanConfig, stream: StreamOptions) -> ScanOut
         batch_timestamp=batch_timestamp,
         duration_s=duration,
         source=source,
+        timestamp=timestamp,
     )
 
 
@@ -224,13 +304,16 @@ def run_scan(args) -> None:
     config = _config_from_args(args)
     history_options = _history_options(args)
     stream = _stream_options(args)
+    incremental = _incremental_options(args)
     _ensure_input_file(args)
 
     while True:
-        outcome = _run_single_pass(args, config, stream)
+        outcome = _run_single_pass(args, config, stream, incremental)
 
         print_summary(outcome.frame, outcome.batch_timestamp, outcome.duration_s)
-        save_results(outcome.frame, args.output, args.formats)
+        # Overwrites whatever the incremental writer left on those same paths,
+        # so a finished scan produces exactly the report it always did.
+        save_results(outcome.frame, args.output, args.formats, timestamp=outcome.timestamp)
         _store_and_compare(history_options, config, outcome)
 
         if not args.interval:
