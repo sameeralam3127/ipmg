@@ -443,6 +443,19 @@ default). A finished scan overwrites those files with the complete report, so
 the file names and contents are the same as they always were. Use
 `--no-incremental` to go back to writing only at the end.
 
+**Resume where you left off.** Hand the interrupted report back with
+`--resume` and IPMG skips the hosts it already covers, appending the rest to
+that same file:
+
+```bash
+ipmg --input 10.0.0.0/16 --formats csv          # interrupted at host 40,000
+ipmg --input 10.0.0.0/16 --resume results_20260628_120000.csv
+```
+
+Only `csv` and `jsonl` reports can be resumed — they are the formats that stay
+readable after an abrupt exit. A final line that was cut off mid-write is
+ignored, so that host is simply scanned again.
+
 **Open ports.** `Open Ports` is only populated when `--scan-ports` is set: for
 each host that answers, IPMG probes a list of common TCP ports (SSH, HTTP,
 HTTPS, RDP, SMB, FTP, SMTP, DNS, MSSQL, MySQL, PostgreSQL by default)
@@ -472,6 +485,7 @@ them — so piping IPMG into a file or a log gives you clean text.
 | `--output` | `results` | Report file name prefix |
 | `--formats` | `xlsx` | One or more of `xlsx`, `csv`, `json`, `jsonl`, `md` |
 | `--no-incremental` | off | Only write the report once the scan has finished |
+| `--resume` | off | Continue an interrupted scan from its `csv` or `jsonl` report |
 | `--autosave` | `30` | How often a running scan re-saves `xlsx`, `json`, and `md` |
 
 **Speed and accuracy**
