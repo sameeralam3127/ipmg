@@ -7,9 +7,17 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default:
+        include: ["*"]
+        days: 7
+    open-pull-requests-limit: 10
     groups:
       actions:
         patterns: ["*"]
+        update-types:
+          - "minor"
+          - "patch"
     commit-message:
       prefix: ci
 
@@ -17,9 +25,17 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default:
+        include: ["*"]
+        days: 7
+    open-pull-requests-limit: 10
     groups:
       python:
         patterns: ["*"]
+        update-types:
+          - "minor"
+          - "patch"
     commit-message:
       prefix: build
       include: scope
