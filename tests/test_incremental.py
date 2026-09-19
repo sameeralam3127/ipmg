@@ -1,5 +1,6 @@
 import csv
 import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pandas as pd
@@ -146,7 +147,7 @@ def test_save_results_reuses_a_supplied_timestamp(tmp_path):
 
     paths = save_results(frame, str(tmp_path / "scan"), ["csv", "jsonl"], timestamp="stamp")
 
-    assert [path.rsplit("/", 1)[-1] for path in paths] == ["scan_stamp.csv", "scan_stamp.jsonl"]
+    assert [Path(path).name for path in paths] == ["scan_stamp.csv", "scan_stamp.jsonl"]
     assert json.loads(open(paths[1], encoding="utf-8").read().strip())["IP Address"] == "8.8.8.8"
 
 
