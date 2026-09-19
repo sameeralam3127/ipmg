@@ -12,8 +12,19 @@ can send to someone: Excel, CSV, JSON, or Markdown. It works from the command
 line or from IPMG Web, a local browser UI, and it remembers every scan so it can tell
 you what moved.
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/sameeralam3127/ipmg/main/docs/assets/ipmg-demo.gif" alt="ipmg scanning 13 hosts in parallel: live results with reverse DNS names and latency, then a summary of 10 active and 3 timed out" width="820">
+</p>
+
+**Why not `nmap -sn`, `fping`, or Angry IP Scanner?** They tell you what is up
+right now. IPMG also remembers every scan and tells you what changed since the
+last one: the host that dropped off, the device that appeared, the latency that
+doubled. It writes the report you would otherwise build by hand.
+[How it compares](#how-it-compares)
+
 **Website:** [sameeralam3127.github.io/ipmg](https://sameeralam3127.github.io/ipmg/) ·
-**Live demo:** [IPMG Web with sample data](https://sameeralam3127.github.io/ipmg/demo/)
+**Live demo:** [IPMG Web with sample data](https://sameeralam3127.github.io/ipmg/demo/) ·
+**Command builder:** [pick what you want, copy the command](https://sameeralam3127.github.io/ipmg/#builder)
 
 ```bash
 pip install ipmg
@@ -25,6 +36,7 @@ ipmg --discover        # scan the network you are on, right now
 
 **Contents**
 
+[How it compares](#how-it-compares) ·
 [Install](#install) ·
 [Your first scan](#your-first-scan) ·
 [Common tasks](#common-tasks) ·
@@ -37,6 +49,26 @@ ipmg --discover        # scan the network you are on, right now
 [Security](#security) ·
 [More help](#more-help) ·
 [Contributing](#contributing)
+
+---
+
+## How it compares
+
+| | IPMG | `nmap -sn` | `fping` | Angry IP Scanner |
+| --- | --- | --- | --- | --- |
+| Parallel ping sweep | Yes | Yes | Yes | Yes |
+| Scan history and "what changed" | Built in | Save XML, compare with `ndiff` | No | No |
+| Reports | Excel, CSV, JSON, Markdown | XML, grepable text | Plain text | CSV, TXT, XML |
+| Browser UI | IPMG Web, local | No (Zenmap is a desktop app) | No | Desktop app (Java) |
+| Port checks | Common TCP ports | Full port and OS scanner | No | Via fetchers |
+
+Reach for nmap when you need a real port or OS scanner. Reach for IPMG when you
+look after a network and need to know what moved since yesterday, with a report
+you can hand to someone.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/sameeralam3127/ipmg/main/docs/assets/ipmg-web.png" alt="IPMG Web dashboard: scan totals, a status donut of 16 active, 1 timeout and 1 inactive host, a latency trend chart, and a list of recent scans" width="820">
+</p>
 
 ---
 
@@ -234,6 +266,19 @@ exist yet. A file you name with `--input` must already exist.
 
 ## Common tasks
 
+Not sure which flags you need? The
+[command builder](https://sameeralam3127.github.io/ipmg/#builder) on the
+website puts the command together as you pick what you want to know, and
+explains every flag it adds.
+
+<p align="center">
+  <a href="https://sameeralam3127.github.io/ipmg/#builder">
+    <img src="https://raw.githubusercontent.com/sameeralam3127/ipmg/main/docs/assets/ipmg-builder.png" alt="IPMG command builder: choose Scan, Compare, History, or Web, enter a target such as 192.168.1.0/24, switch on options like live results or hostnames, and copy the generated ipmg command with each flag explained" width="820">
+  </a>
+</p>
+
+Or pick a ready-made command:
+
 | I want to… | Command |
 | --- | --- |
 | Scan the network I am on | `ipmg --discover` |
@@ -344,6 +389,12 @@ ipmg web               # starts http://127.0.0.1:8080 and opens your browser
 
 `ipmg --web` does the same thing, so whichever one you reach for first works.
 
+Each start creates a new access token. The browser opens with it already in
+the link, and IPMG Web prints that link (`http://127.0.0.1:8080/#token=…`)
+in the terminal. If you open IPMG Web in another browser, or after a
+restart, use the link from the terminal. To keep the same token across
+restarts, for example behind a reverse proxy, set `IPMG_WEB_TOKEN`.
+
 It runs fully offline — every stylesheet and script is bundled with the
 package, nothing is loaded from a CDN. It gives you:
 
@@ -373,12 +424,13 @@ it from your workstation with an SSH tunnel:
 
 ```bash
 ssh -L 8080:127.0.0.1:8080 user@server
-# then open http://127.0.0.1:8080 locally
+# then open the link the server printed (http://127.0.0.1:8080/#token=…) locally
 ```
 
-Alternatively, bind to all interfaces with `--host 0.0.0.0` — this exposes an
-unauthenticated API on the network, so only do this on a trusted network or
-behind a reverse proxy with authentication (see [Security](#security)).
+Alternatively, bind to all interfaces with `--host 0.0.0.0`. Every request
+still needs the access token. The traffic, token included, is plain HTTP,
+so on anything but a trusted network put a reverse proxy with TLS in front
+of it (see [Security](#security)).
 
 ---
 
@@ -520,15 +572,18 @@ itself is hardened accordingly:
   validated as an IP address first
 - IPMG Web binds to `127.0.0.1` by default and serves everything
   locally — no CDN assets, no outbound requests
-- WebSocket connections are origin-checked, so a web page you happen to
-  visit cannot connect to your local IPMG Web and read your scan results
+- Every API request and WebSocket needs the access token created when
+  IPMG Web starts, so other users on the machine and web pages you happen
+  to visit cannot start scans or read your results
+- WebSocket connections are also origin-checked, and a client that stops
+  reading live updates is disconnected rather than buffered without limit
 - Uploads are capped at 5 MB and one scan expands to at most 65,536 hosts,
   so a bad input file cannot exhaust memory
 - All database access uses parameterized SQL
 
-If you bind to a non-local address with `--host`, anyone who can reach that
-interface can start scans and read results — put a reverse proxy with
-authentication in front of it.
+If you bind to a non-local address with `--host`, the token still guards the
+API. It travels over plain HTTP, though, so use an SSH tunnel or a reverse
+proxy with TLS on any network you don't trust.
 
 Found a vulnerability? See [SECURITY.md](SECURITY.md) for how to report it.
 

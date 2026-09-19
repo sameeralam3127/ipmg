@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import ipaddress
 import os
+import re
+import secrets
 import sys
 import threading
 import webbrowser
@@ -35,6 +37,26 @@ def _is_loopback(host: str) -> bool:
         return False
 
 
+#: Characters that survive a URL fragment and a WebSocket subprotocol unescaped.
+_TOKEN_PATTERN = re.compile(r"[A-Za-z0-9._~-]{16,}")
+
+
+def _access_token() -> str:
+    """``IPMG_WEB_TOKEN`` when set (e.g. behind a reverse proxy), else a fresh one.
+
+    Like Jupyter, every start gets a new random token unless one is pinned.
+    """
+    pinned = os.environ.get("IPMG_WEB_TOKEN", "").strip()
+    if not pinned:
+        return secrets.token_urlsafe(32)
+    if not _TOKEN_PATTERN.fullmatch(pinned):
+        raise SystemExit(
+            "IPMG_WEB_TOKEN must be at least 16 characters of letters, digits, '.', '_', '~' "
+            "or '-'. Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(32))\""
+        )
+    return pinned
+
+
 def _has_display() -> bool:
     """False on a Linux session with no X11/Wayland display (e.g. over plain SSH)."""
     if sys.platform.startswith("linux"):
@@ -49,13 +71,16 @@ def run_dashboard(
     db_path: Optional[str] = None,
 ) -> None:
     database = Database(Path(db_path) if db_path else DEFAULT_DB_PATH)
-    app = create_app(database)
-    url = f"http://{_display_host(host)}:{port}"
+    token = _access_token()
+    app = create_app(database, token)
+    # The token goes in the fragment, which browsers never send to the server,
+    # so it stays out of access logs and proxies.
+    url = f"http://{_display_host(host)}:{port}/#token={token}"
 
     ui.blank()
     ui.fields(
         [
-            ("Local", url),
+            ("Open", url),
             ("History", database.path),
         ]
     )
@@ -68,9 +93,16 @@ def run_dashboard(
     elif open_browser:
         threading.Timer(1.0, webbrowser.open, args=(url,)).start()
 
+    ui.note("The link carries this session's access token; the API refuses requests without it.")
     if _is_loopback(host):
-        ui.note(f"Remote access: ssh -L {port}:127.0.0.1:{port} user@this-host, then open {url}.")
-        ui.note("Or run with --host 0.0.0.0 (exposes an unauthenticated API — see SECURITY.md).")
+        ui.note(
+            f"Remote access: ssh -L {port}:127.0.0.1:{port} user@this-host, then open the link."
+        )
+    else:
+        ui.note(
+            "Listening beyond this machine over plain HTTP: anyone who can see the traffic "
+            "can read the token. Prefer an SSH tunnel, or a reverse proxy with TLS (see SECURITY.md)."
+        )
 
     ui.blank()
 
