@@ -78,13 +78,4 @@ jobs:
 
       - name: Run tests with coverage
         # Fails below the floor set in [tool.coverage.report] fail_under.
-        run: pytest -q --cov --cov-report=term-missing:skip-covered --cov-report=xml
-
-      - name: Upload to Codecov
-        # A no-op until the CODECOV_TOKEN secret is added; never fails the job.
-        if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: coverage.xml
-          fail_ci_if_error: false
+        run: pytest -q --cov --cov-report=term-missing:skip-covered
