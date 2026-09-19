@@ -1,7 +1,7 @@
 // Page views for the IPMG dashboard. Each view renders into the <main> node.
 
-import { api, onEvent } from "./api.js?v=20260911.1";
-import { STATUS_COLORS, latencyTrend, statusDonut } from "./charts.js?v=20260911.1";
+import { api, onEvent } from "./api.js?v=20260920.1";
+import { STATUS_COLORS, latencyTrend, statusDonut } from "./charts.js?v=20260920.1";
 
 const REPORT_FORMATS = ["xlsx", "csv", "json", "md"];
 
@@ -17,6 +17,22 @@ function h(tag, attrs = {}, ...children) {
     node.append(child.nodeType ? child : document.createTextNode(String(child)));
   }
   return node;
+}
+
+// A download button: the file is fetched with the access token, then saved.
+function downloadLink(url, label) {
+  return h(
+    "a",
+    {
+      class: "ghost-btn",
+      href: url,
+      onclick: (event) => {
+        event.preventDefault();
+        api.download(url).catch((error) => toast(`Download failed: ${error.message}`, "error"));
+      },
+    },
+    label
+  );
 }
 
 function toast(message, tone = "success") {
@@ -388,6 +404,11 @@ export async function monitorView(root, scanId) {
   redraw();
 
   const unsubscribe = onEvent((event) => {
+    if (event.type === "reconnected") {
+      // Missed events would leave the counts short: re-render from the API.
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
+      return;
+    }
     if (event.scan_id !== scan.id) return;
     if (event.type === "result") {
       completed = event.completed;
@@ -524,11 +545,7 @@ export async function changesView(root, targetId, baselineId) {
 
     exports.replaceChildren(
       ...DIFF_FORMATS.map((fmt) =>
-        h(
-          "a",
-          { class: "ghost-btn", href: api.diffReportUrl(Number(target.value), fmt, options), download: "" },
-          fmt.toUpperCase()
-        )
+        downloadLink(api.diffReportUrl(Number(target.value), fmt, options), fmt.toUpperCase())
       )
     );
 
@@ -584,7 +601,7 @@ export async function scanDetailView(root, scanId) {
 
   for (const fmt of REPORT_FORMATS) {
     toolbar.append(
-      h("a", { class: "ghost-btn", href: api.reportUrl(scan.id, fmt), download: "" }, fmt.toUpperCase())
+      downloadLink(api.reportUrl(scan.id, fmt), fmt.toUpperCase())
     );
   }
 

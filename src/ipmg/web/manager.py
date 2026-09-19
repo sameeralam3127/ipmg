@@ -11,6 +11,14 @@ from typing import Any, Dict, List, Optional, Set
 from ipmg.core.engine import HostResult, ScanConfig, execute_scan
 from ipmg.web.db import Database
 
+#: Events buffered per WebSocket subscriber. A client this far behind is
+#: disconnected instead of letting its backlog grow without bound; the browser
+#: reconnects and reloads the scan from the REST API.
+SUBSCRIBER_QUEUE_LIMIT = 1000
+
+#: Queued in place of an event to tell the WebSocket handler to close.
+OVERFLOW = None
+
 
 class ScanManager:
     def __init__(self, db: Database) -> None:
@@ -26,7 +34,7 @@ class ScanManager:
         self._loop = loop
 
     def subscribe(self) -> asyncio.Queue:
-        queue: asyncio.Queue = asyncio.Queue()
+        queue: asyncio.Queue = asyncio.Queue(maxsize=SUBSCRIBER_QUEUE_LIMIT)
         with self._lock:
             self._subscribers.add(queue)
         return queue
@@ -42,7 +50,21 @@ class ScanManager:
         with self._lock:
             queues = list(self._subscribers)
         for queue in queues:
-            loop.call_soon_threadsafe(queue.put_nowait, event)
+            loop.call_soon_threadsafe(self._offer, queue, event)
+
+    def _offer(self, queue: asyncio.Queue, event: Dict[str, Any]) -> None:
+        """Queue an event for one subscriber; runs on the event loop."""
+        with self._lock:
+            if queue not in self._subscribers:
+                return
+        if queue.full():
+            # The client is not reading. Drop its backlog and close it.
+            self.unsubscribe(queue)
+            while not queue.empty():
+                queue.get_nowait()
+            queue.put_nowait(OVERFLOW)
+            return
+        queue.put_nowait(event)
 
     # -------------------------------------------------------------- scans
 

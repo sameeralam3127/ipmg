@@ -86,9 +86,13 @@ class HostnameCache:
             with self._lock:
                 return self._cache.get(ip, (0.0, "Unresolvable"))[1]
 
+        # Set before the lookup so the finally block always has a value to
+        # cache and always releases threads waiting on this IP.
+        hostname = "Unresolvable"
         try:
             hostname = socket.gethostbyaddr(ip)[0]
-        except OSError:
+        except Exception:
+            # Any lookup failure means "no name", never a failed scan.
             hostname = "Unresolvable"
         finally:
             with self._lock:

@@ -531,7 +531,7 @@ const BUILDERS = {
     const port = integerIn(form.value("web-port"), 8080, { max: 65535 });
     if (form.value("web-host") === "0.0.0.0") {
       line.flag("--host", "Listen on every network interface, not only this machine.", "0.0.0.0");
-      line.warn("IPMG Web has no login: anyone who can reach this machine can start scans and read results. Prefer an SSH tunnel, or put an authenticating reverse proxy in front.");
+      line.warn("Every request needs the access token from the link IPMG Web prints, but it travels over plain HTTP. On a network you don't trust, prefer an SSH tunnel or a reverse proxy with TLS.");
     }
     if (port !== 8080) line.flag("--port", `Serve on port ${port}.`, port);
     if (form.on("web-noBrowser")) line.flag("--no-browser", "Don't open a browser, for servers and SSH sessions.");

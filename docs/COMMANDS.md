@@ -385,12 +385,17 @@ through an SSH tunnel from your workstation:
 # on the server
 ipmg web --no-browser
 
-# on your workstation, then open http://127.0.0.1:8080
+# on your workstation, then open the link the server printed
+# (http://127.0.0.1:8080/#token=…)
 ssh -L 8080:127.0.0.1:8080 user@server
 ```
 
-`--host 0.0.0.0` makes IPMG Web reachable from the network. It has no
-authentication, so only do that behind a reverse proxy that adds it.
+Every API request needs the access token in that link. A new token is made
+each time IPMG Web starts; set `IPMG_WEB_TOKEN` to keep one fixed.
+
+`--host 0.0.0.0` makes IPMG Web reachable from the network. The token still
+guards it, but it travels over plain HTTP, so use a reverse proxy with TLS on
+any network you don't trust.
 
 ---
 
