@@ -94,9 +94,7 @@ def test_execute_scan_probes_ports_only_for_active_hosts_when_enabled(monkeypatc
         return ("Active", 1.0) if ip == "10.0.0.1" else ("Timeout", None)
 
     monkeypatch.setattr("ipmg.core.engine.ping_ip", fake_ping_ip)
-    monkeypatch.setattr(
-        "ipmg.core.engine.scan_ports", lambda ip, _ports, _timeout: [22, 443]
-    )
+    monkeypatch.setattr("ipmg.core.engine.scan_ports", lambda ip, _ports, _timeout: [22, 443])
 
     results = execute_scan(
         ["10.0.0.1", "10.0.0.2"],
