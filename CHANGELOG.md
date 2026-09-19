@@ -2,6 +2,31 @@
 
 <!-- version list -->
 
+## v2.1.0 (2026-09-19)
+
+### Bug Fixes
+
+- Restore Python 3.9 support and add lint, lowest-deps, coverage, and PR-title checks
+  ([#76](https://github.com/sameeralam3127/ipmg/pull/76),
+  [`aa09162`](https://github.com/sameeralam3127/ipmg/commit/aa091623b0b1b711e23c695ba5311fcb19263f05))
+
+### Documentation
+
+- **readme**: Open with a demo GIF and a comparison to nmap, fping, and Angry IP Scanner
+  ([#74](https://github.com/sameeralam3127/ipmg/pull/74),
+  [`b8232f0`](https://github.com/sameeralam3127/ipmg/commit/b8232f06bb85e72254a81cab6f6ec1f8a1bbb9bd))
+
+- **readme**: Point to the command builder, with a screenshot
+  ([#75](https://github.com/sameeralam3127/ipmg/pull/75),
+  [`1c76265`](https://github.com/sameeralam3127/ipmg/commit/1c76265feeb124d4ae494069d4cb1b5e85ef8014))
+
+### Features
+
+- **reports**: Write scan reports while the scan runs
+  ([#71](https://github.com/sameeralam3127/ipmg/pull/71),
+  [`19629de`](https://github.com/sameeralam3127/ipmg/commit/19629de9913e7f1e8b31a490a9f901927738a3ac))
+
+
 ## v2.0.0 (2026-09-17)
 
 ### Documentation
