@@ -12,6 +12,16 @@ can send to someone: Excel, CSV, JSON, or Markdown. It works from the command
 line or from IPMG Web, a local browser UI, and it remembers every scan so it can tell
 you what moved.
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/sameeralam3127/ipmg/main/docs/assets/ipmg-demo.gif" alt="ipmg scanning 13 hosts in parallel: live results with reverse DNS names and latency, then a summary of 10 active and 3 timed out" width="820">
+</p>
+
+**Why not `nmap -sn`, `fping`, or Angry IP Scanner?** They tell you what is up
+right now. IPMG also remembers every scan and tells you what changed since the
+last one: the host that dropped off, the device that appeared, the latency that
+doubled. It writes the report you would otherwise build by hand.
+[How it compares](#how-it-compares)
+
 **Website:** [sameeralam3127.github.io/ipmg](https://sameeralam3127.github.io/ipmg/) ·
 **Live demo:** [IPMG Web with sample data](https://sameeralam3127.github.io/ipmg/demo/)
 
@@ -25,6 +35,7 @@ ipmg --discover        # scan the network you are on, right now
 
 **Contents**
 
+[How it compares](#how-it-compares) ·
 [Install](#install) ·
 [Your first scan](#your-first-scan) ·
 [Common tasks](#common-tasks) ·
@@ -37,6 +48,26 @@ ipmg --discover        # scan the network you are on, right now
 [Security](#security) ·
 [More help](#more-help) ·
 [Contributing](#contributing)
+
+---
+
+## How it compares
+
+| | IPMG | `nmap -sn` | `fping` | Angry IP Scanner |
+| --- | --- | --- | --- | --- |
+| Parallel ping sweep | Yes | Yes | Yes | Yes |
+| Scan history and "what changed" | Built in | Save XML, compare with `ndiff` | No | No |
+| Reports | Excel, CSV, JSON, Markdown | XML, grepable text | Plain text | CSV, TXT, XML |
+| Browser UI | IPMG Web, local | No (Zenmap is a desktop app) | No | Desktop app (Java) |
+| Port checks | Common TCP ports | Full port and OS scanner | No | Via fetchers |
+
+Reach for nmap when you need a real port or OS scanner. Reach for IPMG when you
+look after a network and need to know what moved since yesterday, with a report
+you can hand to someone.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/sameeralam3127/ipmg/main/docs/assets/ipmg-web.png" alt="IPMG Web dashboard: scan totals, a status donut of 16 active, 1 timeout and 1 inactive host, a latency trend chart, and a list of recent scans" width="820">
+</p>
 
 ---
 
