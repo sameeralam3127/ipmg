@@ -115,7 +115,7 @@ def test_execute_scan_probes_ports_only_for_active_hosts_when_enabled(monkeypatc
         return ("Active", 1.0) if ip == "10.0.0.1" else ("Timeout", None)
 
     monkeypatch.setattr("ipmg.core.engine.ping_ip", fake_ping_ip)
-    monkeypatch.setattr("ipmg.core.engine.scan_ports", lambda ip, _ports, _timeout: [22, 443])
+    monkeypatch.setattr("ipmg.core.engine.scan_ports", lambda ip, _ports, _timeout, **_k: [22, 443])
 
     results = execute_scan(
         ["10.0.0.1", "10.0.0.2"],
@@ -152,3 +152,35 @@ def test_execute_scan_propagates_ping_errors(monkeypatch):
 
     with pytest.raises(PingError):
         execute_scan(["10.0.0.1"], ScanConfig())
+
+
+def test_port_probes_share_one_bounded_pool(monkeypatch):
+    # 10 hosts x 5 ports on 10 workers would mean 50 probes at once without
+    # the shared pool; with MAX_PORT_PROBE_WORKERS = 4 no more than 4 may run.
+    import time
+
+    monkeypatch.setattr("ipmg.core.engine.MAX_PORT_PROBE_WORKERS", 4)
+    monkeypatch.setattr("ipmg.core.engine.ping_ip", lambda *_a: ("Active", 1.0))
+
+    lock = threading.Lock()
+    in_flight = 0
+    peak = 0
+
+    def fake_probe(_ip, port, _timeout):
+        nonlocal in_flight, peak
+        with lock:
+            in_flight += 1
+            peak = max(peak, in_flight)
+        time.sleep(0.01)
+        with lock:
+            in_flight -= 1
+        return port == 22
+
+    monkeypatch.setattr("ipmg.core.portscan._probe", fake_probe)
+
+    ips = [f"10.0.0.{n}" for n in range(1, 11)]
+    config = ScanConfig(threads=10, scan_ports=True, ports=(22, 80, 443, 3389, 5432))
+    results = execute_scan(ips, config)
+
+    assert peak <= 4
+    assert all(result.open_ports == (22,) for result in results)

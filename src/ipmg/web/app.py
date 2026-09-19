@@ -65,16 +65,33 @@ AUTH_ERROR = (
 )
 
 
-def _supplied_token(headers: Mapping[str, str], query: Mapping[str, str]) -> Optional[str]:
-    """The token from an ``Authorization: Bearer`` header, or ``?token=``.
+#: WebSocket subprotocol the server answers with. Browsers cannot set headers
+#: on a WebSocket, so the client offers ``ipmg`` plus ``ipmg.token.<token>``.
+WS_SUBPROTOCOL = "ipmg"
+_WS_TOKEN_PREFIX = "ipmg.token."
 
-    The query parameter exists for what cannot send headers: download links
-    and the browser's WebSocket constructor.
+
+def _bearer_token(headers: Mapping[str, str]) -> Optional[str]:
+    """The token from an ``Authorization: Bearer`` header.
+
+    Tokens are never read from the URL: query strings end up in access logs,
+    proxy logs, and browser history.
     """
     scheme, _, credentials = headers.get("authorization", "").partition(" ")
-    if scheme.lower() == "bearer" and credentials:
+    if scheme.lower() == "bearer" and credentials.strip():
         return credentials.strip()
-    return query.get("token")
+    return None
+
+
+def _websocket_token(websocket: WebSocket) -> Optional[str]:
+    """A Bearer header (non-browser clients) or the ``ipmg.token.`` subprotocol."""
+    token = _bearer_token(websocket.headers)
+    if token is not None:
+        return token
+    for protocol in websocket.scope.get("subprotocols", []):
+        if protocol.startswith(_WS_TOKEN_PREFIX):
+            return protocol[len(_WS_TOKEN_PREFIX) :]
+    return None
 
 
 def _token_valid(supplied: Optional[str], expected: str) -> bool:
@@ -92,7 +109,7 @@ def _require_token(expected: str) -> Callable[[Request], None]:
     """
 
     def check(request: Request) -> None:
-        if not _token_valid(_supplied_token(request.headers, request.query_params), expected):
+        if not _token_valid(_bearer_token(request.headers), expected):
             raise HTTPException(
                 status_code=401, detail=AUTH_ERROR, headers={"WWW-Authenticate": "Bearer"}
             )
@@ -379,12 +396,12 @@ def _origin_allowed(websocket: WebSocket) -> bool:
 def _register_websocket(app: FastAPI, manager: ScanManager, token: str) -> None:
     @app.websocket("/api/v1/ws")
     async def websocket_events(websocket: WebSocket) -> None:
-        supplied = _supplied_token(websocket.headers, websocket.query_params)
-        if not _origin_allowed(websocket) or not _token_valid(supplied, token):
+        if not _origin_allowed(websocket) or not _token_valid(_websocket_token(websocket), token):
             await websocket.close(code=1008)
             return
 
-        await websocket.accept()
+        offered = websocket.scope.get("subprotocols", [])
+        await websocket.accept(subprotocol=WS_SUBPROTOCOL if WS_SUBPROTOCOL in offered else None)
         queue = manager.subscribe()
 
         async def forward_events() -> None:

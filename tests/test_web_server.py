@@ -1,3 +1,5 @@
+import pytest
+
 from ipmg.web import server
 
 
@@ -91,7 +93,8 @@ def test_run_dashboard_opens_the_browser_with_the_access_token(tmp_path, monkeyp
     monkeypatch.delenv("IPMG_WEB_TOKEN", raising=False)
     url, app = launch_capturing(tmp_path, monkeypatch)
 
-    assert url == f"http://127.0.0.1:8080/?token={app.state.token}"
+    # In the fragment, which the browser never sends to the server.
+    assert url == f"http://127.0.0.1:8080/#token={app.state.token}"
     assert len(app.state.token) >= 32
 
 
@@ -100,4 +103,17 @@ def test_run_dashboard_uses_a_pinned_token_from_the_environment(tmp_path, monkey
     url, app = launch_capturing(tmp_path, monkeypatch)
 
     assert app.state.token == "pinned-token-for-my-proxy"
-    assert url.endswith("?token=pinned-token-for-my-proxy")
+    assert url.endswith("/#token=pinned-token-for-my-proxy")
+
+
+@pytest.mark.parametrize(
+    "pinned", ["too-short", "has spaces in it, sadly", "semi;colon;token;value"]
+)
+def test_run_dashboard_rejects_a_pinned_token_that_cannot_travel_safely(
+    tmp_path, monkeypatch, pinned
+):
+    monkeypatch.setenv("IPMG_WEB_TOKEN", pinned)
+    monkeypatch.setattr(server.uvicorn, "run", lambda *a, **k: None)
+
+    with pytest.raises(SystemExit, match="IPMG_WEB_TOKEN must be"):
+        server.run_dashboard(db_path=str(tmp_path / "test.db"), open_browser=False)

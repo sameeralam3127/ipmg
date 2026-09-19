@@ -7,25 +7,23 @@ const BASE = "/api/v1";
 // static experience locally without starting a scanner.
 const useDemo = location.hostname.endsWith(".github.io") || new URLSearchParams(location.search).has("demo");
 
-// `ipmg web` opens the page as /?token=…. Keep the token for API calls (and
-// for other tabs until the server restarts with a new one), then drop it from
-// the address bar so it does not linger in the visible URL.
+// `ipmg web` opens the page as /#token=…. A URL fragment is never sent to the
+// server, so the token stays out of access logs and proxies. Keep it for API
+// calls (and for other tabs until the server restarts with a new one), then
+// swap the fragment for the home route. This module runs before the router.
 const TOKEN_KEY = "ipmg-token";
 const token = useDemo ? "" : takeToken();
 
 function takeToken() {
-  const params = new URLSearchParams(location.search);
-  const fromUrl = params.get("token");
-  if (fromUrl) {
+  const match = location.hash.match(/^#token=([A-Za-z0-9._~-]+)$/);
+  if (match) {
     try {
-      localStorage.setItem(TOKEN_KEY, fromUrl);
+      localStorage.setItem(TOKEN_KEY, match[1]);
     } catch {
       /* storage blocked: the token lives for this page only */
     }
-    params.delete("token");
-    const query = params.toString();
-    history.replaceState(null, "", `${location.pathname}${query ? `?${query}` : ""}${location.hash}`);
-    return fromUrl;
+    history.replaceState(null, "", `${location.pathname}${location.search}#/`);
+    return match[1];
   }
   try {
     return localStorage.getItem(TOKEN_KEY) || "";
@@ -34,11 +32,10 @@ function takeToken() {
   }
 }
 
-// Links and the WebSocket cannot send headers, so they carry ?token=.
-const withToken = (url) => `${url}${url.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}`;
+const authHeader = () => ({ Authorization: `Bearer ${token}` });
 
 async function request(path, options = {}) {
-  const headers = { ...(options.headers || {}), Authorization: `Bearer ${token}` };
+  const headers = { ...(options.headers || {}), ...authHeader() };
   const response = await fetch(`${BASE}${path}`, { ...options, headers });
   if (!response.ok) {
     let detail = `${response.status} ${response.statusText}`;
@@ -79,12 +76,38 @@ export const api = {
     form.append("file", file);
     return useDemo ? demo.upload(file) : request("/upload", { method: "POST", body: form });
   },
-  reportUrl: (id, fmt) => useDemo ? demo.reportUrl(id, fmt) : withToken(`${BASE}/scans/${id}/report?fmt=${fmt}`),
+  reportUrl: (id, fmt) => useDemo ? demo.reportUrl(id, fmt) : `${BASE}/scans/${id}/report?fmt=${fmt}`,
   diff: (id, { baseline, latencyThreshold, latencyPct } = {}) =>
     useDemo ? Promise.resolve(demo.diff(id, { baseline, latencyThreshold, latencyPct })) : request(`/scans/${id}/diff${diffQuery({ baseline, latencyThreshold, latencyPct })}`),
   diffReportUrl: (id, fmt, options = {}) =>
-    useDemo ? demo.diffReportUrl(id, fmt, options) : withToken(`${BASE}/scans/${id}/diff/report?fmt=${fmt}${diffQuery(options).replace("?", "&")}`),
+    useDemo ? demo.diffReportUrl(id, fmt, options) : `${BASE}/scans/${id}/diff/report?fmt=${fmt}${diffQuery(options).replace("?", "&")}`,
+  download,
 };
+
+// Report links need the token too, so fetch them with the header and save
+// the response, rather than navigating to a URL that would have to carry it.
+async function download(url) {
+  if (url.startsWith("data:")) {
+    saveHref(url, "");
+    return;
+  }
+  const response = await fetch(url, { headers: authHeader() });
+  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+  const disposition = response.headers.get("Content-Disposition") || "";
+  const name = (disposition.match(/filename="([^"]+)"/) || [])[1] || "ipmg-report";
+  const objectUrl = URL.createObjectURL(await response.blob());
+  saveHref(objectUrl, name);
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 10000);
+}
+
+function saveHref(href, name) {
+  const link = document.createElement("a");
+  link.href = href;
+  link.download = name;
+  document.body.append(link);
+  link.click();
+  link.remove();
+}
 
 function diffQuery({ baseline, latencyThreshold, latencyPct } = {}) {
   const params = new URLSearchParams();
@@ -120,7 +143,9 @@ export function connect() {
     return;
   }
   const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-  socket = new WebSocket(withToken(`${protocol}//${location.host}${BASE}/ws`));
+  // Browsers cannot set headers on a WebSocket, so the token rides in the
+  // subprotocol list; the server answers with the plain "ipmg" protocol.
+  socket = new WebSocket(`${protocol}//${location.host}${BASE}/ws`, ["ipmg", `ipmg.token.${token}`]);
   setConnState("connecting");
 
   socket.onopen = () => {

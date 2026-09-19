@@ -390,7 +390,7 @@ ipmg web               # starts http://127.0.0.1:8080 and opens your browser
 `ipmg --web` does the same thing, so whichever one you reach for first works.
 
 Each start creates a new access token. The browser opens with it already in
-the link, and IPMG Web prints that link (`http://127.0.0.1:8080/?token=…`)
+the link, and IPMG Web prints that link (`http://127.0.0.1:8080/#token=…`)
 in the terminal. If you open IPMG Web in another browser, or after a
 restart, use the link from the terminal. To keep the same token across
 restarts, for example behind a reverse proxy, set `IPMG_WEB_TOKEN`.
@@ -424,7 +424,7 @@ it from your workstation with an SSH tunnel:
 
 ```bash
 ssh -L 8080:127.0.0.1:8080 user@server
-# then open the link the server printed (http://127.0.0.1:8080/?token=…) locally
+# then open the link the server printed (http://127.0.0.1:8080/#token=…) locally
 ```
 
 Alternatively, bind to all interfaces with `--host 0.0.0.0`. Every request

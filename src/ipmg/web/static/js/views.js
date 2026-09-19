@@ -19,6 +19,22 @@ function h(tag, attrs = {}, ...children) {
   return node;
 }
 
+// A download button: the file is fetched with the access token, then saved.
+function downloadLink(url, label) {
+  return h(
+    "a",
+    {
+      class: "ghost-btn",
+      href: url,
+      onclick: (event) => {
+        event.preventDefault();
+        api.download(url).catch((error) => toast(`Download failed: ${error.message}`, "error"));
+      },
+    },
+    label
+  );
+}
+
 function toast(message, tone = "success") {
   const region = document.getElementById("toast-region");
   if (!region) return;
@@ -529,11 +545,7 @@ export async function changesView(root, targetId, baselineId) {
 
     exports.replaceChildren(
       ...DIFF_FORMATS.map((fmt) =>
-        h(
-          "a",
-          { class: "ghost-btn", href: api.diffReportUrl(Number(target.value), fmt, options), download: "" },
-          fmt.toUpperCase()
-        )
+        downloadLink(api.diffReportUrl(Number(target.value), fmt, options), fmt.toUpperCase())
       )
     );
 
@@ -589,7 +601,7 @@ export async function scanDetailView(root, scanId) {
 
   for (const fmt of REPORT_FORMATS) {
     toolbar.append(
-      h("a", { class: "ghost-btn", href: api.reportUrl(scan.id, fmt), download: "" }, fmt.toUpperCase())
+      downloadLink(api.reportUrl(scan.id, fmt), fmt.toUpperCase())
     );
   }
 

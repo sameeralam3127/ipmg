@@ -386,7 +386,7 @@ through an SSH tunnel from your workstation:
 ipmg web --no-browser
 
 # on your workstation, then open the link the server printed
-# (http://127.0.0.1:8080/?token=…)
+# (http://127.0.0.1:8080/#token=…)
 ssh -L 8080:127.0.0.1:8080 user@server
 ```
 

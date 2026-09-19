@@ -9,6 +9,9 @@ from fastapi.testclient import TestClient
 from ipmg.web.app import _render_report, create_app
 from ipmg.web.db import Database
 
+#: What the browser offers: the plain protocol plus the token-carrying one.
+WS_AUTH = ["ipmg", "ipmg.token.test-token"]
+
 
 @pytest.fixture()
 def client(tmp_path, monkeypatch):
@@ -148,13 +151,13 @@ def test_cancel_requires_running_scan(client):
 def test_websocket_rejects_cross_origin(client):
     with pytest.raises(Exception):
         with client.websocket_connect(
-            "/api/v1/ws?token=test-token", headers={"origin": "http://evil.example"}
+            "/api/v1/ws", subprotocols=WS_AUTH, headers={"origin": "http://evil.example"}
         ) as websocket:
             websocket.receive_json()
 
 
 def test_websocket_receives_scan_events(client):
-    with client.websocket_connect("/api/v1/ws?token=test-token") as websocket:
+    with client.websocket_connect("/api/v1/ws", subprotocols=WS_AUTH) as websocket:
         scan_id = client.post("/api/v1/scans", json={"targets": "10.0.0.1"}).json()["id"]
 
         events = [websocket.receive_json() for _ in range(3)]
@@ -275,9 +278,21 @@ def test_api_rejects_a_wrong_token(anonymous):
     assert response.status_code == 401
 
 
-def test_api_accepts_the_token_as_a_query_parameter(anonymous):
-    # Download links cannot send headers, so ?token= must work too.
-    assert anonymous.get("/api/v1/stats?token=test-token").status_code == 200
+def test_api_refuses_a_token_in_the_query_string(anonymous):
+    # URLs end up in access logs and browser history, so they never authenticate.
+    assert anonymous.get("/api/v1/stats?token=test-token").status_code == 401
+
+
+def test_websocket_accepts_a_bearer_header_from_non_browser_clients(anonymous):
+    headers = {"Authorization": "Bearer test-token"}
+    with anonymous.websocket_connect("/api/v1/ws", headers=headers) as websocket:
+        assert websocket.accepted_subprotocol is None
+
+
+def test_websocket_answers_with_the_plain_subprotocol(anonymous):
+    # The token-carrying protocol must never be echoed back.
+    with anonymous.websocket_connect("/api/v1/ws", subprotocols=WS_AUTH) as websocket:
+        assert websocket.accepted_subprotocol == "ipmg"
 
 
 def test_frontend_loads_without_a_token(anonymous):
@@ -285,9 +300,14 @@ def test_frontend_loads_without_a_token(anonymous):
     assert anonymous.get("/").status_code == 200
 
 
-def test_websocket_rejects_a_missing_token(anonymous):
+@pytest.mark.parametrize(
+    "subprotocols",
+    [None, ["ipmg"], ["ipmg", "ipmg.token.wrong"]],
+    ids=["none", "no-token", "wrong-token"],
+)
+def test_websocket_rejects_a_missing_or_wrong_token(anonymous, subprotocols):
     with pytest.raises(Exception):
-        with anonymous.websocket_connect("/api/v1/ws") as websocket:
+        with anonymous.websocket_connect("/api/v1/ws", subprotocols=subprotocols) as websocket:
             websocket.receive_json()
 
 
@@ -304,7 +324,7 @@ def test_websocket_closes_a_subscriber_that_falls_behind(client):
     from ipmg.web.manager import OVERFLOW
 
     manager = client.app.state.manager
-    with client.websocket_connect("/api/v1/ws?token=test-token") as websocket:
+    with client.websocket_connect("/api/v1/ws", subprotocols=WS_AUTH) as websocket:
         deadline = time.time() + 5
         while not manager._subscribers and time.time() < deadline:
             time.sleep(0.01)

@@ -11,6 +11,11 @@ from ipmg.core.portscan import DEFAULT_PORTS, scan_ports
 from ipmg.exceptions import PingError
 from ipmg.utils.helpers import HostnameCache, clamp_int
 
+#: Upper bound on TCP connect probes in flight across a whole scan. Every host
+#: worker shares this one pool, so --scan-ports cannot create
+#: threads x ports probe threads.
+MAX_PORT_PROBE_WORKERS = 128
+
 
 @dataclass(frozen=True)
 class ScanConfig:
@@ -65,9 +70,16 @@ def execute_scan(
     cache = HostnameCache(config.dns_cache_ttl) if config.resolve else None
     results: List[HostResult] = []
 
+    port_executor: Optional[concurrent.futures.ThreadPoolExecutor] = None
+    if config.scan_ports and config.ports:
+        port_executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=min(MAX_PORT_PROBE_WORKERS, config.threads * len(config.ports)),
+            thread_name_prefix="ipmg-port",
+        )
+
     executor = concurrent.futures.ThreadPoolExecutor(max_workers=config.threads)
     try:
-        futures = [executor.submit(_probe_host, ip, config, cache) for ip in ips]
+        futures = [executor.submit(_probe_host, ip, config, cache, port_executor) for ip in ips]
 
         for future in concurrent.futures.as_completed(futures):
             if should_stop is not None and should_stop():
@@ -91,16 +103,23 @@ def execute_scan(
         raise
     finally:
         executor.shutdown(wait=True)
+        if port_executor is not None:
+            port_executor.shutdown(wait=True)
 
     return results
 
 
-def _probe_host(ip: str, config: ScanConfig, cache: Optional[HostnameCache]) -> HostResult:
+def _probe_host(
+    ip: str,
+    config: ScanConfig,
+    cache: Optional[HostnameCache],
+    port_executor: Optional[concurrent.futures.Executor],
+) -> HostResult:
     """Ping one host, then resolve its name and probe its ports.
 
-    Runs on a pool worker, so reverse DNS and port probes are spread across
-    ``config.threads`` workers instead of running one host at a time on the
-    thread that collects results.
+    Runs on a pool worker, so reverse DNS is spread across ``config.threads``
+    workers instead of running one host at a time on the thread that collects
+    results. Port probes go to the scan's shared, bounded ``port_executor``.
     """
     try:
         status, latency = ping_ip(ip, config.timeout, config.count)
@@ -112,7 +131,9 @@ def _probe_host(ip: str, config: ScanConfig, cache: Optional[HostnameCache]) -> 
     hostname = cache.resolve(ip) if cache else ""
     open_ports: Tuple[int, ...] = ()
     if config.scan_ports and status == "Active":
-        open_ports = tuple(scan_ports(ip, config.ports, config.port_timeout))
+        open_ports = tuple(
+            scan_ports(ip, config.ports, config.port_timeout, executor=port_executor)
+        )
 
     return HostResult(
         ip=ip, status=status, latency=latency, hostname=hostname, open_ports=open_ports

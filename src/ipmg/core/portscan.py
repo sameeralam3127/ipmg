@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import concurrent.futures
 import socket
-from typing import Iterable, List, Tuple
+from typing import Iterable, List, Optional, Tuple
 
 #: Common services worth a quick TCP connect once a host is known to be up.
 DEFAULT_PORTS: Tuple[int, ...] = (21, 22, 25, 53, 80, 443, 445, 1433, 3306, 3389, 5432)
@@ -65,18 +65,27 @@ def parse_port_list(value: str) -> Tuple[int, ...]:
     return tuple(ports)
 
 
-def scan_ports(ip: str, ports: Iterable[int], timeout: float = 1.0) -> List[int]:
-    """Probe ``ports`` on ``ip`` concurrently; return the ones that accepted a connection."""
+def scan_ports(
+    ip: str,
+    ports: Iterable[int],
+    timeout: float = 1.0,
+    executor: Optional[concurrent.futures.Executor] = None,
+) -> List[int]:
+    """Probe ``ports`` on ``ip`` concurrently; return the ones that accepted a connection.
+
+    Pass ``executor`` to share one bounded pool across many hosts; otherwise a
+    pool with one worker per port is created for this call.
+    """
     ports = list(ports)
     if not ports:
         return []
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=len(ports)) as executor:
-        futures = {executor.submit(_probe, ip, port, timeout): port for port in ports}
-        open_ports = [
-            futures[future]
-            for future in concurrent.futures.as_completed(futures)
-            if future.result()
-        ]
+    if executor is None:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(ports)) as own:
+            return scan_ports(ip, ports, timeout, executor=own)
 
+    futures = {executor.submit(_probe, ip, port, timeout): port for port in ports}
+    open_ports = [
+        futures[future] for future in concurrent.futures.as_completed(futures) if future.result()
+    ]
     return sorted(open_ports)
