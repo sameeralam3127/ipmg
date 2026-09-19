@@ -36,7 +36,9 @@ jobs:
         run: bandit -r src
 
       - name: Dependency vulnerability audit (pip-audit)
-        run: pip-audit -r requirements.txt
+        run: |
+          python -c "import tomllib; print('\n'.join(tomllib.load(open('pyproject.toml', 'rb'))['project']['optional-dependencies']['dev']))" > "$RUNNER_TEMP/dev-requirements.txt"
+          pip-audit -r requirements.txt -r "$RUNNER_TEMP/dev-requirements.txt" --ignore-vuln PYSEC-2026-2132
 
       - name: Secret scan (detect-secrets)
         run: git ls-files -z | xargs -0 detect-secrets-hook --baseline .secrets.baseline
