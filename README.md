@@ -23,7 +23,8 @@ doubled. It writes the report you would otherwise build by hand.
 [How it compares](#how-it-compares)
 
 **Website:** [sameeralam3127.github.io/ipmg](https://sameeralam3127.github.io/ipmg/) ·
-**Live demo:** [IPMG Web with sample data](https://sameeralam3127.github.io/ipmg/demo/)
+**Live demo:** [IPMG Web with sample data](https://sameeralam3127.github.io/ipmg/demo/) ·
+**Command builder:** [pick what you want, copy the command](https://sameeralam3127.github.io/ipmg/#builder)
 
 ```bash
 pip install ipmg
@@ -264,6 +265,19 @@ exist yet. A file you name with `--input` must already exist.
 ---
 
 ## Common tasks
+
+Not sure which flags you need? The
+[command builder](https://sameeralam3127.github.io/ipmg/#builder) on the
+website puts the command together as you pick what you want to know, and
+explains every flag it adds.
+
+<p align="center">
+  <a href="https://sameeralam3127.github.io/ipmg/#builder">
+    <img src="https://raw.githubusercontent.com/sameeralam3127/ipmg/main/docs/assets/ipmg-builder.png" alt="IPMG command builder: choose Scan, Compare, History, or Web, enter a target such as 192.168.1.0/24, switch on options like live results or hostnames, and copy the generated ipmg command with each flag explained" width="820">
+  </a>
+</p>
+
+Or pick a ready-made command:
 
 | I want to… | Command |
 | --- | --- |
