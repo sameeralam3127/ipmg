@@ -68,7 +68,7 @@ AUTH_ERROR = (
 #: WebSocket subprotocol the server answers with. Browsers cannot set headers
 #: on a WebSocket, so the client offers ``ipmg`` plus ``ipmg.token.<token>``.
 WS_SUBPROTOCOL = "ipmg"
-_WS_TOKEN_PREFIX = "ipmg.token."
+_WS_AUTH_PREFIX = "ipmg.token."
 
 
 def _bearer_token(headers: Mapping[str, str]) -> Optional[str]:
@@ -89,8 +89,8 @@ def _websocket_token(websocket: WebSocket) -> Optional[str]:
     if token is not None:
         return token
     for protocol in websocket.scope.get("subprotocols", []):
-        if protocol.startswith(_WS_TOKEN_PREFIX):
-            return protocol[len(_WS_TOKEN_PREFIX) :]
+        if protocol.startswith(_WS_AUTH_PREFIX):
+            return protocol[len(_WS_AUTH_PREFIX) :]
     return None
 
 
