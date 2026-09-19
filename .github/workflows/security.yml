@@ -36,7 +36,7 @@ jobs:
         run: bandit -r src
 
       - name: Dependency vulnerability audit (pip-audit)
-        run: pip-audit -r requirements.txt
+        run: pip-audit -r requirements.txt . -e dev
 
       - name: Secret scan (detect-secrets)
         run: git ls-files -z | xargs -0 detect-secrets-hook --baseline .secrets.baseline
