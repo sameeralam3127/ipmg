@@ -57,6 +57,27 @@ def test_execute_scan_resolves_hostnames_when_enabled(monkeypatch):
     assert results[0].hostname == "host-10.0.0.1"
 
 
+def test_execute_scan_resolves_hostnames_in_parallel_on_workers(monkeypatch):
+    # Four lookups must be in flight at once to get past the barrier; if they
+    # ran one at a time on the collecting thread, the barrier would time out.
+    barrier = threading.Barrier(4, timeout=5)
+    resolver_threads = set()
+
+    def slow_lookup(ip):
+        resolver_threads.add(threading.current_thread())
+        barrier.wait()
+        return (f"host-{ip}", [], [ip])
+
+    monkeypatch.setattr("ipmg.core.engine.ping_ip", lambda *_a: ("Active", 1.0))
+    monkeypatch.setattr("ipmg.utils.helpers.socket.gethostbyaddr", slow_lookup)
+
+    ips = [f"10.0.0.{n}" for n in range(1, 5)]
+    results = execute_scan(ips, ScanConfig(resolve=True, threads=4))
+
+    assert sorted(r.hostname for r in results) == [f"host-{ip}" for ip in ips]
+    assert threading.current_thread() not in resolver_threads
+
+
 def test_execute_scan_stops_early_when_requested(monkeypatch):
     monkeypatch.setattr("ipmg.core.engine.ping_ip", lambda *_a: ("Active", 1.0))
 

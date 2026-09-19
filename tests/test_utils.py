@@ -102,3 +102,15 @@ def test_spreadsheet_escape_leaves_plain_values_untouched(value):
 
 def test_markdown_cell_escapes_pipes_and_formulas():
     assert markdown_cell("=SUM(A1)|x") == r"'=SUM(A1)\|x"
+
+
+def test_hostname_cache_treats_unexpected_lookup_errors_as_unresolvable(monkeypatch):
+    def broken_lookup(_ip):
+        raise UnicodeError("label too long")
+
+    monkeypatch.setattr("ipmg.utils.helpers.socket.gethostbyaddr", broken_lookup)
+    cache = HostnameCache()
+
+    assert cache.resolve("10.0.0.1") == "Unresolvable"
+    # The in-flight marker was released, so a second call returns at once.
+    assert cache.resolve("10.0.0.1") == "Unresolvable"

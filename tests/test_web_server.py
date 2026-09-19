@@ -66,3 +66,38 @@ def test_run_dashboard_opens_browser_when_display_available(tmp_path, monkeypatc
     server.run_dashboard(db_path=str(tmp_path / "test.db"))
 
     assert len(timers) == 1
+
+
+def launch_capturing(tmp_path, monkeypatch):
+    """Run run_dashboard without serving; return (opened URL, app passed to uvicorn)."""
+    monkeypatch.setattr(server, "_has_display", lambda: True)
+    served = {}
+    monkeypatch.setattr(server.uvicorn, "run", lambda app, **_k: served.setdefault("app", app))
+    opened = []
+
+    class FakeTimer:
+        def __init__(self, _delay, _fn, args=()):
+            opened.extend(args)
+
+        def start(self):
+            pass
+
+    monkeypatch.setattr(server.threading, "Timer", FakeTimer)
+    server.run_dashboard(db_path=str(tmp_path / "test.db"))
+    return opened[0], served["app"]
+
+
+def test_run_dashboard_opens_the_browser_with_the_access_token(tmp_path, monkeypatch):
+    monkeypatch.delenv("IPMG_WEB_TOKEN", raising=False)
+    url, app = launch_capturing(tmp_path, monkeypatch)
+
+    assert url == f"http://127.0.0.1:8080/?token={app.state.token}"
+    assert len(app.state.token) >= 32
+
+
+def test_run_dashboard_uses_a_pinned_token_from_the_environment(tmp_path, monkeypatch):
+    monkeypatch.setenv("IPMG_WEB_TOKEN", "pinned-token-for-my-proxy")
+    url, app = launch_capturing(tmp_path, monkeypatch)
+
+    assert app.state.token == "pinned-token-for-my-proxy"
+    assert url.endswith("?token=pinned-token-for-my-proxy")

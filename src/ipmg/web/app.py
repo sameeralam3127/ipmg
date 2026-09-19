@@ -9,14 +9,15 @@ from __future__ import annotations
 import asyncio
 import io
 import json
+import secrets
 import tempfile
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Mapping, Optional
 from urllib.parse import urlsplit
 
 import pandas as pd
-from fastapi import APIRouter, FastAPI, HTTPException, UploadFile, WebSocket
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, UploadFile, WebSocket
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -38,7 +39,7 @@ from ipmg.infrastructure.file_io import (
 from ipmg.reporting.diff_report import DIFF_FORMATS, render_diff
 from ipmg.reporting.frames import results_dataframe
 from ipmg.services.history_service import HistoryService
-from ipmg.web.manager import ScanManager
+from ipmg.web.manager import OVERFLOW, ScanManager
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -57,6 +58,46 @@ DIFF_MEDIA_TYPES = {fmt: REPORT_MEDIA_TYPES[fmt] for fmt in DIFF_FORMATS}
 
 #: Hostnames that count as "this machine" when checking WebSocket origins.
 _LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+
+AUTH_ERROR = (
+    "Missing or invalid access token. Open IPMG Web with the link that "
+    "'ipmg web' printed when it started."
+)
+
+
+def _supplied_token(headers: Mapping[str, str], query: Mapping[str, str]) -> Optional[str]:
+    """The token from an ``Authorization: Bearer`` header, or ``?token=``.
+
+    The query parameter exists for what cannot send headers: download links
+    and the browser's WebSocket constructor.
+    """
+    scheme, _, credentials = headers.get("authorization", "").partition(" ")
+    if scheme.lower() == "bearer" and credentials:
+        return credentials.strip()
+    return query.get("token")
+
+
+def _token_valid(supplied: Optional[str], expected: str) -> bool:
+    return supplied is not None and secrets.compare_digest(
+        supplied.encode("utf-8"), expected.encode("utf-8")
+    )
+
+
+def _require_token(expected: str) -> Callable[[Request], None]:
+    """FastAPI dependency that rejects API requests without the access token.
+
+    Every API route requires it, on loopback too: it stops other users on the
+    machine, web pages attempting CSRF, and DNS-rebinding attacks from driving
+    the scanner, and makes a non-loopback --host safe to use.
+    """
+
+    def check(request: Request) -> None:
+        if not _token_valid(_supplied_token(request.headers, request.query_params), expected):
+            raise HTTPException(
+                status_code=401, detail=AUTH_ERROR, headers={"WWW-Authenticate": "Bearer"}
+            )
+
+    return check
 
 
 class ScanRequest(BaseModel):
@@ -335,10 +376,11 @@ def _origin_allowed(websocket: WebSocket) -> bool:
     return origin_host in _LOOPBACK_HOSTS and server_host in _LOOPBACK_HOSTS
 
 
-def _register_websocket(app: FastAPI, manager: ScanManager) -> None:
+def _register_websocket(app: FastAPI, manager: ScanManager, token: str) -> None:
     @app.websocket("/api/v1/ws")
     async def websocket_events(websocket: WebSocket) -> None:
-        if not _origin_allowed(websocket):
+        supplied = _supplied_token(websocket.headers, websocket.query_params)
+        if not _origin_allowed(websocket) or not _token_valid(supplied, token):
             await websocket.close(code=1008)
             return
 
@@ -348,6 +390,10 @@ def _register_websocket(app: FastAPI, manager: ScanManager) -> None:
         async def forward_events() -> None:
             while True:
                 event = await queue.get()
+                if event is OVERFLOW:
+                    # 1013 "try again later": the client fell too far behind.
+                    await websocket.close(code=1013)
+                    return
                 await websocket.send_json(event)
 
         forward_task = asyncio.create_task(forward_events())
@@ -363,8 +409,10 @@ def _register_websocket(app: FastAPI, manager: ScanManager) -> None:
             manager.unsubscribe(queue)
 
 
-def create_app(db: Optional[Database] = None) -> FastAPI:
+def create_app(db: Optional[Database] = None, token: Optional[str] = None) -> FastAPI:
+    """Build the app. ``token`` guards every API route; a random one is made if omitted."""
     database = db if db is not None else Database(DEFAULT_DB_PATH)
+    token = token or secrets.token_urlsafe(32)
     manager = ScanManager(database)
     history = HistoryService(database)
 
@@ -377,8 +425,9 @@ def create_app(db: Optional[Database] = None) -> FastAPI:
     app.state.db = database
     app.state.manager = manager
     app.state.history = history
+    app.state.token = token
 
-    api = APIRouter(prefix="/api/v1")
+    api = APIRouter(prefix="/api/v1", dependencies=[Depends(_require_token(token))])
     _register_overview_routes(api, database)
     _register_scan_routes(api, database, manager)
     _register_report_routes(api, database)
@@ -386,7 +435,7 @@ def create_app(db: Optional[Database] = None) -> FastAPI:
     _register_upload_route(api)
     app.include_router(api)
 
-    _register_websocket(app, manager)
+    _register_websocket(app, manager, token)
 
     if STATIC_DIR.is_dir():
         app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")

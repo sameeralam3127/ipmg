@@ -1,7 +1,7 @@
 // Page views for the IPMG dashboard. Each view renders into the <main> node.
 
-import { api, onEvent } from "./api.js?v=20260911.1";
-import { STATUS_COLORS, latencyTrend, statusDonut } from "./charts.js?v=20260911.1";
+import { api, onEvent } from "./api.js?v=20260920.1";
+import { STATUS_COLORS, latencyTrend, statusDonut } from "./charts.js?v=20260920.1";
 
 const REPORT_FORMATS = ["xlsx", "csv", "json", "md"];
 
@@ -388,6 +388,11 @@ export async function monitorView(root, scanId) {
   redraw();
 
   const unsubscribe = onEvent((event) => {
+    if (event.type === "reconnected") {
+      // Missed events would leave the counts short: re-render from the API.
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
+      return;
+    }
     if (event.scan_id !== scan.id) return;
     if (event.type === "result") {
       completed = event.completed;

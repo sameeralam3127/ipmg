@@ -389,6 +389,12 @@ ipmg web               # starts http://127.0.0.1:8080 and opens your browser
 
 `ipmg --web` does the same thing, so whichever one you reach for first works.
 
+Each start creates a new access token. The browser opens with it already in
+the link, and IPMG Web prints that link (`http://127.0.0.1:8080/?token=…`)
+in the terminal. If you open IPMG Web in another browser, or after a
+restart, use the link from the terminal. To keep the same token across
+restarts, for example behind a reverse proxy, set `IPMG_WEB_TOKEN`.
+
 It runs fully offline — every stylesheet and script is bundled with the
 package, nothing is loaded from a CDN. It gives you:
 
@@ -418,12 +424,13 @@ it from your workstation with an SSH tunnel:
 
 ```bash
 ssh -L 8080:127.0.0.1:8080 user@server
-# then open http://127.0.0.1:8080 locally
+# then open the link the server printed (http://127.0.0.1:8080/?token=…) locally
 ```
 
-Alternatively, bind to all interfaces with `--host 0.0.0.0` — this exposes an
-unauthenticated API on the network, so only do this on a trusted network or
-behind a reverse proxy with authentication (see [Security](#security)).
+Alternatively, bind to all interfaces with `--host 0.0.0.0`. Every request
+still needs the access token. The traffic, token included, is plain HTTP,
+so on anything but a trusted network put a reverse proxy with TLS in front
+of it (see [Security](#security)).
 
 ---
 
@@ -565,15 +572,18 @@ itself is hardened accordingly:
   validated as an IP address first
 - IPMG Web binds to `127.0.0.1` by default and serves everything
   locally — no CDN assets, no outbound requests
-- WebSocket connections are origin-checked, so a web page you happen to
-  visit cannot connect to your local IPMG Web and read your scan results
+- Every API request and WebSocket needs the access token created when
+  IPMG Web starts, so other users on the machine and web pages you happen
+  to visit cannot start scans or read your results
+- WebSocket connections are also origin-checked, and a client that stops
+  reading live updates is disconnected rather than buffered without limit
 - Uploads are capped at 5 MB and one scan expands to at most 65,536 hosts,
   so a bad input file cannot exhaust memory
 - All database access uses parameterized SQL
 
-If you bind to a non-local address with `--host`, anyone who can reach that
-interface can start scans and read results — put a reverse proxy with
-authentication in front of it.
+If you bind to a non-local address with `--host`, the token still guards the
+API. It travels over plain HTTP, though, so use an SSH tunnel or a reverse
+proxy with TLS on any network you don't trust.
 
 Found a vulnerability? See [SECURITY.md](SECURITY.md) for how to report it.
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ipaddress
 import os
+import secrets
 import sys
 import threading
 import webbrowser
@@ -49,13 +50,17 @@ def run_dashboard(
     db_path: Optional[str] = None,
 ) -> None:
     database = Database(Path(db_path) if db_path else DEFAULT_DB_PATH)
-    app = create_app(database)
-    url = f"http://{_display_host(host)}:{port}"
+    # IPMG_WEB_TOKEN pins the token (e.g. behind a reverse proxy or in a
+    # service); otherwise every start gets a fresh one, like Jupyter.
+    token = os.environ.get("IPMG_WEB_TOKEN", "").strip() or secrets.token_urlsafe(32)
+    app = create_app(database, token)
+    base_url = f"http://{_display_host(host)}:{port}"
+    url = f"{base_url}/?token={token}"
 
     ui.blank()
     ui.fields(
         [
-            ("Local", url),
+            ("Open", url),
             ("History", database.path),
         ]
     )
@@ -68,9 +73,16 @@ def run_dashboard(
     elif open_browser:
         threading.Timer(1.0, webbrowser.open, args=(url,)).start()
 
+    ui.note("The link carries this session's access token; the API refuses requests without it.")
     if _is_loopback(host):
-        ui.note(f"Remote access: ssh -L {port}:127.0.0.1:{port} user@this-host, then open {url}.")
-        ui.note("Or run with --host 0.0.0.0 (exposes an unauthenticated API — see SECURITY.md).")
+        ui.note(
+            f"Remote access: ssh -L {port}:127.0.0.1:{port} user@this-host, then open the link."
+        )
+    else:
+        ui.note(
+            "Listening beyond this machine over plain HTTP: anyone who can see the traffic "
+            "can read the token. Prefer an SSH tunnel, or a reverse proxy with TLS (see SECURITY.md)."
+        )
 
     ui.blank()
 

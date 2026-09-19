@@ -13,7 +13,15 @@ from ipmg.web.db import Database
 @pytest.fixture()
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr("ipmg.core.engine.ping_ip", lambda ip, _t, _c: ("Active", 1.5))
-    app = create_app(Database(tmp_path / "api.db"))
+    app = create_app(Database(tmp_path / "api.db"), token="test-token")
+    with TestClient(app, headers={"Authorization": "Bearer test-token"}) as test_client:
+        yield test_client
+
+
+@pytest.fixture()
+def anonymous(tmp_path):
+    """A client that sends no access token."""
+    app = create_app(Database(tmp_path / "anon.db"), token="test-token")
     with TestClient(app) as test_client:
         yield test_client
 
@@ -140,13 +148,13 @@ def test_cancel_requires_running_scan(client):
 def test_websocket_rejects_cross_origin(client):
     with pytest.raises(Exception):
         with client.websocket_connect(
-            "/api/v1/ws", headers={"origin": "http://evil.example"}
+            "/api/v1/ws?token=test-token", headers={"origin": "http://evil.example"}
         ) as websocket:
             websocket.receive_json()
 
 
 def test_websocket_receives_scan_events(client):
-    with client.websocket_connect("/api/v1/ws") as websocket:
+    with client.websocket_connect("/api/v1/ws?token=test-token") as websocket:
         scan_id = client.post("/api/v1/scans", json={"targets": "10.0.0.1"}).json()["id"]
 
         events = [websocket.receive_json() for _ in range(3)]
@@ -242,3 +250,67 @@ def test_report_rendering_neutralizes_formula_cells():
     assert xlsx.loc[0, "Hostname"] == "'=cmd|'/c calc'!A1"
 
     assert rb"'=cmd\|'/c calc'!A1" in _render_report(df, "md")
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("get", "/api/v1/stats"),
+        ("get", "/api/v1/scans"),
+        ("get", "/api/v1/assets"),
+        ("post", "/api/v1/scans"),
+        ("delete", "/api/v1/scans/1"),
+        ("post", "/api/v1/scans/1/cancel"),
+        ("post", "/api/v1/upload"),
+    ],
+)
+def test_api_rejects_requests_without_a_token(anonymous, method, path):
+    response = getattr(anonymous, method)(path)
+    assert response.status_code == 401
+    assert "access token" in response.json()["detail"]
+
+
+def test_api_rejects_a_wrong_token(anonymous):
+    response = anonymous.get("/api/v1/stats", headers={"Authorization": "Bearer nope"})
+    assert response.status_code == 401
+
+
+def test_api_accepts_the_token_as_a_query_parameter(anonymous):
+    # Download links cannot send headers, so ?token= must work too.
+    assert anonymous.get("/api/v1/stats?token=test-token").status_code == 200
+
+
+def test_frontend_loads_without_a_token(anonymous):
+    # The page itself holds no data; it needs the token only for API calls.
+    assert anonymous.get("/").status_code == 200
+
+
+def test_websocket_rejects_a_missing_token(anonymous):
+    with pytest.raises(Exception):
+        with anonymous.websocket_connect("/api/v1/ws") as websocket:
+            websocket.receive_json()
+
+
+def test_create_app_generates_a_token_when_none_is_given(tmp_path):
+    first = create_app(Database(tmp_path / "a.db"))
+    second = create_app(Database(tmp_path / "b.db"))
+    assert len(first.state.token) >= 32
+    assert first.state.token != second.state.token
+
+
+def test_websocket_closes_a_subscriber_that_falls_behind(client):
+    from starlette.websockets import WebSocketDisconnect
+
+    from ipmg.web.manager import OVERFLOW
+
+    manager = client.app.state.manager
+    with client.websocket_connect("/api/v1/ws?token=test-token") as websocket:
+        deadline = time.time() + 5
+        while not manager._subscribers and time.time() < deadline:
+            time.sleep(0.01)
+        (queue,) = manager._subscribers
+        manager._loop.call_soon_threadsafe(queue.put_nowait, OVERFLOW)
+
+        with pytest.raises(WebSocketDisconnect) as closed:
+            websocket.receive_json()
+    assert closed.value.code == 1013

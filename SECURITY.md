@@ -27,19 +27,18 @@ explicit authorization — unauthorized scanning may violate your
 organization's policies or the law.
 
 IPMG Web is designed for local use: it binds to `127.0.0.1` by
-default, origin-checks WebSocket connections, caps uploads and target
-expansion, and uses parameterized SQL throughout. It intentionally has no
-built-in authentication, so exposing it on a non-local interface without a
-reverse proxy in front is outside the supported threat model.
+default, requires an access token (random per start, or `IPMG_WEB_TOKEN`)
+on every API request and WebSocket, origin-checks WebSocket connections,
+disconnects live-update clients that stop reading, caps uploads and target
+expansion, and uses parameterized SQL throughout. It serves plain HTTP, so
+on a non-local interface put a reverse proxy with TLS in front of it.
 
 ## Known Issues
 
-Tracked hardening items — see the linked issues for details:
-
-- IPMG Web REST API has no authentication; keep it on `127.0.0.1` and do not
-  expose it beyond localhost ([#21](https://github.com/sameeralam3127/ipmg/issues/21))
-- Unbounded live-event buffering, only reachable when IPMG Web is exposed
-  remotely ([#23](https://github.com/sameeralam3127/ipmg/issues/23))
+There are no known open security issues. Earlier hardening items (API
+authentication, [#21](https://github.com/sameeralam3127/ipmg/issues/21); bounded
+live-event buffering, [#23](https://github.com/sameeralam3127/ipmg/issues/23))
+are fixed.
 
 Please do not open a new public issue for anything already listed here. For
 anything not listed, report it privately via the

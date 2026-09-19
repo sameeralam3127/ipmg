@@ -67,30 +67,18 @@ def execute_scan(
 
     executor = concurrent.futures.ThreadPoolExecutor(max_workers=config.threads)
     try:
-        futures = {executor.submit(ping_ip, ip, config.timeout, config.count): ip for ip in ips}
+        futures = [executor.submit(_probe_host, ip, config, cache) for ip in ips]
 
         for future in concurrent.futures.as_completed(futures):
             if should_stop is not None and should_stop():
                 executor.shutdown(wait=False, cancel_futures=True)
                 break
 
-            ip = futures[future]
             try:
-                status, latency = future.result()
+                result = future.result()
             except PingError:
                 executor.shutdown(wait=False, cancel_futures=True)
                 raise
-            except Exception:
-                status, latency = "Error", None
-
-            hostname = cache.resolve(ip) if cache else ""
-            open_ports: Tuple[int, ...] = ()
-            if config.scan_ports and status == "Active":
-                open_ports = tuple(scan_ports(ip, config.ports, config.port_timeout))
-
-            result = HostResult(
-                ip=ip, status=status, latency=latency, hostname=hostname, open_ports=open_ports
-            )
             results.append(result)
 
             if on_result is not None:
@@ -105,3 +93,27 @@ def execute_scan(
         executor.shutdown(wait=True)
 
     return results
+
+
+def _probe_host(ip: str, config: ScanConfig, cache: Optional[HostnameCache]) -> HostResult:
+    """Ping one host, then resolve its name and probe its ports.
+
+    Runs on a pool worker, so reverse DNS and port probes are spread across
+    ``config.threads`` workers instead of running one host at a time on the
+    thread that collects results.
+    """
+    try:
+        status, latency = ping_ip(ip, config.timeout, config.count)
+    except PingError:
+        raise
+    except Exception:
+        status, latency = "Error", None
+
+    hostname = cache.resolve(ip) if cache else ""
+    open_ports: Tuple[int, ...] = ()
+    if config.scan_ports and status == "Active":
+        open_ports = tuple(scan_ports(ip, config.ports, config.port_timeout))
+
+    return HostResult(
+        ip=ip, status=status, latency=latency, hostname=hostname, open_ports=open_ports
+    )
