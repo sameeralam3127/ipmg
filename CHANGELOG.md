@@ -2,6 +2,33 @@
 
 <!-- version list -->
 
+## v2.1.1 (2026-09-19)
+
+### Bug Fixes
+
+- **web**: Keep the access token out of URLs, and bound port-probe threads
+  ([#78](https://github.com/sameeralam3127/ipmg/pull/78),
+  [`4dc1347`](https://github.com/sameeralam3127/ipmg/commit/4dc134739efc20e530366c92f531dedb16273929))
+
+- **web**: Rename the WebSocket auth prefix constant to satisfy bandit B105
+  ([#78](https://github.com/sameeralam3127/ipmg/pull/78),
+  [`4dc1347`](https://github.com/sameeralam3127/ipmg/commit/4dc134739efc20e530366c92f531dedb16273929))
+
+- **web**: Require an access token for IPMG Web, bound live-update buffers, and parallelize reverse
+  DNS ([#78](https://github.com/sameeralam3127/ipmg/pull/78),
+  [`4dc1347`](https://github.com/sameeralam3127/ipmg/commit/4dc134739efc20e530366c92f531dedb16273929))
+
+- **web**: Require an access token, bound live-update buffers, and parallelize reverse DNS
+  ([#78](https://github.com/sameeralam3127/ipmg/pull/78),
+  [`4dc1347`](https://github.com/sameeralam3127/ipmg/commit/4dc134739efc20e530366c92f531dedb16273929))
+
+### Continuous Integration
+
+- Add tox for running the CI checks locally, drop the Codecov upload
+  ([#77](https://github.com/sameeralam3127/ipmg/pull/77),
+  [`095785f`](https://github.com/sameeralam3127/ipmg/commit/095785f656d97f8abf8bea18c786a33491f0ff2d))
+
+
 ## v2.1.0 (2026-09-19)
 
 ### Bug Fixes
