@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v2.2.0 (2026-09-23)
+
+### Features
+
+- **reports**: Resume an interrupted scan from its partial report
+  ([#80](https://github.com/sameeralam3127/ipmg/pull/80),
+  [`2442ac0`](https://github.com/sameeralam3127/ipmg/commit/2442ac0fe5149961efe869baae5d21c2321d7c09))
+
+
 ## v2.1.1 (2026-09-19)
 
 ### Bug Fixes
