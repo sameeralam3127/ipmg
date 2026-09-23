@@ -111,7 +111,8 @@ def heading(title: str) -> None:
 def field(label: str, value: object, value_style: str = "ipmg.value") -> None:
     """One aligned ``label   value`` line."""
     text = Text(INDENT)
-    text.append(f"{label:<{LABEL_WIDTH}}", style="ipmg.label")
+    # A label as long as the column still gets one space before its value.
+    text.append(f"{label:<{LABEL_WIDTH - 1}} ", style="ipmg.label")
     text.append(str(value), style=value_style)
     console.print(text)
 

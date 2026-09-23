@@ -17,23 +17,32 @@ writes at the end of the pass, which is why the scan shares its timestamp with
 the writer. A completed scan overwrites every snapshot with the canonical
 report, so incremental writing changes what survives an interruption without
 changing what a finished scan produces.
+
+That partial report is also where an interrupted scan picks up again:
+:func:`load_partial_report` reads the hosts it already holds, and ``--resume``
+scans only the rest, writing to the same files under the same timestamp.
 """
 
 from __future__ import annotations
 
+import io
 import json
 import logging
+import math
 import os
+import re
 import time
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
-from typing import IO, Dict, List, Optional, Sequence
+from typing import IO, Dict, List, Optional, Sequence, Set, Tuple
 
 import pandas as pd
 
 from ipmg.core.engine import HostResult
+from ipmg.exceptions import FileIOError
 from ipmg.reporting.frames import RESULT_COLUMNS, format_open_ports
-from ipmg.utils.helpers import spreadsheet_escape
+from ipmg.utils.helpers import FORMULA_PREFIXES, spreadsheet_escape
 
 log = logging.getLogger(__name__)
 
@@ -48,6 +57,12 @@ REPORT_FORMATS = ("xlsx", "csv", "json", "jsonl", "md")
 STREAMING_FORMATS = ("csv", "jsonl")
 #: Formats that only exist as a whole file, so they are re-snapshotted.
 SNAPSHOT_FORMATS = ("xlsx", "json", "md")
+#: Formats a scan can be resumed from, most faithful first. ``md`` only
+#: previews the first 25 hosts, so it cannot stand in for the whole report.
+RESUMABLE_FORMATS = ("jsonl", "csv", "json", "xlsx")
+
+#: ``<base>_<YYYYMMDD_HHMMSS>.<format>``, the name every report is saved under.
+_REPORT_NAME = re.compile(r"^(?P<prefix>.+)_(?P<timestamp>\d{8}_\d{6})\.(?P<fmt>[a-z]+)$")
 
 
 @dataclass(frozen=True)
@@ -120,6 +135,7 @@ class IncrementalReport:
         batch_timestamp: object,
         options: IncrementalOptions = IncrementalOptions(),
         previous: Optional[Sequence[HostResult]] = None,
+        previous_elapsed_s: float = 0.0,
     ) -> None:
         self.options = options.clamped()
         self._base = base
@@ -127,13 +143,17 @@ class IncrementalReport:
         self._batch_timestamp = batch_timestamp
         self._formats = [fmt for fmt in dict.fromkeys(formats)]
         self._results: List[HostResult] = list(previous or ())
+        # Resumed rows keep the time the earlier run had reached, and new rows
+        # count on from it, so a report interrupted twice still knows how long
+        # the whole scan has taken.
         self._rows: List[Dict[str, object]] = [
-            result_row(result, batch_timestamp, None) for result in self._results
+            result_row(result, batch_timestamp, previous_elapsed_s if previous else None)
+            for result in self._results
         ]
         self._handles: Dict[str, IO[str]] = {}
         self._written: Dict[str, None] = {}
-        self._started_at = time.monotonic()
-        self._last_snapshot = self._started_at
+        self._started_at = time.monotonic() - previous_elapsed_s
+        self._last_snapshot = time.monotonic()
         self._closed = False
 
     # -- lifecycle ---------------------------------------------------------
@@ -257,6 +277,194 @@ class IncrementalReport:
             except OSError as exc:  # pragma: no cover - disk failure
                 log.debug("incremental %s close failed: %s", fmt, exc)
         self._handles.clear()
+
+
+@dataclass(frozen=True)
+class PartialReport:
+    """The hosts an interrupted scan left in its report, ready to resume."""
+
+    path: str
+    #: The ``--output`` prefix and timestamp the report was saved under, so a
+    #: resumed scan writes back to the same files.
+    base: str
+    timestamp: str
+    results: Tuple[HostResult, ...]
+    batch_timestamp: Optional[datetime]
+    #: How long the earlier run had been scanning when it stopped.
+    elapsed_s: float
+
+    @property
+    def scanned(self) -> Set[str]:
+        return {result.ip for result in self.results}
+
+
+def find_partial_report(base: str) -> Optional[str]:
+    """The newest report saved under ``base`` that a scan can resume from.
+
+    When one scan left several formats behind, the most faithful one wins:
+    ``jsonl`` and ``csv`` hold every host up to the moment of interruption,
+    while ``json`` and ``xlsx`` are only as recent as their last autosave.
+    """
+    directory = Path(base).parent
+    prefix = Path(base).name
+    candidates = []
+    try:
+        entries = list(directory.iterdir())
+    except OSError:
+        return None
+    for entry in entries:
+        match = _REPORT_NAME.match(entry.name)
+        if not match or match["prefix"] != prefix or match["fmt"] not in RESUMABLE_FORMATS:
+            continue
+        rank = RESUMABLE_FORMATS.index(match["fmt"])
+        candidates.append((match["timestamp"], -rank, str(entry)))
+    return max(candidates)[2] if candidates else None
+
+
+def load_partial_report(path: str) -> PartialReport:
+    """Read the hosts a report already holds, including one cut off mid-write."""
+    name = _REPORT_NAME.match(Path(path).name)
+    if name is None:
+        raise FileIOError(
+            f"Cannot resume from {path}: expected a report named like "
+            "results_20260917_120000.jsonl, as IPMG saves them."
+        )
+    fmt = name["fmt"]
+    if fmt not in RESUMABLE_FORMATS:
+        raise FileIOError(
+            f"Cannot resume from a .{fmt} report; use the "
+            f"{', '.join(RESUMABLE_FORMATS)} report from the same scan instead."
+        )
+
+    try:
+        frame = _read_report(path, fmt)
+    except FileNotFoundError:
+        raise FileIOError(f"Report to resume not found: {path}") from None
+    except (OSError, ValueError) as exc:
+        raise FileIOError(f"Cannot read report {path}: {exc}") from exc
+
+    missing = [column for column in ("IP Address", "Status") if column not in frame.columns]
+    if missing:
+        raise FileIOError(f"{path} is not an IPMG report: missing {', '.join(missing)}.")
+
+    # A spreadsheet format stores cells escaped against formula injection;
+    # the scan itself needs the text the host actually reported.
+    unescape = fmt in ("csv", "xlsx")
+    by_ip: Dict[str, HostResult] = {}
+    for row in frame.to_dict(orient="records"):
+        result = _row_result(row, unescape)
+        if result is not None:
+            by_ip[result.ip] = result
+
+    base = str(Path(path).parent / name["prefix"])
+    return PartialReport(
+        path=path,
+        base=base,
+        timestamp=name["timestamp"],
+        results=tuple(by_ip.values()),
+        batch_timestamp=_batch_timestamp(frame),
+        elapsed_s=_elapsed(frame),
+    )
+
+
+def _read_report(path: str, fmt: str) -> pd.DataFrame:
+    if fmt == "xlsx":
+        return pd.read_excel(path, dtype=object)
+    if fmt == "json":
+        with open(path, encoding="utf-8") as handle:
+            return pd.DataFrame(json.load(handle))
+
+    with open(path, encoding="utf-8", newline="") as handle:
+        text = handle.read()
+    # Rows are flushed whole, so a last line without its newline is one the
+    # previous run was killed while writing. It is dropped, and that host is
+    # simply scanned again.
+    if text and not text.endswith("\n"):
+        text = text[: text.rfind("\n") + 1]
+
+    if fmt == "csv":
+        if not text.strip():
+            return pd.DataFrame(columns=RESULT_COLUMNS)
+        return pd.read_csv(io.StringIO(text), dtype=str, keep_default_na=False)
+
+    records = []
+    for number, line in enumerate(text.splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            records.append(json.loads(line))
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"line {number} is not valid JSON ({exc.msg})") from None
+    return pd.DataFrame(records)
+
+
+def _is_blank(value: object) -> bool:
+    return value is None or (isinstance(value, float) and math.isnan(value)) or value == ""
+
+
+def _text(value: object, unescape: bool = False) -> str:
+    if _is_blank(value):
+        return ""
+    text = str(value).strip()
+    if unescape and text.startswith("'") and text[1:].startswith(FORMULA_PREFIXES):
+        return text[1:]
+    return text
+
+
+def _latency(value: object) -> Optional[float]:
+    if _is_blank(value):
+        return None
+    try:
+        return float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+
+
+def _open_ports(value: object) -> Tuple[int, ...]:
+    ports = []
+    for piece in _text(value).split(","):
+        try:
+            ports.append(int(float(piece)))
+        except ValueError:
+            continue
+    return tuple(ports)
+
+
+def _row_result(row: Dict[str, object], unescape: bool) -> Optional[HostResult]:
+    ip = _text(row.get("IP Address"))
+    status = _text(row.get("Status"))
+    if not ip or not status:
+        return None
+    return HostResult(
+        ip=ip,
+        status=status,
+        latency=_latency(row.get("Latency")),
+        hostname=_text(row.get("Hostname"), unescape),
+        open_ports=_open_ports(row.get("Open Ports")),
+    )
+
+
+def _batch_timestamp(frame: pd.DataFrame) -> Optional[datetime]:
+    """The resumed scan's start time, so both runs report as one batch."""
+    if "Batch Timestamp" not in frame.columns:
+        return None
+    for value in frame["Batch Timestamp"]:
+        if _is_blank(value):
+            continue
+        try:
+            # A finished json report stores it as epoch milliseconds.
+            unit = "ms" if isinstance(value, (int, float)) else None
+            return pd.to_datetime(value, unit=unit).to_pydatetime()
+        except (TypeError, ValueError, OverflowError):
+            return None
+    return None
+
+
+def _elapsed(frame: pd.DataFrame) -> float:
+    if "Scan Duration (s)" not in frame.columns:
+        return 0.0
+    durations = pd.to_numeric(frame["Scan Duration (s)"], errors="coerce").dropna()
+    return float(durations.max()) if not durations.empty else 0.0
 
 
 def atomic_write_bytes(path: str, data: bytes) -> None:

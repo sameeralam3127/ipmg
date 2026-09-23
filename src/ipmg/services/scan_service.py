@@ -15,7 +15,7 @@ from ipmg.core.diff import DiffOptions
 from ipmg.core.discovery import discover_local_subnet
 from ipmg.core.engine import HostResult, ScanConfig, execute_scan
 from ipmg.core.portscan import DEFAULT_PORTS
-from ipmg.exceptions import HistoryError
+from ipmg.exceptions import FileIOError, HistoryError
 from ipmg.infrastructure.file_io import (
     DEFAULT_INPUT_FILE,
     create_sample_file,
@@ -26,6 +26,9 @@ from ipmg.infrastructure.incremental import (
     DEFAULT_AUTOSAVE_S,
     IncrementalOptions,
     IncrementalReport,
+    PartialReport,
+    find_partial_report,
+    load_partial_report,
 )
 from ipmg.reporting import ui
 from ipmg.reporting.diff_report import export_diff, print_diff
@@ -49,6 +52,8 @@ class ScanOutcome:
     source: str
     #: File-name stamp shared by the incremental writes and the final report.
     timestamp: str
+    #: Report file name prefix; a resumed scan keeps the one it started with.
+    output: str
 
 
 @dataclass(frozen=True)
@@ -86,6 +91,20 @@ def _incremental_options(args) -> IncrementalOptions:
         enabled=not bool(getattr(args, "no_incremental", False)),
         autosave_s=float(getattr(args, "autosave", DEFAULT_AUTOSAVE_S)),
     ).clamped()
+
+
+def _load_resume(args) -> Optional[PartialReport]:
+    """The partial report ``--resume`` points at, or the newest one for ``--output``."""
+    target = getattr(args, "resume", None)
+    if target is None:
+        return None
+    path = target or find_partial_report(args.output)
+    if path is None:
+        raise FileIOError(
+            f"No report to resume: nothing named {args.output}_<timestamp>.<format> "
+            "was found. Pass the report's path, as in --resume results_20260917_120000.jsonl."
+        )
+    return load_partial_report(path)
 
 
 def _stream_options(args) -> StreamOptions:
@@ -175,18 +194,32 @@ def _scan_with_progress(
 def _open_report(
     args,
     incremental: IncrementalOptions,
+    output: str,
     timestamp: str,
     batch_timestamp: datetime,
+    previous: List[HostResult],
+    previous_elapsed_s: float,
 ) -> Optional[IncrementalReport]:
     """Start writing this pass's report, unless incremental writing is off."""
     if not incremental.enabled or not args.formats:
         return None
     return IncrementalReport(
-        base=args.output,
+        base=output,
         formats=args.formats,
         timestamp=timestamp,
         batch_timestamp=batch_timestamp,
         options=incremental,
+        previous=previous,
+        previous_elapsed_s=previous_elapsed_s,
+    )
+
+
+def _announce_resume(resume: PartialReport, done: int, total: int) -> None:
+    ui.fields(
+        [
+            ("Resuming", resume.path),
+            ("Left", f"{ui.plural(total - done, 'host')} of {total} still to scan"),
+        ]
     )
 
 
@@ -224,18 +257,32 @@ def _run_single_pass(
     config: ScanConfig,
     stream: StreamOptions,
     incremental: IncrementalOptions,
+    resume: Optional[PartialReport] = None,
 ) -> ScanOutcome:
-    batch_timestamp = current_timestamp()
-    timestamp = timestamp_str()
+    batch_timestamp = (resume and resume.batch_timestamp) or current_timestamp()
+    timestamp = resume.timestamp if resume else timestamp_str()
+    output = resume.base if resume else args.output
     started_at = time.perf_counter()
 
     ip_list = discover_local_subnet() if args.discover else load_targets(args.input)
     source = "auto-discovery" if args.discover else args.input
 
+    # Hosts the earlier run finished are kept only if they are still targets,
+    # so resuming against an edited list never reports hosts it no longer has.
+    targets = set(ip_list)
+    previous = [result for result in resume.results if result.ip in targets] if resume else []
+    previous_elapsed_s = resume.elapsed_s if resume else 0.0
+    scanned = {result.ip for result in previous}
+    remaining = [ip for ip in ip_list if ip not in scanned]
+
     _print_configuration(source, len(ip_list), config)
-    report = _open_report(args, incremental, timestamp, batch_timestamp)
-    results = _run_pass(ip_list, config, stream, report)
-    duration = time.perf_counter() - started_at
+    if resume:
+        _announce_resume(resume, len(previous), len(ip_list))
+    report = _open_report(
+        args, incremental, output, timestamp, batch_timestamp, previous, previous_elapsed_s
+    )
+    results = previous + _run_pass(remaining, config, stream, report)
+    duration = previous_elapsed_s + time.perf_counter() - started_at
 
     return ScanOutcome(
         results=results,
@@ -244,6 +291,7 @@ def _run_single_pass(
         duration_s=duration,
         source=source,
         timestamp=timestamp,
+        output=output,
     )
 
 
@@ -306,14 +354,18 @@ def run_scan(args) -> None:
     stream = _stream_options(args)
     incremental = _incremental_options(args)
     _ensure_input_file(args)
+    resume = _load_resume(args)
 
     while True:
-        outcome = _run_single_pass(args, config, stream, incremental)
+        outcome = _run_single_pass(args, config, stream, incremental, resume)
+        # Only the first pass picks up where an earlier run stopped; every
+        # --interval pass after it is a fresh scan.
+        resume = None
 
         print_summary(outcome.frame, outcome.batch_timestamp, outcome.duration_s)
         # Overwrites whatever the incremental writer left on those same paths,
         # so a finished scan produces exactly the report it always did.
-        save_results(outcome.frame, args.output, args.formats, timestamp=outcome.timestamp)
+        save_results(outcome.frame, outcome.output, args.formats, timestamp=outcome.timestamp)
         _store_and_compare(history_options, config, outcome)
 
         if not args.interval:
