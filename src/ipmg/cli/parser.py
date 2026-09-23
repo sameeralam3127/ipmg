@@ -219,6 +219,18 @@ def build_parser() -> argparse.ArgumentParser:
             "csv and jsonl are written per host regardless."
         ),
     )
+    reports.add_argument(
+        "--resume",
+        nargs="?",
+        const="",
+        default=None,
+        metavar="REPORT",
+        help=(
+            "Finish an interrupted scan: skip the hosts its report already holds and "
+            "complete that report. REPORT is its jsonl, csv, json, or xlsx file "
+            "(default: the newest report named after --output)."
+        ),
+    )
 
     live = parser.add_argument_group("live output")
     live.add_argument(

@@ -495,6 +495,21 @@ default). A finished scan overwrites those files with the complete report, so
 the file names and contents are the same as they always were. Use
 `--no-incremental` to go back to writing only at the end.
 
+**Pick up where an interrupted scan stopped.** `--resume` reads the hosts the
+partial report already holds, scans only the rest, and finishes that same
+report — same file names, same batch timestamp:
+
+```bash
+ipmg --input 10.0.0.0/16 --formats jsonl xlsx     # Ctrl+C partway through
+ipmg --input 10.0.0.0/16 --formats jsonl xlsx --resume
+ipmg --input 10.0.0.0/16 --resume results_20260917_120000.csv
+```
+
+Without a path, `--resume` takes the newest report named after `--output`,
+preferring `jsonl` or `csv` (current to the last host) over `json` or `xlsx`
+(current to the last autosave). Hosts dropped from the target list since are
+left out of the finished report.
+
 **Open ports.** `Open Ports` is only populated when `--scan-ports` is set: for
 each host that answers, IPMG probes a list of common TCP ports (SSH, HTTP,
 HTTPS, RDP, SMB, FTP, SMTP, DNS, MSSQL, MySQL, PostgreSQL by default)
@@ -525,6 +540,7 @@ them — so piping IPMG into a file or a log gives you clean text.
 | `--formats` | `xlsx` | One or more of `xlsx`, `csv`, `json`, `jsonl`, `md` |
 | `--no-incremental` | off | Only write the report once the scan has finished |
 | `--autosave` | `30` | How often a running scan re-saves `xlsx`, `json`, and `md` |
+| `--resume` | off | Finish an interrupted scan from its partial report (newest one, or the path given) |
 
 **Speed and accuracy**
 

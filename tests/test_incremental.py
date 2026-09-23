@@ -7,11 +7,14 @@ import pandas as pd
 import pytest
 
 from ipmg.core.engine import HostResult
+from ipmg.exceptions import FileIOError
 from ipmg.infrastructure.file_io import save_results, write_report
 from ipmg.infrastructure.incremental import (
     IncrementalOptions,
     IncrementalReport,
     atomic_write_bytes,
+    find_partial_report,
+    load_partial_report,
 )
 from ipmg.services.scan_service import run_scan
 from ipmg.utils.helpers import console
@@ -225,3 +228,163 @@ def test_finished_scan_writes_one_set_of_reports(tmp_path, monkeypatch):
     assert sorted(row["IP Address"] for row in rows) == ["1.1.1.1", "8.8.8.8"]
     # Every row carries the duration of the whole pass, as it did before.
     assert len({row["Scan Duration (s)"] for row in rows}) == 1
+
+
+# -- resuming an interrupted scan ---------------------------------------------
+
+
+def _pinged(calls):
+    def ping_ip(ip, _timeout, _count):
+        calls.append(ip)
+        return "Active", 2.0
+
+    return ping_ip
+
+
+def _interrupt_first_run(tmp_path, monkeypatch, targets, stop_at, **overrides):
+    monkeypatch.setattr("ipmg.services.scan_service.load_targets", lambda _source: targets)
+    monkeypatch.setattr("ipmg.core.engine.ping_ip", _interrupted_ping(stop_at))
+    with pytest.raises(KeyboardInterrupt):
+        run_scan(_scan_args(tmp_path, **overrides))
+
+
+def test_resume_scans_only_the_hosts_left(tmp_path, monkeypatch):
+    targets = ["8.8.8.8", "1.1.1.1", "9.9.9.9"]
+    _interrupt_first_run(tmp_path, monkeypatch, targets, "1.1.1.1")
+    (partial,) = tmp_path.glob("scan_*.csv")
+
+    calls = []
+    monkeypatch.setattr("ipmg.core.engine.ping_ip", _pinged(calls))
+    run_scan(_scan_args(tmp_path, resume=str(partial)))
+
+    assert sorted(calls) == ["1.1.1.1", "9.9.9.9"]
+    # The finished report lands on the file the interrupted run started.
+    assert list(tmp_path.glob("scan_*.csv")) == [partial]
+    rows = list(csv.DictReader(open(partial, encoding="utf-8")))
+    assert sorted(row["IP Address"] for row in rows) == sorted(targets)
+    assert len({row["Batch Timestamp"] for row in rows}) == 1
+    assert len({row["Scan Duration (s)"] for row in rows}) == 1
+
+
+def test_resume_without_a_path_picks_the_newest_report(tmp_path, monkeypatch):
+    (tmp_path / "scan_20200101_000000.jsonl").write_text(
+        json.dumps({"IP Address": "1.1.1.1", "Status": "Active"}) + "\n", encoding="utf-8"
+    )
+    _interrupt_first_run(
+        tmp_path, monkeypatch, ["8.8.8.8", "1.1.1.1"], "1.1.1.1", formats=["jsonl", "xlsx"]
+    )
+
+    calls = []
+    monkeypatch.setattr("ipmg.core.engine.ping_ip", _pinged(calls))
+    run_scan(_scan_args(tmp_path, formats=["jsonl", "xlsx"], resume=""))
+
+    # The older report lists 1.1.1.1 as done; the newer one, which wins, does not.
+    assert calls == ["1.1.1.1"]
+
+
+def test_resume_with_no_report_to_find_is_an_error(tmp_path):
+    with pytest.raises(FileIOError, match="No report to resume"):
+        run_scan(_scan_args(tmp_path, resume=""))
+
+
+def test_interrupting_a_resumed_scan_keeps_both_runs(tmp_path, monkeypatch):
+    targets = ["8.8.8.8", "1.1.1.1", "9.9.9.9"]
+    _interrupt_first_run(tmp_path, monkeypatch, targets, "1.1.1.1", formats=["jsonl"])
+    (partial,) = tmp_path.glob("scan_*.jsonl")
+
+    monkeypatch.setattr(
+        "ipmg.services.scan_service.load_targets", lambda _source: ["8.8.8.8", "9.9.9.9", "1.1.1.1"]
+    )
+    with pytest.raises(KeyboardInterrupt):
+        run_scan(_scan_args(tmp_path, formats=["jsonl"], resume=str(partial)))
+
+    resumed = load_partial_report(str(partial))
+    assert sorted(resumed.scanned) == ["8.8.8.8", "9.9.9.9"]
+
+
+def test_resume_drops_hosts_no_longer_targeted(tmp_path, monkeypatch):
+    partial = tmp_path / "scan_20260917_120000.jsonl"
+    partial.write_text(
+        "".join(
+            json.dumps({"IP Address": ip, "Status": "Active", "Batch Timestamp": BATCH}) + "\n"
+            for ip in ("8.8.8.8", "10.0.0.1")
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "ipmg.services.scan_service.load_targets", lambda _source: ["8.8.8.8", "1.1.1.1"]
+    )
+    monkeypatch.setattr("ipmg.core.engine.ping_ip", _pinged([]))
+
+    run_scan(_scan_args(tmp_path, formats=["jsonl"], resume=str(partial)))
+
+    rows = [json.loads(line) for line in partial.read_text(encoding="utf-8").splitlines()]
+    assert sorted(row["IP Address"] for row in rows) == ["1.1.1.1", "8.8.8.8"]
+    assert {row["Batch Timestamp"] for row in rows} == {BATCH}
+
+
+def test_load_drops_a_line_cut_off_mid_write(tmp_path):
+    partial = tmp_path / "scan_20260917_120000.jsonl"
+    partial.write_text(
+        json.dumps({"IP Address": "8.8.8.8", "Status": "Active", "Scan Duration (s)": 4.5})
+        + '\n{"IP Address": "1.1.1.1", "Sta',
+        encoding="utf-8",
+    )
+
+    loaded = load_partial_report(str(partial))
+
+    assert [result.ip for result in loaded.results] == ["8.8.8.8"]
+    assert loaded.elapsed_s == 4.5
+    assert loaded.base == str(tmp_path / "scan")
+    assert loaded.timestamp == "20260917_120000"
+
+
+@pytest.mark.parametrize("fmt", ["csv", "xlsx", "json"])
+def test_load_round_trips_every_field(tmp_path, fmt):
+    original = HostResult(
+        ip="8.8.8.8",
+        status="Active",
+        latency=12.5,
+        hostname="=evil.example",
+        open_ports=(22, 443),
+    )
+    with _report(tmp_path, [fmt]) as report:
+        report.record(original)
+        report.record(_result("1.1.1.1", "Timeout", None))
+        report.snapshot()
+
+    loaded = load_partial_report(report.path_for(fmt))
+
+    # Spreadsheet formats store the hostname escaped; the scan gets it back as-is.
+    assert loaded.results[0] == original
+    assert loaded.results[1].latency is None
+    assert str(loaded.batch_timestamp) == BATCH
+
+
+@pytest.mark.parametrize(
+    "name, message",
+    [
+        ("scan_20260917_120000.md", "Cannot resume from a .md report"),
+        ("notes.jsonl", "expected a report named like"),
+        ("scan_20260917_999999.csv", "not found"),
+    ],
+)
+def test_load_rejects_what_it_cannot_resume(tmp_path, name, message):
+    if not name.endswith(".csv"):
+        (tmp_path / name).write_text("", encoding="utf-8")
+
+    with pytest.raises(FileIOError, match=message):
+        load_partial_report(str(tmp_path / name))
+
+
+def test_find_prefers_the_most_complete_format(tmp_path):
+    for name in (
+        "scan_20260917_120000.xlsx",
+        "scan_20260917_120000.jsonl",
+        "other_20990101_000000.csv",
+    ):
+        (tmp_path / name).write_text("", encoding="utf-8")
+
+    assert find_partial_report(str(tmp_path / "scan")) == str(
+        tmp_path / "scan_20260917_120000.jsonl"
+    )

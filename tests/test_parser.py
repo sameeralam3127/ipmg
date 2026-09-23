@@ -55,3 +55,13 @@ def test_parser_accepts_streaming_flags():
 
     assert args.stream_all is True
     assert args.stream_refresh == 1.0
+
+
+def test_parser_resume_takes_an_optional_report():
+    parser = build_parser()
+
+    assert parser.parse_args([]).resume is None
+    assert parser.parse_args(["--resume"]).resume == ""
+    assert parser.parse_args(["--resume", "scan_20260917_120000.csv"]).resume == (
+        "scan_20260917_120000.csv"
+    )
