@@ -9,8 +9,6 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import List, Optional, Tuple
 
-import pandas as pd
-
 from ipmg.core.diff import DiffOptions
 from ipmg.core.discovery import discover_local_subnet
 from ipmg.core.engine import HostResult, ScanConfig, execute_scan
@@ -35,7 +33,7 @@ from ipmg.infrastructure.incremental import (
 from ipmg.infrastructure.notify import NotifyOptions, notify_options, send_notifications
 from ipmg.reporting import ui
 from ipmg.reporting.diff_report import export_diff, print_diff
-from ipmg.reporting.frames import results_dataframe
+from ipmg.reporting.frames import ReportTable, results_table
 from ipmg.reporting.live import DEFAULT_REFRESH_S, StreamOptions, scan_display
 from ipmg.reporting.machine import MachineOutput, MachineStream, write_array
 from ipmg.reporting.summary import print_summary
@@ -53,7 +51,7 @@ class ScanOutcome:
     """Everything one scan pass produced."""
 
     results: List[HostResult]
-    frame: pd.DataFrame
+    frame: ReportTable
     batch_timestamp: datetime
     duration_s: float
     source: str
@@ -344,7 +342,7 @@ def _run_single_pass(
 
     return ScanOutcome(
         results=results,
-        frame=results_dataframe(results, batch_timestamp, duration),
+        frame=results_table(results, batch_timestamp, duration),
         batch_timestamp=batch_timestamp,
         duration_s=duration,
         source=source,

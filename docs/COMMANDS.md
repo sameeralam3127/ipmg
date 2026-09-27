@@ -462,6 +462,10 @@ exit "$status"
 
 ## IPMG Web
 
+IPMG Web is the optional `web` extra. The one-line installers, Homebrew, and
+the Docker image include it; after a plain `pip install ipmg`, add it with
+`pip install "ipmg[web]"`.
+
 ```bash
 ipmg web                                # http://127.0.0.1:8080, opens your browser
 ipmg web --no-browser                   # don't open a browser

@@ -70,8 +70,50 @@ jobs:
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
         run: python -m build
 
+  core-install:
+    # `pip install ipmg`, no extras: the lean core must scan and write every
+    # report on its own, and must not have pulled the web stack or pandas in.
+    name: core install (no extras)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install the core only
+        run: |
+          python -m venv /tmp/core
+          /tmp/core/bin/pip install .
+
+      - name: No web stack, no pandas
+        run: |
+          for module in pandas numpy fastapi uvicorn pydantic; do
+            if /tmp/core/bin/python -c "import $module" 2>/dev/null; then
+              echo "::error::the core install pulled in $module"; exit 1
+            fi
+          done
+
+      - name: Scan and write every report format
+        run: |
+          /tmp/core/bin/ipmg --input 127.0.0.1 --no-history --output core \
+            --formats xlsx csv json jsonl md --fail-on-down
+          ls core_*.xlsx core_*.csv core_*.json core_*.jsonl core_*.md
+
+      - name: ipmg web explains the missing extra
+        run: |
+          if /tmp/core/bin/ipmg web --no-browser > web.txt 2>&1; then
+            echo "::error::ipmg web started without the web extra"; exit 1
+          fi
+          grep -q "ipmg\[web\]" web.txt
+
   release:
-    needs: test
+    needs: [test, core-install]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: pypi

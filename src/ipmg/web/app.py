@@ -8,7 +8,6 @@ The API contract (models, errors, versioning) is described in docs/API.md.
 from __future__ import annotations
 
 import asyncio
-import io
 import secrets
 import tempfile
 from contextlib import asynccontextmanager
@@ -16,7 +15,6 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Optional, Union
 from urllib.parse import urlsplit
 
-import pandas as pd
 from fastapi import (
     APIRouter,
     Depends,
@@ -44,13 +42,12 @@ from ipmg.exceptions import FileIOError, HistoryError, ReportError
 from ipmg.infrastructure.database import DEFAULT_DB_PATH, Database
 from ipmg.infrastructure.file_io import (
     SUPPORTED_INPUT_SUFFIXES,
-    build_markdown_report,
     load_targets,
     parse_manual_targets,
-    sanitize_export_frame,
+    render_report,
 )
 from ipmg.reporting.diff_report import DIFF_FORMATS, render_diff
-from ipmg.reporting.frames import results_dataframe
+from ipmg.reporting.frames import ReportTable, results_table
 from ipmg.services.history_service import HistoryService
 from ipmg.web.manager import OVERFLOW, ScanManager
 from ipmg.web.schemas import (
@@ -198,7 +195,7 @@ def _parse_scan_targets(request: ScanRequest) -> List[str]:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-def _results_dataframe(scan: Dict[str, Any], rows: List[Dict[str, Any]]) -> pd.DataFrame:
+def _results_table(scan: Dict[str, Any], rows: List[Dict[str, Any]]) -> ReportTable:
     results = [
         HostResult(
             ip=row["ip"],
@@ -209,19 +206,12 @@ def _results_dataframe(scan: Dict[str, Any], rows: List[Dict[str, Any]]) -> pd.D
         )
         for row in rows
     ]
-    return results_dataframe(results, scan["started_at"], scan["duration_s"])
+    return results_table(results, scan["started_at"], scan["duration_s"])
 
 
-def _render_report(df: pd.DataFrame, fmt: str) -> bytes:
-    if fmt == "xlsx":
-        buffer = io.BytesIO()
-        sanitize_export_frame(df).to_excel(buffer, index=False)
-        return buffer.getvalue()
-    if fmt == "csv":
-        return sanitize_export_frame(df).to_csv(index=False).encode("utf-8")
-    if fmt == "json":
-        return df.to_json(orient="records").encode("utf-8")
-    return build_markdown_report(df).encode("utf-8")
+def _render_report(table: ReportTable, fmt: str) -> bytes:
+    # The CLI's own writers, so a download matches the file a scan saves.
+    return render_report(table, fmt)
 
 
 def _parse_upload(filename: str, payload: bytes) -> List[str]:
@@ -349,8 +339,8 @@ def _register_report_routes(api: APIRouter, database: Database) -> None:
         if scan is None:
             raise HTTPException(status_code=404, detail="Scan not found")
 
-        df = _results_dataframe(scan, database.get_results(scan_id))
-        content = _render_report(df, fmt)
+        table = _results_table(scan, database.get_results(scan_id))
+        content = _render_report(table, fmt)
 
         timestamp = str(scan["started_at"]).replace(" ", "_").replace(":", "")
         filename = f"ipmg_scan_{scan_id}_{timestamp}.{fmt}"

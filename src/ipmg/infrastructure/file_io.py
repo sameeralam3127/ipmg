@@ -1,20 +1,28 @@
 from __future__ import annotations
 
+import calendar
+import csv
 import io
 import ipaddress
 import json
+import math
+import os
+from collections import Counter
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterable, Sequence
-
-import pandas as pd
+from typing import Any, Iterable, List, Sequence
 
 from ipmg.core.ping import validate_ip
 from ipmg.exceptions import FileIOError
-from ipmg.infrastructure.incremental import atomic_write_bytes, frame_rows, jsonl_record
+from ipmg.infrastructure.incremental import atomic_write_bytes, jsonl_record
 from ipmg.reporting import ui
+from ipmg.reporting.frames import ReportTable
 from ipmg.utils.helpers import markdown_cell, spreadsheet_escape, timestamp_str
 
-SUPPORTED_INPUT_SUFFIXES = {".xlsx", ".xls", ".csv", ".json", ".txt", ".list"}
+SUPPORTED_INPUT_SUFFIXES = {".xlsx", ".csv", ".json", ".txt", ".list"}
+
+#: How the xlsx report formats its timestamp column (what pandas wrote).
+_XLSX_DATETIME_FORMAT = "YYYY-MM-DD HH:MM:SS"
 MAX_EXPANDED_TARGETS = 65_536
 DEFAULT_INPUT_FILE = "ip_list.xlsx"
 
@@ -160,17 +168,45 @@ def targets_from_json(data: Any, source: str = "JSON input") -> list[str]:
     return targets
 
 
-def _load_from_dataframe(df: pd.DataFrame, source: str) -> list[str]:
-    if "IP Address" not in df.columns:
+def _load_from_rows(header: Sequence[Any], rows: Iterable[Sequence[Any]], source: str) -> list[str]:
+    """Targets from a table whose ``header`` names an ``IP Address`` column."""
+    names = [str(name).strip() if name is not None else "" for name in header]
+    if "IP Address" not in names:
         raise FileIOError(f"Input file '{source}' must contain an 'IP Address' column.")
+    index = names.index("IP Address")
 
-    values = (value.strip() for value in df["IP Address"].dropna().astype(str) if value.strip())
+    cells = (row[index] if index < len(row) else None for row in rows)
+    values = (str(cell).strip() for cell in cells if cell is not None and str(cell).strip())
     targets = _collect_targets(values, f"'{source}'", strict=False)
 
     if not targets:
         raise FileIOError(f"No valid IP targets were found in '{source}'.")
 
     return targets
+
+
+def _load_from_xlsx(path: str) -> list[str]:
+    from openpyxl import load_workbook
+
+    try:
+        workbook = load_workbook(path, read_only=True, data_only=True)
+    except Exception as exc:  # openpyxl raises a zoo of zip and XML errors
+        raise FileIOError(f"Input file '{path}' is not a readable .xlsx workbook: {exc}") from exc
+    try:
+        rows = workbook.worksheets[0].iter_rows(values_only=True)
+        header = next(rows, ())
+        return _load_from_rows(header, rows, path)
+    finally:
+        workbook.close()
+
+
+def _load_from_csv(path: str) -> list[str]:
+    # utf-8-sig: Excel saves CSV with a byte-order mark, which would otherwise
+    # glue itself to the first column's name.
+    with open(path, encoding="utf-8-sig", newline="") as handle:
+        rows = csv.reader(handle)
+        header = next(rows, [])
+        return _load_from_rows(header, rows, path)
 
 
 def _load_from_text(path: str) -> list[str]:
@@ -199,10 +235,15 @@ def load_targets(source: str) -> list[str]:
 
     if path.exists():
         suffix = path.suffix.lower()
-        if suffix in {".xlsx", ".xls"}:
-            return _load_from_dataframe(pd.read_excel(path), source)
+        if suffix == ".xlsx":
+            return _load_from_xlsx(source)
+        if suffix == ".xls":
+            raise FileIOError(
+                f"'{source}' is an Excel 97-2003 (.xls) workbook, which IPMG cannot "
+                "read. Save it as .xlsx or .csv and pass that instead."
+            )
         if suffix == ".csv":
-            return _load_from_dataframe(pd.read_csv(path), source)
+            return _load_from_csv(source)
         if suffix == ".json":
             return _load_from_json(source)
         if suffix in {".txt", ".list"}:
@@ -212,7 +253,7 @@ def load_targets(source: str) -> list[str]:
             f"Supported types: {', '.join(sorted(SUPPORTED_INPUT_SUFFIXES))}."
         )
 
-    if path.suffix.lower() in SUPPORTED_INPUT_SUFFIXES:
+    if path.suffix.lower() in SUPPORTED_INPUT_SUFFIXES | {".xls"}:
         raise FileIOError(f"Input file '{source}' was not found.")
 
     expanded = _expand_target(source.strip())
@@ -253,61 +294,64 @@ def load_all_targets(sources: Sequence[str]) -> list[str]:
     return list(merged)
 
 
+SAMPLE_TARGETS = ["8.8.8.8", "1.1.1.1"]
+
+
 def create_sample_file(path: str) -> None:
-    df = pd.DataFrame({"IP Address": ["8.8.8.8", "1.1.1.1"]})
     suffix = Path(path).suffix.lower()
 
-    if suffix == ".csv":
-        df.to_csv(path, index=False)
-        return
-
     if suffix == ".json":
-        Path(path).write_text(json.dumps(["8.8.8.8", "1.1.1.1"], indent=2) + "\n", encoding="utf-8")
+        Path(path).write_text(json.dumps(SAMPLE_TARGETS, indent=2) + "\n", encoding="utf-8")
         return
 
     if suffix in {".txt", ".list"}:
-        Path(path).write_text("8.8.8.8\n1.1.1.1\n", encoding="utf-8")
+        Path(path).write_text("\n".join(SAMPLE_TARGETS) + "\n", encoding="utf-8")
         return
 
-    df.to_excel(path, index=False)
+    sample = ReportTable([{"IP Address": ip} for ip in SAMPLE_TARGETS], columns=("IP Address",))
+    atomic_write_bytes(path, render_report(sample, "csv" if suffix == ".csv" else "xlsx"))
 
 
-def sanitize_export_frame(df: pd.DataFrame) -> pd.DataFrame:
-    """Copy ``df`` with every text cell neutralised for spreadsheet export.
+def _is_missing(value: Any) -> bool:
+    return value is None or (isinstance(value, float) and math.isnan(value))
+
+
+def sanitize_table(table: ReportTable) -> ReportTable:
+    """Copy ``table`` with every text cell neutralised for spreadsheet export.
 
     Applied to CSV and XLSX output on both the CLI and dashboard paths so a
     hostname harvested from reverse DNS cannot smuggle a formula into the
     operator's spreadsheet. See :func:`spreadsheet_escape`.
     """
-    safe = df.copy()
-    for column in safe.columns:
-        # Every column is walked rather than filtered by dtype: pandas stores
-        # text as ``object`` or ``str`` depending on the version, and numbers
-        # pass straight through the isinstance guard anyway.
-        safe[column] = safe[column].map(
-            lambda value: spreadsheet_escape(value) if isinstance(value, str) else value,
-            na_action="ignore",
-        )
-    return safe
+    return ReportTable(
+        [
+            {
+                column: spreadsheet_escape(value) if isinstance(value, str) else value
+                for column, value in row.items()
+            }
+            for row in table.rows
+        ],
+        columns=table.columns,
+    )
 
 
 def _format_markdown_value(value) -> str:
-    if pd.isna(value):
+    if _is_missing(value):
         return ""
     if isinstance(value, float):
         return f"{value:.3f}".rstrip("0").rstrip(".")
     return markdown_cell(value)
 
 
-def build_markdown_report(df: pd.DataFrame) -> str:
-    total = len(df)
-    status_counts = df["Status"].value_counts().to_dict() if "Status" in df else {}
+def build_markdown_report(table: ReportTable) -> str:
+    total = len(table)
+    # most_common keeps first-seen order among equal counts, as pandas did.
+    status_counts = dict(Counter(table.column("Status")).most_common()) if total else {}
     active = status_counts.get("Active", 0)
     active_rate = (active / total) * 100 if total else 0
-    duration = df["Scan Duration (s)"].max() if "Scan Duration (s)" in df and total else 0
-    batch_timestamp = ""
-    if "Batch Timestamp" in df and total:
-        batch_timestamp = str(df["Batch Timestamp"].iloc[0])
+    durations = [value for value in table.column("Scan Duration (s)") if not _is_missing(value)]
+    duration = max(durations) if durations else 0
+    batch_timestamp = str(table.rows[0].get("Batch Timestamp") or "") if total else ""
 
     lines = [
         "# IPMG Scan Report",
@@ -335,7 +379,7 @@ def build_markdown_report(df: pd.DataFrame) -> str:
     preview_columns = [
         column
         for column in ["IP Address", "Status", "Latency", "Hostname", "Open Ports"]
-        if column in df.columns
+        if column in table.columns
     ]
     if preview_columns:
         lines.extend(
@@ -347,10 +391,10 @@ def build_markdown_report(df: pd.DataFrame) -> str:
                 "| " + " | ".join("---" for _ in preview_columns) + " |",
             ]
         )
-        for _, row in df.head(25).iterrows():
+        for row in table.rows[:25]:
             lines.append(
                 "| "
-                + " | ".join(_format_markdown_value(row[column]) for column in preview_columns)
+                + " | ".join(_format_markdown_value(row.get(column)) for column in preview_columns)
                 + " |"
             )
 
@@ -361,35 +405,97 @@ def build_markdown_report(df: pd.DataFrame) -> str:
     return "\n".join(lines)
 
 
-def write_report(df: pd.DataFrame, path: str, fmt: str) -> None:
-    """Write ``df`` to ``path`` in one format, replacing the file atomically.
+def _xlsx_cell(value: Any) -> Any:
+    if _is_missing(value):
+        return ""  # an empty text cell, as pandas wrote a missing value
+    if isinstance(value, datetime):
+        # Excel keeps milliseconds, and so did the pandas writer before this.
+        return value.replace(microsecond=value.microsecond // 1000 * 1000)
+    return value
+
+
+def _render_xlsx(table: ReportTable) -> bytes:
+    from openpyxl import Workbook
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Sheet1"
+    sheet.append(list(table.columns))
+    for row in sanitize_table(table).rows:
+        sheet.append([_xlsx_cell(row.get(column)) for column in table.columns])
+        for cell in sheet[sheet.max_row]:
+            if isinstance(cell.value, datetime):
+                cell.number_format = _XLSX_DATETIME_FORMAT
+    buffer = io.BytesIO()
+    workbook.save(buffer)
+    return buffer.getvalue()
+
+
+def _csv_text(value: Any) -> str:
+    return "" if _is_missing(value) else str(value)
+
+
+def _render_csv(table: ReportTable) -> bytes:
+    buffer = io.StringIO()
+    # os.linesep, as pandas' to_csv used: CRLF on Windows, LF elsewhere.
+    writer = csv.writer(buffer, lineterminator=os.linesep)
+    writer.writerow(table.columns)
+    for row in sanitize_table(table).rows:
+        writer.writerow([_csv_text(row.get(column)) for column in table.columns])
+    return buffer.getvalue().encode("utf-8")
+
+
+def _json_value(value: Any) -> Any:
+    """A cell as the json report has always held it (pandas' ``to_json``)."""
+    if _is_missing(value):
+        return None
+    if isinstance(value, datetime):
+        # Epoch milliseconds, reading a naive time as UTC, exactly as before.
+        return calendar.timegm(value.timetuple()) * 1000 + value.microsecond // 1000
+    if isinstance(value, float):
+        return round(value, 10)
+    return value
+
+
+def _render_json(table: ReportTable) -> bytes:
+    records: List[dict] = [
+        {column: _json_value(row.get(column)) for column in table.columns} for row in table.rows
+    ]
+    # Compact, ASCII-only, and with "/" escaped: byte for byte the old format.
+    text = json.dumps(records, separators=(",", ":"), ensure_ascii=True).replace("/", "\\/")
+    return text.encode("utf-8")
+
+
+def render_report(table: ReportTable, fmt: str) -> bytes:
+    """``table`` rendered in one report format. Raises ValueError for an unknown one."""
+    if fmt == "xlsx":
+        return _render_xlsx(table)
+    if fmt == "csv":
+        return _render_csv(table)
+    if fmt == "json":
+        return _render_json(table)
+    if fmt == "jsonl":
+        # Rendered exactly like the lines a running scan appends to the file.
+        return "".join(jsonl_record(row) for row in table.rows).encode("utf-8")
+    if fmt == "md":
+        return build_markdown_report(table).encode("utf-8")
+    raise ValueError(f"Unsupported report format: {fmt}")
+
+
+def write_report(table: ReportTable, path: str, fmt: str) -> None:
+    """Write ``table`` to ``path`` in one format, replacing the file atomically.
 
     The whole file is rendered in memory and swapped into place, so a reader
     — or an incremental snapshot interrupted halfway — never finds a report
     that is only partly written. Raises :class:`ValueError` for an unknown
     format so callers can tell "not written" from "silently skipped".
     """
-    if fmt == "xlsx":
-        buffer = io.BytesIO()
-        sanitize_export_frame(df).to_excel(buffer, index=False)
-        data = buffer.getvalue()
-    elif fmt == "csv":
-        data = sanitize_export_frame(df).to_csv(index=False).encode("utf-8")
-    elif fmt == "json":
-        data = df.to_json(orient="records").encode("utf-8")
-    elif fmt == "jsonl":
-        # Rendered row by row rather than through pandas, so the finished file
-        # is written exactly like the one a running scan appends to.
-        data = "".join(jsonl_record(row) for row in frame_rows(df)).encode("utf-8")
-    elif fmt == "md":
-        data = build_markdown_report(df).encode("utf-8")
-    else:
-        raise ValueError(f"Unsupported report format: {fmt}")
-
-    atomic_write_bytes(path, data)
+    atomic_write_bytes(path, render_report(table, fmt))
 
 
-def save_results(df, base: str, formats: list[str], timestamp: str | None = None) -> list[str]:
+def save_results(
+    table: ReportTable, base: str, formats: list[str], timestamp: str | None = None
+) -> list[str]:
     """Write the finished report in every requested format.
 
     ``timestamp`` is passed in when a scan has already been writing reports
@@ -402,7 +508,7 @@ def save_results(df, base: str, formats: list[str], timestamp: str | None = None
     for fmt in formats:
         output_path = f"{base}_{ts}.{fmt}"
         try:
-            write_report(df, output_path, fmt)
+            write_report(table, output_path, fmt)
         except ValueError:
             continue
 

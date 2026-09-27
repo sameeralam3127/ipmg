@@ -25,6 +25,17 @@ from ipmg.services.history_service import HistoryService
 from ipmg.services.scan_service import machine_output, run_scan
 from ipmg.utils.helpers import configure_logging
 
+#: Top-level modules of the `web` extra, to tell a missing extra from a bug.
+WEB_PACKAGES = frozenset({"fastapi", "pydantic", "starlette", "uvicorn", "websockets", "multipart"})
+
+WEB_EXTRA_MISSING = (
+    "IPMG Web needs the optional 'web' packages, which this install does not have. "
+    "Add them with whichever tool installed IPMG:\n"
+    "  uv tool install --force 'ipmg[web]'\n"
+    "  pipx install --force 'ipmg[web]'\n"
+    "  pip install 'ipmg[web]'"
+)
+
 EXIT_OK = 0
 EXIT_ERROR = 1
 EXIT_CHANGES_DETECTED = 2
@@ -57,8 +68,14 @@ def _web_command(argv: List[str]) -> int:
     ui.header("web")
     print_disclaimer_once()
 
-    # Imported lazily so plain CLI scans do not pay for the web stack.
-    from ipmg.web.server import run_dashboard
+    # Imported lazily so plain CLI scans do not pay for the web stack, which
+    # is the optional `web` extra.
+    try:
+        from ipmg.web.server import run_dashboard
+    except ModuleNotFoundError as exc:
+        if exc.name not in WEB_PACKAGES:
+            raise
+        raise IPMGError(WEB_EXTRA_MISSING) from exc
 
     run_dashboard(
         host=args.host,

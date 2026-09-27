@@ -274,3 +274,33 @@ def test_diff_command_notification_misconfiguration_is_an_error(db_path, monkeyp
 
     assert exit_code == commands.EXIT_ERROR
     assert "--smtp-host" in capsys.readouterr().out
+
+
+def _block_import(monkeypatch, missing):
+    """Make importing ipmg.web.server fail as if ``missing`` were not installed."""
+    import builtins
+    import sys
+
+    real_import = builtins.__import__
+    monkeypatch.delitem(sys.modules, "ipmg.web.server", raising=False)
+
+    def fake_import(name, *args, **kwargs):
+        if name == "ipmg.web.server":
+            raise ModuleNotFoundError(f"No module named '{missing}'", name=missing)
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+
+def test_web_without_the_extra_says_how_to_add_it(monkeypatch, capsys):
+    _block_import(monkeypatch, "fastapi")
+
+    assert commands.run(["web", "--no-browser"]) == commands.EXIT_ERROR
+    assert "ipmg[web]" in capsys.readouterr().out
+
+
+def test_web_import_errors_that_are_not_the_extra_still_surface(monkeypatch):
+    _block_import(monkeypatch, "some_internal_module")
+
+    with pytest.raises(ModuleNotFoundError):
+        commands.run(["web", "--no-browser"])

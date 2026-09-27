@@ -115,6 +115,22 @@ Then check it works, on any platform:
 ipmg --version
 ```
 
+### What gets installed
+
+`pip install ipmg` is the lean core: scanning, every report format
+(Excel included), history, change detection, notifications, and exit codes.
+It is about 9 MB and 7 packages. IPMG Web, the browser UI with its REST API
+and Prometheus `/metrics`, is the optional `web` extra, because its server
+stack is most of the weight:
+
+```bash
+pip install "ipmg[web]"             # or: uv tool install "ipmg[web]", pipx install "ipmg[web]"
+```
+
+The one-line installers, Homebrew, and the Docker image install it with the
+`web` extra already. Run `ipmg web` without it and IPMG tells you the command
+that adds it.
+
 ### Installing with pip
 
 `pip install ipmg` works inside a virtual environment, and inside one only.
@@ -480,7 +496,7 @@ Anywhere IPMG takes `--input`, you can give it any of these:
   192.168.1.0/30
   ```
 
-- **An Excel or CSV file** (`.xlsx`, `.xls`, `.csv`) — must contain a column
+- **An Excel or CSV file** (`.xlsx`, `.csv`) — must contain a column
   named `IP Address`. Cells can hold single addresses or CIDR blocks:
 
   | IP Address  |

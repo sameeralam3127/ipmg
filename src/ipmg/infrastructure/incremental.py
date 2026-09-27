@@ -25,6 +25,7 @@ scans only the rest, writing to the same files under the same timestamp.
 
 from __future__ import annotations
 
+import csv
 import io
 import json
 import logging
@@ -33,15 +34,13 @@ import os
 import re
 import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import IO, Dict, List, Optional, Sequence, Set, Tuple
 
-import pandas as pd
-
 from ipmg.core.engine import HostResult
 from ipmg.exceptions import FileIOError
-from ipmg.reporting.frames import RESULT_COLUMNS, format_open_ports
+from ipmg.reporting.frames import RESULT_COLUMNS, ReportTable, format_open_ports
 from ipmg.utils.helpers import FORMULA_PREFIXES, spreadsheet_escape
 
 log = logging.getLogger(__name__)
@@ -94,16 +93,6 @@ def jsonl_record(row: Dict[str, object]) -> str:
     rather than the epoch milliseconds pandas would emit.
     """
     return json.dumps(dict(row), default=str) + "\n"
-
-
-def frame_rows(df: pd.DataFrame) -> List[Dict[str, object]]:
-    """A report DataFrame as plain dicts, with pandas' missing values as ``None``.
-
-    The one conversion used by everything that renders rows as JSON — the
-    ``jsonl`` report and ``--json``/``--jsonl`` on stdout — so a host looks the
-    same whichever of them a script reads.
-    """
-    return df.astype(object).where(pd.notna(df), None).to_dict(orient="records")
 
 
 def result_row(
@@ -260,7 +249,7 @@ class IncrementalReport:
         # snapshot indistinguishable from a finished report.
         from ipmg.infrastructure.file_io import write_report
 
-        frame = pd.DataFrame(self._rows, columns=RESULT_COLUMNS)
+        frame = ReportTable(list(self._rows))
         written: List[str] = []
         for fmt in formats:
             try:
@@ -361,7 +350,7 @@ def load_partial_report(path: str) -> PartialReport:
     # the scan itself needs the text the host actually reported.
     unescape = fmt in ("csv", "xlsx")
     by_ip: Dict[str, HostResult] = {}
-    for row in frame.to_dict(orient="records"):
+    for row in frame.rows:
         result = _row_result(row, unescape)
         if result is not None:
             by_ip[result.ip] = result
@@ -377,12 +366,12 @@ def load_partial_report(path: str) -> PartialReport:
     )
 
 
-def _read_report(path: str, fmt: str) -> pd.DataFrame:
+def _read_report(path: str, fmt: str) -> ReportTable:
     if fmt == "xlsx":
-        return pd.read_excel(path, dtype=object)
+        return _read_xlsx(path)
     if fmt == "json":
         with open(path, encoding="utf-8") as handle:
-            return pd.DataFrame(json.load(handle))
+            return _table_from_records(json.load(handle))
 
     with open(path, encoding="utf-8", newline="") as handle:
         text = handle.read()
@@ -393,9 +382,11 @@ def _read_report(path: str, fmt: str) -> pd.DataFrame:
         text = text[: text.rfind("\n") + 1]
 
     if fmt == "csv":
-        if not text.strip():
-            return pd.DataFrame(columns=RESULT_COLUMNS)
-        return pd.read_csv(io.StringIO(text), dtype=str, keep_default_na=False)
+        rows = list(csv.reader(io.StringIO(text)))
+        if not rows:
+            return ReportTable()
+        header, body = rows[0], rows[1:]
+        return ReportTable([dict(zip(header, row)) for row in body], columns=header)
 
     records = []
     for number, line in enumerate(text.splitlines(), start=1):
@@ -405,7 +396,29 @@ def _read_report(path: str, fmt: str) -> pd.DataFrame:
             records.append(json.loads(line))
         except json.JSONDecodeError as exc:
             raise ValueError(f"line {number} is not valid JSON ({exc.msg})") from None
-    return pd.DataFrame(records)
+    return _table_from_records(records)
+
+
+def _table_from_records(records: object) -> ReportTable:
+    if not isinstance(records, list) or not all(isinstance(row, dict) for row in records):
+        raise ValueError("expected a list of report rows")
+    columns = list(dict.fromkeys(key for row in records for key in row))
+    return ReportTable(records, columns=columns)
+
+
+def _read_xlsx(path: str) -> ReportTable:
+    from openpyxl import load_workbook
+
+    try:
+        workbook = load_workbook(path, read_only=True, data_only=True)
+    except Exception as exc:  # openpyxl raises a zoo of zip and XML errors
+        raise ValueError(f"not a readable .xlsx workbook ({exc})") from exc
+    try:
+        rows = workbook.worksheets[0].iter_rows(values_only=True)
+        header = [str(name) if name is not None else "" for name in next(rows, ())]
+        return ReportTable([dict(zip(header, row)) for row in rows], columns=header)
+    finally:
+        workbook.close()
 
 
 def _is_blank(value: object) -> bool:
@@ -454,27 +467,40 @@ def _row_result(row: Dict[str, object], unescape: bool) -> Optional[HostResult]:
     )
 
 
-def _batch_timestamp(frame: pd.DataFrame) -> Optional[datetime]:
+def _parse_timestamp(value: object) -> Optional[datetime]:
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        # A finished json report stores it as epoch milliseconds (naive UTC).
+        return datetime(1970, 1, 1) + timedelta(milliseconds=value)
+    return datetime.fromisoformat(str(value).strip())
+
+
+def _batch_timestamp(frame: ReportTable) -> Optional[datetime]:
     """The resumed scan's start time, so both runs report as one batch."""
     if "Batch Timestamp" not in frame.columns:
         return None
-    for value in frame["Batch Timestamp"]:
+    for value in frame.column("Batch Timestamp"):
         if _is_blank(value):
             continue
         try:
-            # A finished json report stores it as epoch milliseconds.
-            unit = "ms" if isinstance(value, (int, float)) else None
-            return pd.to_datetime(value, unit=unit).to_pydatetime()
+            return _parse_timestamp(value)
         except (TypeError, ValueError, OverflowError):
             return None
     return None
 
 
-def _elapsed(frame: pd.DataFrame) -> float:
+def _elapsed(frame: ReportTable) -> float:
     if "Scan Duration (s)" not in frame.columns:
         return 0.0
-    durations = pd.to_numeric(frame["Scan Duration (s)"], errors="coerce").dropna()
-    return float(durations.max()) if not durations.empty else 0.0
+    durations = []
+    for value in frame.column("Scan Duration (s)"):
+        try:
+            durations.append(float(value))  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            continue
+    durations = [value for value in durations if not math.isnan(value)]
+    return max(durations) if durations else 0.0
 
 
 def atomic_write_bytes(path: str, data: bytes) -> None:
