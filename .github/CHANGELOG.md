@@ -2,6 +2,21 @@
 
 <!-- version list -->
 
+## v3.1.0 (2026-09-27)
+
+### Features
+
+- **web**: Prometheus /metrics endpoint for scan results
+  ([#91](https://github.com/sameeralam3127/ipmg/pull/91),
+  [`c4bfb97`](https://github.com/sameeralam3127/ipmg/commit/c4bfb977b0bc1b4691f1cf0e6c363726fdf5049d))
+
+### Refactoring
+
+- **web**: Import the metrics renderer only when /metrics is enabled
+  ([#91](https://github.com/sameeralam3127/ipmg/pull/91),
+  [`c4bfb97`](https://github.com/sameeralam3127/ipmg/commit/c4bfb977b0bc1b4691f1cf0e6c363726fdf5049d))
+
+
 ## v3.0.0 (2026-09-27)
 
 ### Build System
