@@ -50,6 +50,57 @@ def test_parser_streaming_defaults_off():
     assert args.stream_refresh == 0.25
 
 
+def test_parser_notifications_default_off():
+    args = build_parser().parse_args([])
+
+    assert args.notify_webhook is None
+    assert args.notify_slack is None
+    assert args.notify_teams is None
+    assert args.notify_email is None
+    assert args.notify_severity == "warning"
+
+
+def test_parser_notification_urls_are_optional_values():
+    args = build_parser().parse_args(
+        [
+            "--notify-slack",
+            "--notify-webhook",
+            "https://example.test/hook",
+            "--notify-severity",
+            "critical",
+        ]
+    )
+
+    assert args.notify_slack == ""
+    assert args.notify_webhook == "https://example.test/hook"
+    assert args.notify_severity == "critical"
+
+
+def test_parser_accepts_email_notification_settings():
+    args = build_parser().parse_args(
+        [
+            "--notify-email",
+            "a@example.test",
+            "b@example.test",
+            "--smtp-host",
+            "mail",
+            "--smtp-port",
+            "2525",
+        ]
+    )
+
+    assert args.notify_email == ["a@example.test", "b@example.test"]
+    assert (args.smtp_host, args.smtp_port) == ("mail", 2525)
+
+
+def test_diff_parser_accepts_notification_flags():
+    from ipmg.cli.parser import build_diff_parser
+
+    args = build_diff_parser().parse_args(["--notify-teams", "https://example.test/teams"])
+
+    assert args.notify_teams == "https://example.test/teams"
+
+
 def test_parser_accepts_streaming_flags():
     args = build_parser().parse_args(["--stream-all", "--stream-refresh", "1"])
 

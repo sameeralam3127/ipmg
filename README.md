@@ -343,6 +343,21 @@ ipmg diff --fail-on-change            # exit 2 when anything changed (CI)
 ipmg history --limit 10               # list stored scans
 ```
 
+To hear about changes without watching the terminal, send them to Slack,
+Microsoft Teams, any JSON webhook, or email. Any `--notify-*` flag turns on
+`--compare`, and with `--interval` every pass that changes something alerts:
+
+```bash
+ipmg --input targets.txt --interval 15 --notify-slack        # URL from $IPMG_NOTIFY_SLACK
+ipmg --input targets.txt --notify-email ops@example.com --smtp-host smtp.example.com
+ipmg diff --notify-webhook https://ops.example.com/ipmg --notify-severity critical
+```
+
+Only changes at or above `--notify-severity` (default `warning`) trigger a
+notification. A notification that fails is reported but never fails the scan.
+Secrets such as webhook URLs and `IPMG_SMTP_PASSWORD` can come from environment
+variables; see [Notifications](docs/COMMANDS.md#notifications) for all of them.
+
 What counts as a change:
 
 | Change | Severity | Meaning |
@@ -375,6 +390,11 @@ source**, so file-based and `--discover` runs do not get mixed up. Pass
 | `--latency-threshold` | `5` | Minimum latency delta in ms |
 | `--latency-pct` | `25` | Minimum relative latency change |
 | `--fail-on-change` | off | `ipmg diff` exits 2 when changes are found |
+| `--notify-webhook` | off | POST the change report as JSON to a URL |
+| `--notify-slack` | off | Post changes to a Slack incoming webhook |
+| `--notify-teams` | off | Post changes to a Microsoft Teams Workflows webhook |
+| `--notify-email` | off | Email the Markdown change report (with `--smtp-host`, `--smtp-port`, `--smtp-security`, `--smtp-user`, `--smtp-from`) |
+| `--notify-severity` | `warning` | Only notify for changes at least this severe |
 
 ---
 
@@ -580,7 +600,8 @@ them — so piping IPMG into a file or a log gives you clean text.
 
 **History and changes** — see [Change detection](#change-detection) for
 `--compare`, `--no-history`, `--db`, `--diff-formats`, `--diff-output`,
-`--latency-threshold`, `--latency-pct`, and `--fail-on-change`.
+`--latency-threshold`, `--latency-pct`, `--fail-on-change`, and the
+`--notify-*` flags.
 
 Exit codes: `0` success, `1` error, `2` changes detected
 (`ipmg diff --fail-on-change`), `130` interrupted.
@@ -604,6 +625,9 @@ itself is hardened accordingly:
 - Uploads are capped at 5 MB and one scan expands to at most 65,536 hosts,
   so a bad input file cannot exhaust memory
 - All database access uses parameterized SQL
+- The only outbound requests IPMG makes are the notifications you ask for
+  with a `--notify-*` flag. Their URLs and the SMTP password can come from
+  environment variables, and error messages never repeat them
 
 If you bind to a non-local address with `--host`, the token still guards the
 API. It travels over plain HTTP, though, so use an SSH tunnel or a reverse

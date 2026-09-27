@@ -224,3 +224,31 @@ def test_scan_flags_are_documented(capsys):
         "same as 'ipmg web'",
     ):
         assert phrase in out
+
+
+def test_diff_command_sends_notifications(db_path, monkeypatch, capsys):
+    posts = []
+    monkeypatch.setattr(
+        "ipmg.infrastructure.notify.post_json", lambda url, payload: posts.append(url)
+    )
+    monkeypatch.setenv("IPMG_NOTIFY_TEAMS", "https://example.test/teams")
+    seed(
+        db_path,
+        [HostResult("10.0.0.1", "Active", 2.0)],
+        [HostResult("10.0.0.1", "Timeout", None)],
+    )
+
+    exit_code = commands.run(["diff", "--db", db_path, "--notify-teams", "--fail-on-change"])
+
+    assert exit_code == commands.EXIT_CHANGES_DETECTED
+    assert posts == ["https://example.test/teams"]
+    assert "Notified" in capsys.readouterr().out
+
+
+def test_diff_command_notification_misconfiguration_is_an_error(db_path, monkeypatch, capsys):
+    monkeypatch.delenv("IPMG_SMTP_HOST", raising=False)
+
+    exit_code = commands.run(["diff", "--db", db_path, "--notify-email", "ops@example.test"])
+
+    assert exit_code == commands.EXIT_ERROR
+    assert "--smtp-host" in capsys.readouterr().out
