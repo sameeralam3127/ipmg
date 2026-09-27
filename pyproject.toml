@@ -48,15 +48,11 @@ classifiers = [
     "Environment :: Console",
 ]
 
+# The core is what a scan needs: the terminal UI, Excel reports and input,
+# and the config file parser. IPMG Web's server stack is the `web` extra.
 dependencies = [
-    "pandas>=2.2.2",
     "openpyxl>=3.1",
     "rich>=13.0",
-    "fastapi>=0.110",
-    "pydantic>=2.7",
-    "uvicorn>=0.27",
-    "websockets>=12",
-    "python-multipart>=0.0.9",
     # tomllib is in the standard library from 3.11; tomli 2.x is the same
     # parser with the same API, so the floor must not drop below it.
     "tomli>=2.0.1; python_version < '3.11'",
@@ -70,7 +66,18 @@ Issues = "https://github.com/sameeralam3127/ipmg/issues"
 Changelog = "https://github.com/sameeralam3127/ipmg/releases"
 
 [project.optional-dependencies]
+# IPMG Web (`ipmg web`): the browser UI, its REST API, and /metrics.
+web = [
+    "fastapi>=0.110",
+    "pydantic>=2.7",
+    "uvicorn>=0.27",
+    "websockets>=12",
+    "python-multipart>=0.0.9",
+]
+# Everything; what the one-line installers and the Docker image install.
+all = ["ipmg[web]"]
 dev = [
+    "ipmg[web]",
     "pytest>=7.4",
     "pytest-cov>=5.0",
     "ruff>=0.4",
@@ -89,6 +96,7 @@ ipmg = "ipmg.cli.commands:run"
 
 [dependency-groups]
 dev = [
+    "ipmg[web]",
     "pytest>=7.4",
     "pytest-cov>=5.0",
     "ruff>=0.4",

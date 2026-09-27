@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-import pandas as pd
+import openpyxl
 import pytest
 
 from ipmg.core.health import HostsDownError
@@ -30,10 +30,10 @@ def test_run_scan_handles_worker_errors(tmp_path, monkeypatch):
         return "Active", 10.5
 
     def fake_save_results(df, _base, _formats, timestamp=None):
-        captured["df"] = df.copy()
+        captured["df"] = df
 
     def fake_print_summary(df, batch_timestamp, duration_seconds):
-        captured["summary"] = (df.copy(), batch_timestamp, duration_seconds)
+        captured["summary"] = (df, batch_timestamp, duration_seconds)
 
     monkeypatch.setattr("ipmg.services.scan_service.load_all_targets", fake_load_all_targets)
     monkeypatch.setattr("ipmg.core.engine.ping_ip", fake_ping_ip)
@@ -59,12 +59,12 @@ def test_run_scan_handles_worker_errors(tmp_path, monkeypatch):
     assert args.timeout == 1
     assert args.count == 1
 
-    df: pd.DataFrame = captured["df"]
-    statuses = dict(zip(df["IP Address"], df["Status"]))
+    df = captured["df"]
+    statuses = dict(zip(df.column("IP Address"), df.column("Status")))
     assert statuses["8.8.8.8"] == "Active"
     assert statuses["1.1.1.1"] == "Error"
-    assert len(df["Batch Timestamp"].unique()) == 1
-    assert (df["Scan Duration (s)"] >= 0).all()
+    assert len(set(df.column("Batch Timestamp"))) == 1
+    assert all(duration >= 0 for duration in df.column("Scan Duration (s)"))
 
 
 def test_run_scan_clamps_resource_limits(tmp_path, monkeypatch):
@@ -393,7 +393,10 @@ def test_run_scan_without_input_creates_the_default_sample_file(tmp_path, monkey
 
 def test_run_scan_without_input_reuses_an_existing_default_file(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
-    pd.DataFrame({"IP Address": ["10.0.0.1"]}).to_excel(tmp_path / "ip_list.xlsx", index=False)
+    workbook = openpyxl.Workbook()
+    workbook.active.append(["IP Address"])
+    workbook.active.append(["10.0.0.1"])
+    workbook.save(tmp_path / "ip_list.xlsx")
     pinged = record_pings(monkeypatch)
 
     run_scan(scan_args(tmp_path, input=None, history=False))

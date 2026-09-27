@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from typing import Any, Dict, Sequence
 
 from rich.text import Text
@@ -36,17 +37,19 @@ def status_dot(status: str) -> Text:
     return text
 
 
-def _average_latency(df) -> float | None:
-    if "Latency" not in df or "Status" not in df:
-        return None
-    active = df.loc[df["Status"] == "Active", "Latency"].dropna()
-    return float(active.mean()) if len(active) else None
+def _average_latency(table) -> float | None:
+    active = [
+        row["Latency"]
+        for row in table.rows
+        if row.get("Status") == "Active" and isinstance(row.get("Latency"), (int, float))
+    ]
+    return sum(active) / len(active) if active else None
 
 
-def print_summary(df, batch_timestamp, duration_seconds: float) -> None:
+def print_summary(table, batch_timestamp, duration_seconds: float) -> None:
     """Status breakdown plus a one-line scorecard for a finished scan."""
-    counts = df["Status"].value_counts().to_dict() if "Status" in df else {}
-    total = len(df)
+    counts = dict(Counter(table.column("Status")))
+    total = len(table)
     active = counts.get("Active", 0)
     active_rate = (active / total) * 100 if total else 0.0
 
@@ -67,7 +70,7 @@ def print_summary(df, batch_timestamp, duration_seconds: float) -> None:
         )
     ui.print_table(grid)
 
-    average = _average_latency(df)
+    average = _average_latency(table)
     ui.blank()
     ui.joined(
         [

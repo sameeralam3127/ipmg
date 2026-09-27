@@ -25,10 +25,9 @@ import time
 from dataclasses import dataclass
 from typing import Dict, Optional, Sequence
 
-import pandas as pd
-
 from ipmg.core.engine import HostResult
-from ipmg.infrastructure.incremental import frame_rows, jsonl_record, result_row
+from ipmg.infrastructure.incremental import jsonl_record, result_row
+from ipmg.reporting.frames import ReportTable
 
 
 @dataclass(frozen=True)
@@ -77,12 +76,11 @@ class MachineStream:
         sys.stdout.flush()
 
 
-def write_array(frame: pd.DataFrame) -> None:
+def write_array(table: ReportTable) -> None:
     """Print a finished scan to stdout as one JSON array.
 
     ``default=str`` for the same reason :func:`jsonl_record` uses it: a
-    timestamp should read as the text it prints as, not as the epoch
-    milliseconds pandas would otherwise emit.
+    timestamp should read as the text it prints as, not as epoch milliseconds.
     """
-    sys.stdout.write(json.dumps(frame_rows(frame), default=str) + "\n")
+    sys.stdout.write(json.dumps(table.rows, default=str) + "\n")
     sys.stdout.flush()

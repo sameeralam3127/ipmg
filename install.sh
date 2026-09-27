@@ -218,9 +218,10 @@ Check that this machine can reach https://astral.sh, or install uv by hand:
 fi
 
 # -------------------------------------------------------------- ipmg
-TARGET="$PACKAGE"
+# The web extra too: someone running the one-liner expects `ipmg web` to work.
+TARGET="${PACKAGE}[web]"
 if [[ -n "$IPMG_VERSION" ]]; then
-  TARGET="${PACKAGE}==${IPMG_VERSION}"
+  TARGET="${PACKAGE}[web]==${IPMG_VERSION}"
 fi
 
 log "Installing ${TARGET} from PyPI..."

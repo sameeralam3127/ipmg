@@ -28,6 +28,18 @@ The install directory is not on your `PATH` yet. Open a new terminal first —
 the installer adds it to your shell profile. Still missing? Run it directly
 from `~/.local/bin/ipmg`, or `python -m ipmg` if you installed with pip.
 
+### `IPMG Web needs the optional 'web' packages`
+
+`pip install ipmg` installs the lean core, which scans and writes every report
+but does not include IPMG Web's server. Add it with the tool that installed
+IPMG: `uv tool install --force "ipmg[web]"`, `pipx install --force "ipmg[web]"`,
+or `pip install "ipmg[web]"`.
+
+### An Excel 97-2003 (`.xls`) file is rejected
+
+IPMG reads `.xlsx` workbooks. Open the `.xls` file in Excel or LibreOffice and
+save it as `.xlsx` or `.csv`.
+
 ### The installer fails on a minimal image
 
 Bare container and cloud images often lack `curl`, `tar`, or `gzip`. The

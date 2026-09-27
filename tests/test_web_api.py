@@ -2,10 +2,11 @@ import io
 import json
 import time
 
-import pandas as pd
+import openpyxl
 import pytest
 from fastapi.testclient import TestClient
 
+from ipmg.reporting.frames import ReportTable
 from ipmg.web.app import _render_report, create_app
 from ipmg.web.db import Database
 
@@ -97,7 +98,7 @@ def test_report_downloads(client):
 
 def test_upload_csv_and_json(client, tmp_path):
     csv_path = tmp_path / "targets.csv"
-    pd.DataFrame({"IP Address": ["8.8.8.8", "192.168.9.0/30"]}).to_csv(csv_path, index=False)
+    csv_path.write_text("IP Address\n8.8.8.8\n192.168.9.0/30\n", encoding="utf-8")
 
     with open(csv_path, "rb") as handle:
         response = client.post(
@@ -245,7 +246,7 @@ def test_index_served(client):
 
 def test_report_rendering_neutralizes_formula_cells():
     """A PTR record the scanned host controls must not become a live formula."""
-    df = pd.DataFrame(
+    df = ReportTable.from_rows(
         [
             {
                 "IP Address": "10.0.0.1",
@@ -259,8 +260,8 @@ def test_report_rendering_neutralizes_formula_cells():
     assert b"'=cmd" in _render_report(df, "csv")
     assert b",=cmd" not in _render_report(df, "csv")
 
-    xlsx = pd.read_excel(io.BytesIO(_render_report(df, "xlsx")))
-    assert xlsx.loc[0, "Hostname"] == "'=cmd|'/c calc'!A1"
+    sheet = openpyxl.load_workbook(io.BytesIO(_render_report(df, "xlsx"))).active
+    assert sheet["D2"].value == "'=cmd|'/c calc'!A1"
 
     assert rb"'=cmd\|'/c calc'!A1" in _render_report(df, "md")
 

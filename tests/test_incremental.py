@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
-import pandas as pd
+import openpyxl
 import pytest
 
 from ipmg.core.engine import HostResult
@@ -16,6 +16,7 @@ from ipmg.infrastructure.incremental import (
     find_partial_report,
     load_partial_report,
 )
+from ipmg.reporting.frames import ReportTable
 from ipmg.services.scan_service import run_scan
 from ipmg.utils.helpers import console
 
@@ -102,7 +103,7 @@ def test_snapshot_formats_are_written_on_interruption(tmp_path):
             report.record(_result("8.8.8.8"))
             raise RuntimeError("scan died")
 
-    assert len(pd.read_excel(report.path_for("xlsx"))) == 1
+    assert openpyxl.load_workbook(report.path_for("xlsx")).active.max_row == 2  # header + 1
     assert json.loads(open(report.path_for("json"), encoding="utf-8").read())[0]["Status"] == (
         "Active"
     )
@@ -142,11 +143,13 @@ def test_atomic_write_keeps_the_previous_file_on_failure(tmp_path, monkeypatch):
 
 def test_write_report_rejects_unknown_formats(tmp_path):
     with pytest.raises(ValueError):
-        write_report(pd.DataFrame([{"IP Address": "8.8.8.8"}]), str(tmp_path / "x.pdf"), "pdf")
+        write_report(
+            ReportTable.from_rows([{"IP Address": "8.8.8.8"}]), str(tmp_path / "x.pdf"), "pdf"
+        )
 
 
 def test_save_results_reuses_a_supplied_timestamp(tmp_path):
-    frame = pd.DataFrame([{"IP Address": "8.8.8.8", "Status": "Active"}])
+    frame = ReportTable.from_rows([{"IP Address": "8.8.8.8", "Status": "Active"}])
 
     paths = save_results(frame, str(tmp_path / "scan"), ["csv", "jsonl"], timestamp="stamp")
 

@@ -1,6 +1,6 @@
 import json
 
-import pandas as pd
+import openpyxl
 import pytest
 
 from ipmg.exceptions import FileIOError
@@ -10,14 +10,19 @@ from ipmg.infrastructure.file_io import (
     describe_sources,
     load_all_targets,
     load_targets,
-    sanitize_export_frame,
+    sanitize_table,
     save_results,
 )
+from ipmg.reporting.frames import ReportTable
+
+
+def write_csv(path, header, values):
+    path.write_text("\n".join([header, *values]) + "\n", encoding="utf-8")
 
 
 def test_load_targets_from_csv(tmp_path):
     path = tmp_path / "targets.csv"
-    pd.DataFrame({"IP Address": ["8.8.8.8", "192.168.1.0/30", "8.8.8.8"]}).to_csv(path, index=False)
+    write_csv(path, "IP Address", ["8.8.8.8", "192.168.1.0/30", "8.8.8.8"])
 
     assert load_targets(str(path)) == ["8.8.8.8", "192.168.1.1", "192.168.1.2"]
 
@@ -40,7 +45,7 @@ def test_load_targets_rejects_large_cidr():
 
 def test_load_targets_requires_expected_column(tmp_path):
     path = tmp_path / "targets.csv"
-    pd.DataFrame({"Address": ["8.8.8.8"]}).to_csv(path, index=False)
+    write_csv(path, "Address", ["8.8.8.8"])
 
     with pytest.raises(Exception):
         load_targets(str(path))
@@ -48,7 +53,7 @@ def test_load_targets_requires_expected_column(tmp_path):
 
 def test_save_results_writes_markdown_report(tmp_path, monkeypatch):
     monkeypatch.setattr("ipmg.infrastructure.file_io.timestamp_str", lambda: "20260628_120000")
-    df = pd.DataFrame(
+    df = ReportTable.from_rows(
         [
             {
                 "IP Address": "8.8.8.8",
@@ -130,7 +135,7 @@ HOSTILE_HOSTNAME = "=cmd|'/c calc'!A1"
 
 
 def _hostile_frame():
-    return pd.DataFrame(
+    return ReportTable.from_rows(
         [
             {
                 "IP Address": "10.0.0.1",
@@ -145,20 +150,20 @@ def _hostile_frame():
     )
 
 
-def test_sanitize_export_frame_quotes_formula_cells_only():
-    safe = sanitize_export_frame(_hostile_frame())
+def test_sanitize_table_quotes_formula_cells_only():
+    (safe,) = sanitize_table(_hostile_frame()).rows
 
-    assert safe.loc[0, "Hostname"] == "'" + HOSTILE_HOSTNAME
-    assert safe.loc[0, "Open Ports"] == "'@22, 80"
-    assert safe.loc[0, "IP Address"] == "10.0.0.1"
-    assert safe.loc[0, "Latency"] == 12.3456
+    assert safe["Hostname"] == "'" + HOSTILE_HOSTNAME
+    assert safe["Open Ports"] == "'@22, 80"
+    assert safe["IP Address"] == "10.0.0.1"
+    assert safe["Latency"] == 12.3456
 
 
-def test_sanitize_export_frame_leaves_the_original_untouched():
-    df = _hostile_frame()
-    sanitize_export_frame(df)
+def test_sanitize_table_leaves_the_original_untouched():
+    table = _hostile_frame()
+    sanitize_table(table)
 
-    assert df.loc[0, "Hostname"] == HOSTILE_HOSTNAME
+    assert table.rows[0]["Hostname"] == HOSTILE_HOSTNAME
 
 
 def test_save_results_neutralizes_formulas_in_csv_and_xlsx(tmp_path, monkeypatch):
@@ -170,8 +175,9 @@ def test_save_results_neutralizes_formulas_in_csv_and_xlsx(tmp_path, monkeypatch
     assert "'=cmd" in csv_text
     assert ",=cmd" not in csv_text
 
-    xlsx = pd.read_excel(tmp_path / "scan_20260628_120000.xlsx")
-    assert xlsx.loc[0, "Hostname"] == "'" + HOSTILE_HOSTNAME
+    sheet = openpyxl.load_workbook(tmp_path / "scan_20260628_120000.xlsx").active
+    header = [cell.value for cell in sheet[1]]
+    assert sheet.cell(2, header.index("Hostname") + 1).value == "'" + HOSTILE_HOSTNAME
 
     report = (tmp_path / "scan_20260628_120000.md").read_text(encoding="utf-8")
     assert r"'=cmd\|'/c calc'!A1" in report
@@ -222,7 +228,7 @@ def test_load_targets_from_json(tmp_path, document):
 def test_load_targets_round_trips_a_json_report(tmp_path, monkeypatch):
     """A report IPMG wrote with --formats json is valid input again."""
     monkeypatch.setattr("ipmg.infrastructure.file_io.timestamp_str", lambda: "20260628_120000")
-    frame = pd.DataFrame(
+    frame = ReportTable.from_rows(
         [
             {"IP Address": "8.8.8.8", "Status": "Active", "Latency": 1.0, "Hostname": "dns.google"},
             {"IP Address": "1.1.1.1", "Status": "Timeout", "Latency": None, "Hostname": ""},
@@ -334,3 +340,39 @@ def test_load_all_targets_counts_overlapping_sources_once():
 
 def test_describe_sources_lists_every_source():
     assert describe_sources(["targets.txt", "10.0.0.5"]) == "targets.txt, 10.0.0.5"
+
+
+def test_an_xls_workbook_is_rejected_with_what_to_do(tmp_path):
+    path = tmp_path / "hosts.xls"
+    path.write_bytes(b"\xd0\xcf\x11\xe0")  # the OLE2 signature of a real .xls
+
+    with pytest.raises(FileIOError, match="Save it as .xlsx or .csv"):
+        load_targets(str(path))
+
+
+def test_load_targets_from_xlsx_finds_the_column_anywhere(tmp_path):
+    path = tmp_path / "hosts.xlsx"
+    workbook = openpyxl.Workbook()
+    workbook.active.append(["Name", "IP Address"])
+    workbook.active.append(["router", "10.0.0.1"])
+    workbook.active.append(["blank", None])
+    workbook.active.append(["net", "10.0.1.0/30"])
+    workbook.save(path)
+
+    assert load_targets(str(path)) == ["10.0.0.1", "10.0.1.1", "10.0.1.2"]
+
+
+def test_load_targets_from_a_csv_saved_by_excel(tmp_path):
+    """Excel writes a byte-order mark, which must not hide the column name."""
+    path = tmp_path / "hosts.csv"
+    path.write_bytes("﻿IP Address\r\n10.0.0.1\r\n".encode())
+
+    assert load_targets(str(path)) == ["10.0.0.1"]
+
+
+def test_a_corrupt_xlsx_is_a_clear_error(tmp_path):
+    path = tmp_path / "hosts.xlsx"
+    path.write_bytes(b"not a zip file")
+
+    with pytest.raises(FileIOError, match="not a readable .xlsx"):
+        load_targets(str(path))
