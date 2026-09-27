@@ -6,6 +6,7 @@ import logging
 import sys
 from typing import Callable, Dict, List, Optional
 
+from ipmg.cli import config
 from ipmg.cli.parser import (
     build_diff_parser,
     build_history_parser,
@@ -31,7 +32,11 @@ log = logging.getLogger(__name__)
 
 
 def _scan_command(argv: List[str]) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    # Before parsing: the file supplies the defaults, so anything on the
+    # command line still overrides it.
+    config.apply(parser, build_parser, argv)
+    args = parser.parse_args(argv)
     configure_logging(args.verbose)
     if machine_output(args).enabled:
         # Before the banner: with --json or --jsonl stdout carries the results

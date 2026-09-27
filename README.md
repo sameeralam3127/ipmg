@@ -567,6 +567,55 @@ them — so piping IPMG into a file or a log gives you clean text.
 
 ---
 
+## Default options in a file
+
+If every run repeats the same flags, put them in **`ipmg.toml`** next to your
+work instead:
+
+```toml
+threads = 200
+timeout = 1
+resolve = true
+formats = ["md", "csv"]
+
+[profile.datacenter]
+threads = 400
+scan-ports = true
+ports = "22,80,443"
+```
+
+```bash
+ipmg --input targets.txt                        # uses the file's defaults
+ipmg --input targets.txt --profile datacenter   # and the profile on top
+ipmg --input targets.txt --threads 20           # a flag always wins
+```
+
+Any long flag can be a key, written as the flag is (`scan-ports`) or with
+underscores (`scan_ports`). A switch takes `true` to mean "as if the flag were
+passed" — `no-history = true` is `--no-history`. Files are read from
+`~/.config/ipmg/config.toml` first (or `$XDG_CONFIG_HOME`), then `./ipmg.toml`
+on top, so a project can override your global defaults:
+
+| Flag | What it does |
+| --- | --- |
+| `--config PATH` | Read that file instead of searching |
+| `--no-config` | Ignore every file and use the built-in defaults |
+| `--profile NAME` | Apply the `[profile.NAME]` section as well |
+
+**The command line always wins.** A flag that appears on it ignores the file
+entirely for that flag — including `--input`, which merges several sources on
+one command line but replaces the file's list rather than adding to it.
+
+A key that is not a flag, a value of the wrong type, or a value outside a
+flag's choices is an error naming the key and the file it came from:
+
+```text
+✗ Unknown option 'thredas' in ipmg.toml. Did you mean 'threads'?
+✗ 'formats' in ipmg.toml: 'pdf' is not one of xlsx, csv, json, jsonl, md.
+```
+
+---
+
 ## All options
 
 `ipmg --help` always lists the current set. Grouped for reading:
@@ -612,6 +661,9 @@ them — so piping IPMG into a file or a log gives you clean text.
 | `--stream-all` | off | Stream every result, including hosts that did not answer (implies `--stream`) |
 | `--stream-refresh` | `0.25` | Seconds between progress-bar redraws while streaming (0.05-5) |
 | `--verbose` | off | Debug logging |
+| `--config` | search | Read defaults from this file instead of searching for `ipmg.toml` |
+| `--no-config` | off | Ignore every configuration file |
+| `--profile` | none | Apply a `[profile.NAME]` section from the configuration file |
 
 **History and changes** — see [Change detection](#change-detection) for
 `--compare`, `--no-history`, `--db`, `--diff-formats`, `--diff-output`,
