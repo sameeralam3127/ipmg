@@ -20,7 +20,8 @@ from ipmg.exceptions import FileIOError, HistoryError
 from ipmg.infrastructure.file_io import (
     DEFAULT_INPUT_FILE,
     create_sample_file,
-    load_targets,
+    describe_sources,
+    load_all_targets,
     save_results,
 )
 from ipmg.infrastructure.incremental import (
@@ -36,11 +37,15 @@ from ipmg.reporting import ui
 from ipmg.reporting.diff_report import export_diff, print_diff
 from ipmg.reporting.frames import results_dataframe
 from ipmg.reporting.live import DEFAULT_REFRESH_S, StreamOptions, scan_display
+from ipmg.reporting.machine import MachineOutput, MachineStream, write_array
 from ipmg.reporting.summary import print_summary
 from ipmg.services.history_service import HistoryService
 from ipmg.utils.helpers import current_timestamp, timestamp_str
 
 log = logging.getLogger(__name__)
+
+#: What a scan writes when --formats is not given.
+DEFAULT_FORMATS = ("xlsx",)
 
 
 @dataclass(frozen=True)
@@ -113,6 +118,31 @@ def _load_resume(args) -> Optional[PartialReport]:
     return load_partial_report(path)
 
 
+def machine_output(args) -> MachineOutput:
+    """Read the stdout-output settings off the parsed arguments.
+
+    Public because the command has to know before it prints its banner, which
+    happens before the scan starts.
+    """
+    return MachineOutput(
+        array=bool(getattr(args, "json", False)),
+        stream=bool(getattr(args, "jsonl", False)),
+    )
+
+
+def _report_formats(args, machine: MachineOutput) -> List[str]:
+    """Which report files this scan should write.
+
+    An explicit ``--formats`` always stands. Without one a scan writes xlsx,
+    except when it is piping its results to stdout: a scan run for a script's
+    benefit should not leave a spreadsheet behind that nobody asked for.
+    """
+    formats = getattr(args, "formats", None)
+    if formats is not None:
+        return list(formats)
+    return [] if machine.enabled else list(DEFAULT_FORMATS)
+
+
 def _stream_options(args) -> StreamOptions:
     """Read live-output settings off the parsed arguments."""
     all_hosts = bool(getattr(args, "stream_all", False))
@@ -152,9 +182,9 @@ def _ensure_input_file(args) -> None:
     creating it would silently scan the sample addresses instead of the hosts
     the user meant, so ``load_targets`` reports it as missing.
     """
-    if args.discover or args.input is not None:
+    if args.discover or args.input:
         return
-    args.input = DEFAULT_INPUT_FILE
+    args.input = [DEFAULT_INPUT_FILE]
     if not os.path.exists(DEFAULT_INPUT_FILE):
         create_sample_file(DEFAULT_INPUT_FILE)
         ui.blank()
@@ -164,12 +194,14 @@ def _ensure_input_file(args) -> None:
         )
 
 
-def _print_configuration(source: str, targets: int, config: ScanConfig) -> None:
+def _print_configuration(sources: List[str], targets: int, config: ScanConfig) -> None:
     ping_word = "ping" if config.count == 1 else "pings"
     ui.blank()
+    # One source per line: a scan that merges a file with a few extra hosts
+    # should show which hosts those were, not one run-together line.
+    ui.field_list("Source", sources)
     ui.fields(
         [
-            ("Source", source),
             ("Targets", ui.plural(targets, "host")),
             (
                 "Config",
@@ -191,15 +223,21 @@ def _scan_with_progress(
     config: ScanConfig,
     stream: StreamOptions,
     report: Optional[IncrementalReport] = None,
+    machine: Optional[MachineStream] = None,
 ) -> List[HostResult]:
+    # The incremental report and the stdout stream take the same record(result)
+    # call, so one callback can feed both.
+    writers = [writer for writer in (report, machine) if writer is not None]
+
     with scan_display(len(ip_list), config, stream) as on_progress:
-        if report is None:
+        if not writers:
             return execute_scan(ip_list, config, on_result=on_progress)
 
         def on_result(result: HostResult, done: int, total: int) -> None:
-            # The report is written before the row is drawn, so what the
-            # operator sees on screen is never ahead of what is on disk.
-            report.record(result)
+            # Everything is written before the row is drawn, so what the
+            # operator sees on screen is never ahead of what was written out.
+            for writer in writers:
+                writer.record(result)
             on_progress(result, done, total)
 
         return execute_scan(ip_list, config, on_result=on_result)
@@ -251,14 +289,15 @@ def _run_pass(
     config: ScanConfig,
     stream: StreamOptions,
     report: Optional[IncrementalReport],
+    machine: Optional[MachineStream] = None,
 ) -> List[HostResult]:
     """Scan every host, keeping the partial report if the pass is cut short."""
     if report is None:
-        return _scan_with_progress(ip_list, config, stream)
+        return _scan_with_progress(ip_list, config, stream, machine=machine)
 
     try:
         with report:
-            return _scan_with_progress(ip_list, config, stream, report)
+            return _scan_with_progress(ip_list, config, stream, report, machine)
     except BaseException:
         # BaseException, not Exception: Ctrl+C is the interruption this
         # feature exists for, and it must not pass by unannounced.
@@ -271,6 +310,7 @@ def _run_single_pass(
     config: ScanConfig,
     stream: StreamOptions,
     incremental: IncrementalOptions,
+    machine: MachineOutput,
     resume: Optional[PartialReport] = None,
 ) -> ScanOutcome:
     batch_timestamp = (resume and resume.batch_timestamp) or current_timestamp()
@@ -278,8 +318,9 @@ def _run_single_pass(
     output = resume.base if resume else args.output
     started_at = time.perf_counter()
 
-    ip_list = discover_local_subnet() if args.discover else load_targets(args.input)
-    source = "auto-discovery" if args.discover else args.input
+    sources = ["auto-discovery"] if args.discover else list(args.input)
+    ip_list = discover_local_subnet() if args.discover else load_all_targets(sources)
+    source = describe_sources(sources)
 
     # Hosts the earlier run finished are kept only if they are still targets,
     # so resuming against an edited list never reports hosts it no longer has.
@@ -289,13 +330,16 @@ def _run_single_pass(
     scanned = {result.ip for result in previous}
     remaining = [ip for ip in ip_list if ip not in scanned]
 
-    _print_configuration(source, len(ip_list), config)
+    _print_configuration(sources, len(ip_list), config)
     if resume:
         _announce_resume(resume, len(previous), len(ip_list))
     report = _open_report(
         args, incremental, output, timestamp, batch_timestamp, previous, previous_elapsed_s
     )
-    results = previous + _run_pass(remaining, config, stream, report)
+    machine_stream = (
+        MachineStream(batch_timestamp, previous, previous_elapsed_s) if machine.stream else None
+    )
+    results = previous + _run_pass(remaining, config, stream, report, machine_stream)
     duration = previous_elapsed_s + time.perf_counter() - started_at
 
     return ScanOutcome(
@@ -365,6 +409,13 @@ def _store_and_compare(
 
 
 def run_scan(args) -> None:
+    machine = machine_output(args)
+    if machine.enabled:
+        # Normally done by the command before its banner; repeated here, since
+        # it must also hold for anything that calls run_scan directly.
+        ui.use_stderr()
+    args.formats = _report_formats(args, machine)
+
     config = _config_from_args(args)
     history_options = _history_options(args)
     health = _health_policy(args)
@@ -374,12 +425,14 @@ def run_scan(args) -> None:
     resume = _load_resume(args)
 
     while True:
-        outcome = _run_single_pass(args, config, stream, incremental, resume)
+        outcome = _run_single_pass(args, config, stream, incremental, machine, resume)
         # Only the first pass picks up where an earlier run stopped; every
         # --interval pass after it is a fresh scan.
         resume = None
 
         print_summary(outcome.frame, outcome.batch_timestamp, outcome.duration_s)
+        if machine.array:
+            write_array(outcome.frame)
         # Overwrites whatever the incremental writer left on those same paths,
         # so a finished scan produces exactly the report it always did.
         save_results(outcome.frame, outcome.output, args.formats, timestamp=outcome.timestamp)

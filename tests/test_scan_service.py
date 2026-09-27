@@ -21,7 +21,7 @@ def wide_console():
 def test_run_scan_handles_worker_errors(tmp_path, monkeypatch):
     captured = {}
 
-    def fake_load_targets(_source):
+    def fake_load_all_targets(_sources):
         return ["8.8.8.8", "1.1.1.1"]
 
     def fake_ping_ip(ip, _timeout, _count):
@@ -35,13 +35,13 @@ def test_run_scan_handles_worker_errors(tmp_path, monkeypatch):
     def fake_print_summary(df, batch_timestamp, duration_seconds):
         captured["summary"] = (df.copy(), batch_timestamp, duration_seconds)
 
-    monkeypatch.setattr("ipmg.services.scan_service.load_targets", fake_load_targets)
+    monkeypatch.setattr("ipmg.services.scan_service.load_all_targets", fake_load_all_targets)
     monkeypatch.setattr("ipmg.core.engine.ping_ip", fake_ping_ip)
     monkeypatch.setattr("ipmg.services.scan_service.save_results", fake_save_results)
     monkeypatch.setattr("ipmg.services.scan_service.print_summary", fake_print_summary)
 
     args = SimpleNamespace(
-        input="targets.csv",
+        input=["targets.csv"],
         output=str(tmp_path / "results"),
         timeout=1,
         count=1,
@@ -74,13 +74,13 @@ def test_run_scan_clamps_resource_limits(tmp_path, monkeypatch):
         captured["limits"] = (timeout, count)
         return "Active", 1.0
 
-    monkeypatch.setattr("ipmg.services.scan_service.load_targets", lambda _source: ["8.8.8.8"])
+    monkeypatch.setattr("ipmg.services.scan_service.load_all_targets", lambda _sources: ["8.8.8.8"])
     monkeypatch.setattr("ipmg.core.engine.ping_ip", fake_ping_ip)
     monkeypatch.setattr("ipmg.services.scan_service.save_results", lambda *_args, **_kwargs: None)
     monkeypatch.setattr("ipmg.services.scan_service.print_summary", lambda *_args, **_kwargs: None)
 
     args = SimpleNamespace(
-        input="targets.csv",
+        input=["targets.csv"],
         output=str(tmp_path / "results"),
         timeout=999,
         count=999,
@@ -100,7 +100,7 @@ def test_run_scan_clamps_resource_limits(tmp_path, monkeypatch):
 
 def scan_args(tmp_path, **overrides):
     args = dict(
-        input="targets.csv",
+        input=["targets.csv"],
         output=str(tmp_path / "results"),
         timeout=1,
         count=1,
@@ -128,8 +128,8 @@ def stub_scan(monkeypatch):
     state = {"statuses": {}}
 
     monkeypatch.setattr(
-        "ipmg.services.scan_service.load_targets",
-        lambda _source: list(state["statuses"]),
+        "ipmg.services.scan_service.load_all_targets",
+        lambda _sources: list(state["statuses"]),
     )
     monkeypatch.setattr("ipmg.services.scan_service.save_results", lambda *_args, **_kwargs: None)
     monkeypatch.setattr("ipmg.services.scan_service.print_summary", lambda *_args, **_kwargs: None)
@@ -371,7 +371,7 @@ def test_run_scan_rejects_a_missing_input_file_instead_of_creating_it(tmp_path, 
     missing = tmp_path / "targts.txt"
 
     with pytest.raises(FileIOError, match="was not found"):
-        run_scan(scan_args(tmp_path, input=str(missing), history=False))
+        run_scan(scan_args(tmp_path, input=[str(missing)], history=False))
 
     # A typo used to create this file with sample public addresses and scan them.
     assert not missing.exists()
@@ -385,7 +385,7 @@ def test_run_scan_without_input_creates_the_default_sample_file(tmp_path, monkey
 
     run_scan(args)
 
-    assert args.input == "ip_list.xlsx"
+    assert args.input == ["ip_list.xlsx"]
     assert (tmp_path / "ip_list.xlsx").exists()
     assert sorted(pinged) == ["1.1.1.1", "8.8.8.8"]
     assert "Created ip_list.xlsx" in capsys.readouterr().out
@@ -400,3 +400,37 @@ def test_run_scan_without_input_reuses_an_existing_default_file(tmp_path, monkey
 
     assert pinged == ["10.0.0.1"]
     assert "Created" not in capsys.readouterr().out
+
+
+def test_run_scan_merges_a_file_with_extra_cli_targets(tmp_path, monkeypatch, capsys):
+    """A file and loose targets in one run: the union, de-duplicated."""
+    pinged = record_pings(monkeypatch)
+    path = tmp_path / "targets.txt"
+    path.write_text("10.0.0.1\n10.0.0.2\n", encoding="utf-8")
+    sources = [str(path), "10.0.0.0/30", "10.0.0.5"]
+
+    run_scan(scan_args(tmp_path, input=sources, history=False))
+
+    assert sorted(pinged) == ["10.0.0.1", "10.0.0.2", "10.0.0.5"]
+
+
+def test_run_scan_header_lists_every_source(tmp_path, monkeypatch, capsys):
+    record_pings(monkeypatch)
+
+    run_scan(scan_args(tmp_path, input=["10.0.0.1", "10.0.0.5"], history=False))
+
+    out = capsys.readouterr().out
+    assert "Source" in out
+    assert "10.0.0.1" in out
+    assert "10.0.0.5" in out
+
+
+def test_run_scan_records_every_source_in_history(tmp_path, monkeypatch):
+    """The stored source names both, so the next run compares against it."""
+    record_pings(monkeypatch)
+    db = str(tmp_path / "history.db")
+
+    run_scan(scan_args(tmp_path, input=["10.0.0.1", "10.0.0.5"], db=db))
+
+    stored = Database(db).list_scans(limit=1)
+    assert stored[0]["source"] == "10.0.0.1, 10.0.0.5"

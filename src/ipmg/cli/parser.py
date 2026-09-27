@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 
 from ipmg import __version__
+from ipmg.cli.config import add_config_arguments, config_help
 from ipmg.core.portscan import DEFAULT_PORTS, parse_port_list
 from ipmg.infrastructure.file_io import DEFAULT_INPUT_FILE
 from ipmg.infrastructure.incremental import (
@@ -189,7 +190,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = ScanParser(
         prog="ipmg",
         description=PROG,
-        epilog=COMMANDS_HINT,
+        epilog=f"{COMMANDS_HINT}\n\n{config_help()}",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
         "--version",
@@ -198,14 +200,20 @@ def build_parser() -> argparse.ArgumentParser:
     )
     # No default here, so the scan service can tell "no --input given" (use the
     # sample file) apart from an explicit file name that does not exist (error).
+    # "extend" rather than "store": repeating the flag adds sources instead of
+    # replacing them, so a shell alias carrying --input can still be added to.
     parser.add_argument(
         "--input",
+        action="extend",
+        nargs="+",
         default=None,
         metavar="TARGETS",
         help=(
-            "IP, CIDR block, range, or target file (.txt, .list, .csv, .xls, .xlsx). "
-            f"Without --input or --discover, {DEFAULT_INPUT_FILE} is used and "
-            "created with sample targets if it does not exist."
+            "One or more IPs, CIDR blocks, ranges, or target files "
+            "(.txt, .list, .csv, .json, .xls, .xlsx). Every source is merged and "
+            "de-duplicated, and the flag may be repeated. Without --input or "
+            f"--discover, {DEFAULT_INPUT_FILE} is used and created with sample "
+            "targets if it does not exist."
         ),
     )
     parser.add_argument(
@@ -235,13 +243,19 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="N",
         help="How many hosts to probe at once (default: 50).",
     )
+    # No default here either: the scan service needs to tell "no --formats
+    # given" (write xlsx, unless stdout is carrying the results) apart from an
+    # explicit choice, which always stands.
     parser.add_argument(
         "--formats",
         nargs="+",
-        default=["xlsx"],
+        default=None,
         choices=list(REPORT_FORMATS),
         metavar="FORMAT",
-        help=f"One or more report formats: {', '.join(REPORT_FORMATS)} (default: xlsx).",
+        help=(
+            f"One or more report formats: {', '.join(REPORT_FORMATS)} (default: xlsx, "
+            "or no report file at all with --json or --jsonl)."
+        ),
     )
     parser.add_argument(
         "--discover",
@@ -344,6 +358,25 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
 
+    machine = parser.add_argument_group("machine-readable output")
+    stdout_group = machine.add_mutually_exclusive_group()
+    stdout_group.add_argument(
+        "--json",
+        action="store_true",
+        help=(
+            "Print the finished scan to stdout as a JSON array, with the human "
+            "output on stderr, for piping into jq or a script."
+        ),
+    )
+    stdout_group.add_argument(
+        "--jsonl",
+        action="store_true",
+        help=(
+            "Stream one JSON object per host to stdout as each probe finishes, "
+            "with the human output on stderr."
+        ),
+    )
+
     live = parser.add_argument_group("live output")
     live.add_argument(
         "--stream",
@@ -389,6 +422,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_database_argument(history)
     _add_diff_export_arguments(history)
     _add_diff_threshold_arguments(parser)
+    add_config_arguments(parser)
     _add_notify_arguments(parser)
     parser.set_defaults(history=True)
     return parser

@@ -3,7 +3,16 @@ import json
 import pandas as pd
 import pytest
 
-from ipmg.infrastructure.file_io import load_targets, sanitize_export_frame, save_results
+from ipmg.exceptions import FileIOError
+from ipmg.infrastructure.file_io import (
+    MAX_EXPANDED_TARGETS,
+    create_sample_file,
+    describe_sources,
+    load_all_targets,
+    load_targets,
+    sanitize_export_frame,
+    save_results,
+)
 
 
 def test_load_targets_from_csv(tmp_path):
@@ -173,7 +182,7 @@ def test_save_results_neutralizes_formulas_in_csv_and_xlsx(tmp_path, monkeypatch
 
 
 @pytest.mark.parametrize(
-    "name", ["targts.txt", "hosts.list", "hosts.csv", "hosts.xlsx", "hosts.xls"]
+    "name", ["targts.txt", "hosts.list", "hosts.csv", "hosts.json", "hosts.xlsx", "hosts.xls"]
 )
 def test_load_targets_reports_a_missing_input_file(tmp_path, name):
     from ipmg.exceptions import FileIOError
@@ -190,3 +199,138 @@ def test_load_targets_still_rejects_text_that_is_not_a_target():
 
     with pytest.raises(FileIOError, match="neither a readable file"):
         load_targets("not-a-target")
+
+
+@pytest.mark.parametrize(
+    "document",
+    [
+        ["8.8.8.8", "192.168.5.0/30"],
+        [{"IP Address": "8.8.8.8"}, {"IP Address": "192.168.5.0/30"}],
+        [{"ip": "8.8.8.8"}, {"target": "192.168.5.0/30"}],
+        {"targets": ["8.8.8.8", "192.168.5.0/30"]},
+        {"ips": ["8.8.8.8", "192.168.5.0/30"]},
+    ],
+)
+def test_load_targets_from_json(tmp_path, document):
+    """Every shape the dashboard uploader accepts also works as --input."""
+    path = tmp_path / "targets.json"
+    path.write_text(json.dumps(document), encoding="utf-8")
+
+    assert load_targets(str(path)) == ["8.8.8.8", "192.168.5.1", "192.168.5.2"]
+
+
+def test_load_targets_round_trips_a_json_report(tmp_path, monkeypatch):
+    """A report IPMG wrote with --formats json is valid input again."""
+    monkeypatch.setattr("ipmg.infrastructure.file_io.timestamp_str", lambda: "20260628_120000")
+    frame = pd.DataFrame(
+        [
+            {"IP Address": "8.8.8.8", "Status": "Active", "Latency": 1.0, "Hostname": "dns.google"},
+            {"IP Address": "1.1.1.1", "Status": "Timeout", "Latency": None, "Hostname": ""},
+        ]
+    )
+    (report,) = save_results(frame, str(tmp_path / "scan"), ["json"])
+
+    assert load_targets(report) == ["8.8.8.8", "1.1.1.1"]
+
+
+@pytest.mark.parametrize("document", ['"8.8.8.8"', '{"targets": {"a": "8.8.8.8"}}'])
+def test_load_targets_rejects_json_that_is_not_a_list(tmp_path, document):
+    path = tmp_path / "targets.json"
+    path.write_text(document, encoding="utf-8")
+
+    with pytest.raises(FileIOError, match="must contain a list of targets"):
+        load_targets(str(path))
+
+
+def test_load_targets_rejects_malformed_json(tmp_path):
+    path = tmp_path / "targets.json"
+    path.write_text("[8.8.8.8", encoding="utf-8")
+
+    with pytest.raises(FileIOError, match="is not valid JSON"):
+        load_targets(str(path))
+
+
+def test_load_targets_names_a_bad_entry_in_json(tmp_path):
+    """JSON is structured, so a non-target entry is an error, not a skipped line."""
+    path = tmp_path / "targets.json"
+    path.write_text(json.dumps(["8.8.8.8", "nonsense"]), encoding="utf-8")
+
+    with pytest.raises(FileIOError, match="Unsupported target input: nonsense"):
+        load_targets(str(path))
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [42, None, {"host": "10.0.0.1"}, {"ip": 167772161}, ["10.0.0.1"]],
+)
+def test_load_targets_names_a_json_entry_that_is_not_a_target(tmp_path, entry):
+    """Numbers, nulls, and objects without a known key used to be dropped silently."""
+    path = tmp_path / "targets.json"
+    path.write_text(json.dumps(["8.8.8.8", entry]), encoding="utf-8")
+
+    with pytest.raises(FileIOError, match="Unsupported entry in .*IP Address, ip, target"):
+        load_targets(str(path))
+
+
+def test_load_targets_rejects_empty_json(tmp_path):
+    path = tmp_path / "targets.json"
+    path.write_text("[]", encoding="utf-8")
+
+    with pytest.raises(FileIOError, match="No valid IP targets"):
+        load_targets(str(path))
+
+
+def test_create_sample_file_writes_json(tmp_path):
+    path = tmp_path / "ip_list.json"
+
+    create_sample_file(str(path))
+
+    assert json.loads(path.read_text(encoding="utf-8")) == ["8.8.8.8", "1.1.1.1"]
+    assert load_targets(str(path)) == ["8.8.8.8", "1.1.1.1"]
+
+
+def test_load_all_targets_merges_a_file_with_extra_hosts(tmp_path):
+    path = tmp_path / "targets.txt"
+    path.write_text("10.0.0.1\n10.0.0.2\n", encoding="utf-8")
+
+    targets = load_all_targets([str(path), "10.0.0.0/30", "10.0.0.5"])
+
+    # The file first, then the CIDR's new host, then the loose one; 10.0.0.1
+    # and 10.0.0.2 appear in two sources and are scanned once.
+    assert targets == ["10.0.0.1", "10.0.0.2", "10.0.0.5"]
+
+
+def test_load_all_targets_keeps_a_single_source_unchanged():
+    assert load_all_targets(["10.0.0.0/30"]) == load_targets("10.0.0.0/30")
+
+
+def test_load_all_targets_rejects_no_sources():
+    with pytest.raises(FileIOError, match="No target source"):
+        load_all_targets([])
+
+
+def test_load_all_targets_reports_a_bad_source_among_good_ones(tmp_path):
+    path = tmp_path / "targets.txt"
+    path.write_text("10.0.0.1\n", encoding="utf-8")
+
+    with pytest.raises(FileIOError, match="neither a readable file"):
+        load_all_targets([str(path), "nonsense"])
+
+
+def test_load_all_targets_limits_the_combined_total():
+    """The host cap applies to the union, not to each source on its own."""
+    blocks = ["10.0.0.0/17", "10.1.0.0/17", "10.2.0.0/17"]
+
+    with pytest.raises(FileIOError, match="expand to more than"):
+        load_all_targets(blocks)
+
+
+def test_load_all_targets_counts_overlapping_sources_once():
+    """Two copies of a block are the union it describes, not twice its size."""
+    block = "10.0.0.0/16"
+
+    assert len(load_all_targets([block, block])) < MAX_EXPANDED_TARGETS
+
+
+def test_describe_sources_lists_every_source():
+    assert describe_sources(["targets.txt", "10.0.0.5"]) == "targets.txt, 10.0.0.5"

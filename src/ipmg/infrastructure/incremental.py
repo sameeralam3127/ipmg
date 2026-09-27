@@ -96,6 +96,16 @@ def jsonl_record(row: Dict[str, object]) -> str:
     return json.dumps(dict(row), default=str) + "\n"
 
 
+def frame_rows(df: pd.DataFrame) -> List[Dict[str, object]]:
+    """A report DataFrame as plain dicts, with pandas' missing values as ``None``.
+
+    The one conversion used by everything that renders rows as JSON — the
+    ``jsonl`` report and ``--json``/``--jsonl`` on stdout — so a host looks the
+    same whichever of them a script reads.
+    """
+    return df.astype(object).where(pd.notna(df), None).to_dict(orient="records")
+
+
 def result_row(
     result: HostResult,
     batch_timestamp: object,

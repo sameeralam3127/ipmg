@@ -126,6 +126,16 @@ def test_upload_csv_and_json(client, tmp_path):
     assert response.status_code == 400
 
 
+def test_upload_rejects_malformed_json(client):
+    """Uploads share the CLI loader, so a truncated document is a 400, not a 500."""
+    response = client.post(
+        "/api/v1/upload", files={"file": ("targets.json", b"[10.1.0.1", "application/json")}
+    )
+
+    assert response.status_code == 400
+    assert "not valid JSON" in response.json()["detail"]
+
+
 def test_stats_assets_and_delete(client):
     scan_id = client.post("/api/v1/scans", json={"targets": "10.0.0.1"}).json()["id"]
     wait_for_completion(client, scan_id)

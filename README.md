@@ -283,8 +283,10 @@ Or pick a ready-made command:
 | --- | --- |
 | Scan the network I am on | `ipmg --discover` |
 | Scan hosts listed in a file | `ipmg --input targets.txt` |
+| Scan a file plus a few extra hosts | `ipmg --input targets.txt 10.0.0.0/30 10.0.0.5` |
 | Get names, not just IP addresses | `ipmg --input targets.txt --resolve` |
 | Get a report I can send to someone | `ipmg --input targets.txt --formats md csv` |
+| Pipe the results into a script | `ipmg --input targets.txt --json \| jq .` |
 | See hosts appear as they answer | `ipmg --input 192.168.1.0/24 --stream` |
 | See what changed since last time | `ipmg --input targets.txt --compare` |
 | Check which services are listening | `ipmg --input targets.txt --scan-ports` |
@@ -486,9 +488,32 @@ Anywhere IPMG takes `--input`, you can give it any of these:
   | 192.168.1.1 |
   | 10.0.1.0/30 |
 
-Duplicate targets are removed automatically, and one scan expands to at most
-65,536 hosts — larger CIDR blocks or ranges are rejected up front, before the
-scan starts.
+- **A JSON file** (`.json`) — a list of addresses, a list of objects keyed by
+  `IP Address`, `ip`, or `target`, or an object with a `targets` or `ips` array:
+
+  ```json
+  ["192.168.1.1", "10.0.1.0/30"]
+  ```
+
+  Because `IP Address` is one of the keys it accepts, a report IPMG wrote with
+  `--formats json` can be fed straight back in:
+
+  ```bash
+  ipmg --input results_20260628_120000.json
+  ```
+
+`--input` takes as many of these as you like, in any mix, and may also be
+repeated:
+
+```bash
+ipmg --input targets.txt 10.0.0.0/30 10.0.0.5
+ipmg --input targets.txt --input 10.0.0.5     # the same thing
+```
+
+Duplicate targets are removed automatically — across sources too, so a host
+that is both in the file and on the command line is scanned once — and one scan
+expands to at most 65,536 hosts in total. Larger CIDR blocks, ranges, or
+combinations are rejected up front, before the scan starts.
 
 ---
 
@@ -538,6 +563,22 @@ preferring `jsonl` or `csv` (current to the last host) over `json` or `xlsx`
 (current to the last autosave). Hosts dropped from the target list since are
 left out of the finished report.
 
+**Piping results into a script.** `--json` prints the finished scan to stdout as
+a JSON array, and `--jsonl` prints one object per host the moment its probe
+finishes. The human output moves to stderr, so stdout is nothing but data and no
+temp file or glob is needed:
+
+```bash
+ipmg --input 10.0.0.0/24 --json | jq '.[] | select(.Status == "Active")'
+ipmg --input 10.0.0.0/24 --jsonl | while read -r host; do notify "$host"; done
+ipmg --input 10.0.0.0/24 --json 2>/dev/null > hosts.json   # data only
+```
+
+The field names are the report columns above, and both flags print a host
+identically — `--json` is what `--jsonl` prints, gathered into an array. Unless
+you ask for `--formats` explicitly, a piped scan writes no report file at all.
+Exit codes are unchanged.
+
 **Open ports.** `Open Ports` is only populated when `--scan-ports` is set: for
 each host that answers, IPMG probes a list of common TCP ports (SSH, HTTP,
 HTTPS, RDP, SMB, FTP, SMTP, DNS, MSSQL, MySQL, PostgreSQL by default)
@@ -554,6 +595,61 @@ them — so piping IPMG into a file or a log gives you clean text.
 
 ---
 
+## Default options in a file
+
+If every run repeats the same flags, put them in **`ipmg.toml`** next to your
+work instead:
+
+```toml
+threads = 200
+timeout = 1
+resolve = true
+formats = ["md", "csv"]
+
+[profile.datacenter]
+threads = 400
+scan-ports = true
+ports = "22,80,443"
+```
+
+```bash
+ipmg --input targets.txt                        # uses the file's defaults
+ipmg --input targets.txt --profile datacenter   # and the profile on top
+ipmg --input targets.txt --threads 20           # a flag always wins
+```
+
+Any long flag can be a key, written as the flag is (`scan-ports`) or with
+underscores (`scan_ports`). A switch takes `true` to mean "as if the flag were
+passed" — `no-history = true` is `--no-history`. Files are read from
+`~/.config/ipmg/config.toml` first (or `$XDG_CONFIG_HOME`), then `./ipmg.toml`
+on top, so a project can override your global defaults:
+
+| Flag | What it does |
+| --- | --- |
+| `--config PATH` | Read that file instead of searching |
+| `--no-config` | Ignore every file and use the built-in defaults |
+| `--profile NAME` | Apply the `[profile.NAME]` section as well |
+
+**The command line always wins.** A flag that appears on it ignores the file
+entirely for that flag — including `--input`, which merges several sources on
+one command line but replaces the file's list rather than adding to it.
+
+A key that is not a flag, a value of the wrong type, or a value outside a
+flag's choices is an error naming the key and the file it came from:
+
+```text
+✗ Unknown option 'thredas' in ipmg.toml. Did you mean 'threads'?
+✗ 'formats' in ipmg.toml: 'pdf' is not one of xlsx, csv, json, jsonl, md.
+```
+
+A project's `./ipmg.toml` comes with whatever directory you scan from,
+including a repository you just cloned, so it cannot say where results are
+sent: the `--notify-*` destinations and `--smtp-*` settings are only read from
+`~/.config/ipmg/config.toml` or a file you pass with `--config`. A file also
+cannot combine flags that exclude each other, such as `json` and `jsonl`.
+
+---
+
 ## All options
 
 `ipmg --help` always lists the current set. Grouped for reading:
@@ -562,10 +658,12 @@ them — so piping IPMG into a file or a log gives you clean text.
 
 | Flag | Default | Description |
 | --- | --- | --- |
-| `--input` | `ip_list.xlsx` | What to scan: a file (`.xlsx`, `.xls`, `.csv`, `.txt`, `.list`), a single IP, a CIDR block, or a range (`10.0.0.1-10.0.0.50`) |
+| `--input` | `ip_list.xlsx` | What to scan: one or more files (`.xlsx`, `.xls`, `.csv`, `.json`, `.txt`, `.list`), IPs, CIDR blocks, or ranges (`10.0.0.1-10.0.0.50`), merged and de-duplicated |
 | `--discover` | off | Auto-detect and scan the local subnet instead |
 | `--output` | `results` | Report file name prefix |
-| `--formats` | `xlsx` | One or more of `xlsx`, `csv`, `json`, `jsonl`, `md` |
+| `--formats` | `xlsx` | One or more of `xlsx`, `csv`, `json`, `jsonl`, `md` (no file at all with `--json`/`--jsonl`) |
+| `--json` | off | Print the finished scan to stdout as a JSON array, human output on stderr |
+| `--jsonl` | off | Stream one JSON object per host to stdout as each probe finishes |
 | `--no-incremental` | off | Only write the report once the scan has finished |
 | `--autosave` | `30` | How often a running scan re-saves `xlsx`, `json`, and `md` |
 | `--resume` | off | Finish an interrupted scan from its partial report (newest one, or the path given) |
@@ -597,6 +695,9 @@ them — so piping IPMG into a file or a log gives you clean text.
 | `--stream-all` | off | Stream every result, including hosts that did not answer (implies `--stream`) |
 | `--stream-refresh` | `0.25` | Seconds between progress-bar redraws while streaming (0.05-5) |
 | `--verbose` | off | Debug logging |
+| `--config` | search | Read defaults from this file instead of searching for `ipmg.toml` |
+| `--no-config` | off | Ignore every configuration file |
+| `--profile` | none | Apply a `[profile.NAME]` section from the configuration file |
 
 **Exit status**
 

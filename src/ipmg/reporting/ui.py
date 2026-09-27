@@ -87,6 +87,19 @@ def reset_glyphs() -> None:
     _glyphs = None
 
 
+def use_stderr(enabled: bool = True) -> None:
+    """Route every UI line to stderr, leaving stdout to machine-readable output.
+
+    ``console.stderr`` is a flag rather than a captured stream, so the console
+    still resolves its file on each write — which is what keeps the output
+    capturable by tests and redirectable by callers.
+    """
+    console.stderr = enabled
+    # The glyph set is chosen from the stream's encoding, so it has to be
+    # picked again now that a different stream does the writing.
+    reset_glyphs()
+
+
 # ------------------------------------------------------------------ blocks
 
 

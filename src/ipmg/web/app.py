@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import io
-import json
 import secrets
 import tempfile
 from contextlib import asynccontextmanager
@@ -188,23 +187,6 @@ def _file_response(media_types: Mapping[str, str], description: str) -> Dict[int
     return {200: {"description": description, "content": {m: binary for m in media_types.values()}}}
 
 
-def _targets_from_json(data: Any) -> List[str]:
-    if isinstance(data, dict):
-        data = data.get("targets") or data.get("ips") or []
-    if not isinstance(data, list):
-        raise FileIOError("JSON uploads must contain a list of targets.")
-
-    lines = []
-    for entry in data:
-        if isinstance(entry, str):
-            lines.append(entry)
-        elif isinstance(entry, dict):
-            value = entry.get("IP Address") or entry.get("ip") or entry.get("target")
-            if value:
-                lines.append(str(value))
-    return parse_manual_targets("\n".join(lines))
-
-
 def _parse_scan_targets(request: ScanRequest) -> List[str]:
     try:
         if request.ips:
@@ -245,22 +227,21 @@ def _render_report(df: pd.DataFrame, fmt: str) -> bytes:
 def _parse_upload(filename: str, payload: bytes) -> List[str]:
     suffix = Path(filename).suffix.lower()
 
-    if suffix == ".json":
-        return _targets_from_json(json.loads(payload.decode("utf-8")))
+    if suffix not in SUPPORTED_INPUT_SUFFIXES:
+        raise FileIOError(
+            f"Unsupported file type '{suffix or '<none>'}'. Supported: "
+            f"{', '.join(sorted(SUPPORTED_INPUT_SUFFIXES))}."
+        )
 
-    if suffix in SUPPORTED_INPUT_SUFFIXES:
-        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as handle:
-            handle.write(payload)
-            temp_path = handle.name
-        try:
-            return load_targets(temp_path)
-        finally:
-            Path(temp_path).unlink(missing_ok=True)
-
-    raise FileIOError(
-        f"Unsupported file type '{suffix or '<none>'}'. Supported: "
-        f"{', '.join(sorted(SUPPORTED_INPUT_SUFFIXES | {'.json'}))}."
-    )
+    # Every supported type, JSON included, goes through the CLI loader, so an
+    # upload and an --input file are parsed by exactly the same code.
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as handle:
+        handle.write(payload)
+        temp_path = handle.name
+    try:
+        return load_targets(temp_path)
+    finally:
+        Path(temp_path).unlink(missing_ok=True)
 
 
 def _register_overview_routes(api: APIRouter, database: Database) -> None:

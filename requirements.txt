@@ -6,3 +6,4 @@ pydantic>=2.7
 uvicorn>=0.27
 websockets>=12
 python-multipart>=0.0.9
+tomli>=2.0.1; python_version < "3.11"

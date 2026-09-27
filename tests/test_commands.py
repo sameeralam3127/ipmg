@@ -148,7 +148,7 @@ def test_scan_arguments_are_forwarded(monkeypatch):
     monkeypatch.setattr(commands, "run_scan", lambda args: captured.update(vars(args)))
 
     assert commands.run(["--input", "targets.csv", "--compare", "--no-history"]) == commands.EXIT_OK
-    assert captured["input"] == "targets.csv"
+    assert captured["input"] == ["targets.csv"]
     assert captured["compare"] is True
     assert captured["history"] is False
 
