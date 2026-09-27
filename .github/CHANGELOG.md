@@ -2,6 +2,57 @@
 
 <!-- version list -->
 
+## v2.3.0 (2026-09-27)
+
+### Bug Fixes
+
+- **notify**: Pass lint, and catch errors building a message
+  ([#85](https://github.com/sameeralam3127/ipmg/pull/85),
+  [`da87756`](https://github.com/sameeralam3127/ipmg/commit/da87756e226e960ccd375f52a696f398bcef24d3))
+
+- **notify**: Refuse non-http URLs in post_json and pass bandit
+  ([#85](https://github.com/sameeralam3127/ipmg/pull/85),
+  [`da87756`](https://github.com/sameeralam3127/ipmg/commit/da87756e226e960ccd375f52a696f398bcef24d3))
+
+### Continuous Integration
+
+- Bump the actions group with 3 updates ([#81](https://github.com/sameeralam3127/ipmg/pull/81),
+  [`137a504`](https://github.com/sameeralam3127/ipmg/commit/137a504f98895e295909f60e0c9b84566f223092))
+
+### Documentation
+
+- Move community health files into .github ([#83](https://github.com/sameeralam3127/ipmg/pull/83),
+  [`4b5e9b6`](https://github.com/sameeralam3127/ipmg/commit/4b5e9b65a8ae5232bd128e1ece58519d28395ab2))
+
+### Features
+
+- **notify**: Send change reports to a webhook, Slack, Teams, and email
+  ([#85](https://github.com/sameeralam3127/ipmg/pull/85),
+  [`da87756`](https://github.com/sameeralam3127/ipmg/commit/da87756e226e960ccd375f52a696f398bcef24d3))
+
+- **scan**: Exit non-zero when hosts are down, for cron and monitoring
+  ([#82](https://github.com/sameeralam3127/ipmg/pull/82),
+  [`1cf21dc`](https://github.com/sameeralam3127/ipmg/commit/1cf21dc482877fc688822e66b3898cc97c436a4e))
+
+- **web**: Stabilize and document the /api/v1 REST API
+  ([#87](https://github.com/sameeralam3127/ipmg/pull/87),
+  [`f861b2c`](https://github.com/sameeralam3127/ipmg/commit/f861b2c7cad0a1e4ecc4fef9da8734b482c393db))
+
+### Refactoring
+
+- **scan**: Define HostsDownError next to the health check
+  ([#82](https://github.com/sameeralam3127/ipmg/pull/82),
+  [`1cf21dc`](https://github.com/sameeralam3127/ipmg/commit/1cf21dc482877fc688822e66b3898cc97c436a4e))
+
+- **scan**: Report hosts down with an exception, keeping run_scan's signature
+  ([#82](https://github.com/sameeralam3127/ipmg/pull/82),
+  [`1cf21dc`](https://github.com/sameeralam3127/ipmg/commit/1cf21dc482877fc688822e66b3898cc97c436a4e))
+
+- **scan**: Sort down hosts with the shared ip_sort_key
+  ([#82](https://github.com/sameeralam3127/ipmg/pull/82),
+  [`1cf21dc`](https://github.com/sameeralam3127/ipmg/commit/1cf21dc482877fc688822e66b3898cc97c436a4e))
+
+
 ## v2.2.0 (2026-09-23)
 
 ### Features
