@@ -143,13 +143,19 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="N",
         help="How many hosts to probe at once (default: 50).",
     )
+    # No default here either: the scan service needs to tell "no --formats
+    # given" (write xlsx, unless stdout is carrying the results) apart from an
+    # explicit choice, which always stands.
     parser.add_argument(
         "--formats",
         nargs="+",
-        default=["xlsx"],
+        default=None,
         choices=list(REPORT_FORMATS),
         metavar="FORMAT",
-        help=f"One or more report formats: {', '.join(REPORT_FORMATS)} (default: xlsx).",
+        help=(
+            f"One or more report formats: {', '.join(REPORT_FORMATS)} (default: xlsx, "
+            "or no report file at all with --json or --jsonl)."
+        ),
     )
     parser.add_argument(
         "--discover",
@@ -235,6 +241,25 @@ def build_parser() -> argparse.ArgumentParser:
             "Finish an interrupted scan: skip the hosts its report already holds and "
             "complete that report. REPORT is its jsonl, csv, json, or xlsx file "
             "(default: the newest report named after --output)."
+        ),
+    )
+
+    machine = parser.add_argument_group("machine-readable output")
+    stdout_group = machine.add_mutually_exclusive_group()
+    stdout_group.add_argument(
+        "--json",
+        action="store_true",
+        help=(
+            "Print the finished scan to stdout as a JSON array, with the human "
+            "output on stderr, for piping into jq or a script."
+        ),
+    )
+    stdout_group.add_argument(
+        "--jsonl",
+        action="store_true",
+        help=(
+            "Stream one JSON object per host to stdout as each probe finishes, "
+            "with the human output on stderr."
         ),
     )
 

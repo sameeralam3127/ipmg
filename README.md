@@ -286,6 +286,7 @@ Or pick a ready-made command:
 | Scan a file plus a few extra hosts | `ipmg --input targets.txt 10.0.0.0/30 10.0.0.5` |
 | Get names, not just IP addresses | `ipmg --input targets.txt --resolve` |
 | Get a report I can send to someone | `ipmg --input targets.txt --formats md csv` |
+| Pipe the results into a script | `ipmg --input targets.txt --json \| jq .` |
 | See hosts appear as they answer | `ipmg --input 192.168.1.0/24 --stream` |
 | See what changed since last time | `ipmg --input targets.txt --compare` |
 | Check which services are listening | `ipmg --input targets.txt --scan-ports` |
@@ -534,6 +535,22 @@ preferring `jsonl` or `csv` (current to the last host) over `json` or `xlsx`
 (current to the last autosave). Hosts dropped from the target list since are
 left out of the finished report.
 
+**Piping results into a script.** `--json` prints the finished scan to stdout as
+a JSON array, and `--jsonl` prints one object per host the moment its probe
+finishes. The human output moves to stderr, so stdout is nothing but data and no
+temp file or glob is needed:
+
+```bash
+ipmg --input 10.0.0.0/24 --json | jq '.[] | select(.Status == "Active")'
+ipmg --input 10.0.0.0/24 --jsonl | while read -r host; do notify "$host"; done
+ipmg --input 10.0.0.0/24 --json 2>/dev/null > hosts.json   # data only
+```
+
+The field names are the report columns above, and both flags print a host
+identically — `--json` is what `--jsonl` prints, gathered into an array. Unless
+you ask for `--formats` explicitly, a piped scan writes no report file at all.
+Exit codes are unchanged.
+
 **Open ports.** `Open Ports` is only populated when `--scan-ports` is set: for
 each host that answers, IPMG probes a list of common TCP ports (SSH, HTTP,
 HTTPS, RDP, SMB, FTP, SMTP, DNS, MSSQL, MySQL, PostgreSQL by default)
@@ -561,7 +578,9 @@ them — so piping IPMG into a file or a log gives you clean text.
 | `--input` | `ip_list.xlsx` | What to scan: one or more files (`.xlsx`, `.xls`, `.csv`, `.json`, `.txt`, `.list`), IPs, CIDR blocks, or ranges (`10.0.0.1-10.0.0.50`), merged and de-duplicated |
 | `--discover` | off | Auto-detect and scan the local subnet instead |
 | `--output` | `results` | Report file name prefix |
-| `--formats` | `xlsx` | One or more of `xlsx`, `csv`, `json`, `jsonl`, `md` |
+| `--formats` | `xlsx` | One or more of `xlsx`, `csv`, `json`, `jsonl`, `md` (no file at all with `--json`/`--jsonl`) |
+| `--json` | off | Print the finished scan to stdout as a JSON array, human output on stderr |
+| `--jsonl` | off | Stream one JSON object per host to stdout as each probe finishes |
 | `--no-incremental` | off | Only write the report once the scan has finished |
 | `--autosave` | `30` | How often a running scan re-saves `xlsx`, `json`, and `md` |
 | `--resume` | off | Finish an interrupted scan from its partial report (newest one, or the path given) |

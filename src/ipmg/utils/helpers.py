@@ -41,14 +41,17 @@ def _tolerate_unencodable_output() -> None:
 
     Scan results carry data we do not control (IDN hostnames, file names), so
     a byte that ASCII cannot represent must never abort the whole command.
+    Both streams are covered because the UI moves to stderr whenever stdout is
+    carrying machine-readable output.
     """
-    reconfigure = getattr(sys.stdout, "reconfigure", None)
-    if reconfigure is None:
-        return
-    try:
-        reconfigure(errors="replace")
-    except (OSError, ValueError):  # pragma: no cover - stream already detached
-        pass
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(errors="replace")
+        except (OSError, ValueError):  # pragma: no cover - stream already detached
+            pass
 
 
 _tolerate_unencodable_output()
