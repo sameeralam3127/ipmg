@@ -168,11 +168,10 @@
 
           <div class="tab-panel" role="tabpanel" id="panel-windows" aria-labelledby="tab-windows" hidden>
             <div class="code-block">
-              <pre><code id="cmd-windows">powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-uv tool install ipmg</code></pre>
+              <pre><code id="cmd-windows">irm https://raw.githubusercontent.com/sameeralam3127/ipmg/main/install.ps1 | iex</code></pre>
               <button class="copy-btn" type="button" data-copy-from="#cmd-windows">Copy</button>
             </div>
-            <p>Run both lines in PowerShell. <code>ping</code> ships with Windows, and CI runs the full test suite and a live scan on Windows for every change.</p>
+            <p>Run it in PowerShell 5.1 or 7; no administrator rights needed. It installs uv if missing, installs IPMG, and adds it to your <code>PATH</code>. <code>ping</code> ships with Windows, and CI runs the full test suite and a live scan on Windows for every change.</p>
           </div>
 
           <div class="tab-panel" role="tabpanel" id="panel-tool" aria-labelledby="tab-tool" hidden>
