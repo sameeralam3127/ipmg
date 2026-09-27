@@ -322,6 +322,22 @@ def test_a_file_may_set_one_flag_of_an_exclusive_group(in_project):
     assert parse([]).jsonl is True
 
 
+@pytest.mark.parametrize(
+    "line, expected", [("discover = true", "ipv4"), ('discover = "ipv6"', "ipv6")]
+)
+def test_an_optional_value_flag_takes_true_or_a_value(in_project, line, expected):
+    """discover = true predates --discover FAMILY, and must keep working."""
+    write(in_project / "ipmg.toml", line + "\n")
+
+    assert parse([]).discover == expected
+
+
+def test_an_optional_value_flag_set_to_false_stays_off(in_project):
+    write(in_project / "ipmg.toml", "discover = false\n")
+
+    assert parse([]).discover is None
+
+
 def test_a_list_for_a_single_valued_flag(in_project):
     write(in_project / "ipmg.toml", "threads = [1, 2]\n")
 

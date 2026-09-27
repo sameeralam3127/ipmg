@@ -256,13 +256,17 @@ def _index_by_hostname(snapshots: Mapping[str, HostSnapshot]) -> Dict[str, Set[s
     return index
 
 
-def ip_sort_key(value: str) -> Tuple[int, int, str]:
-    """Sort key placing valid IPs first in numeric order; shared with the DB layer."""
+def ip_sort_key(value: str) -> Tuple[int, int, int, str]:
+    """Sort key: IPv4 in numeric order, then IPv6, then anything unparsable.
+
+    The family comes before the number, or ``::1`` (the integer 1) would sort
+    ahead of every IPv4 address. Shared with the DB layer.
+    """
     try:
         address = ipaddress.ip_address(value)
     except ValueError:
-        return (1, 0, value)
-    return (0, int(address), "")
+        return (1, 0, 0, value)
+    return (0, address.version, int(address), value)
 
 
 def _sort_changes(changes: Sequence[HostChange]) -> Tuple[HostChange, ...]:

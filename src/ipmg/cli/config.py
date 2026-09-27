@@ -264,6 +264,11 @@ def _coerce(action: argparse.Action, key: str, value: Any, path: Path) -> Any:
             raise ConfigError(f"{where} must be true or false, not {_kind(value)}.")
         return action.const if value else _KEEP
 
+    if action.nargs == "?" and isinstance(value, bool):
+        # A flag whose value is optional (--discover [FAMILY]): true is the bare
+        # flag, so "discover = true" keeps meaning what it did as a switch.
+        return action.const if value else _KEEP
+
     if action.nargs in ("+", "*"):
         values = value if isinstance(value, list) else [value]
         if not values:

@@ -155,3 +155,23 @@ def test_parser_input_can_be_repeated():
 
 def test_parser_input_defaults_to_nothing():
     assert build_parser().parse_args([]).input is None
+
+
+@pytest.mark.parametrize(
+    "argv, expected",
+    [
+        ([], None),
+        (["--discover"], "ipv4"),
+        (["--discover", "ipv6"], "ipv6"),
+        (["--discover", "all"], "all"),
+    ],
+)
+def test_parser_discover_takes_an_optional_family(argv, expected):
+    assert build_parser().parse_args(argv).discover == expected
+
+
+def test_parser_rejects_an_unknown_discovery_family(capsys):
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["--discover", "ipv5"])
+
+    assert "--discover" in capsys.readouterr().err

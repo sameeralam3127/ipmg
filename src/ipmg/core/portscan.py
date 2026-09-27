@@ -30,9 +30,13 @@ def port_service_name(port: int) -> str:
 
 def _probe(ip: str, port: int, timeout: float) -> bool:
     try:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        # getaddrinfo picks the family (and an IPv6 scope id) from the address.
+        family, kind, proto, _name, address = socket.getaddrinfo(
+            ip, port, type=socket.SOCK_STREAM, flags=socket.AI_NUMERICHOST
+        )[0]
+        with socket.socket(family, kind, proto) as sock:
             sock.settimeout(timeout)
-            return sock.connect_ex((ip, port)) == 0
+            return sock.connect_ex(address) == 0
     except OSError:
         return False
 
