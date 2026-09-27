@@ -18,9 +18,7 @@ def test_fail_on_down_passes_when_every_host_is_active():
 
 
 def test_fail_on_down_names_the_hosts_that_are_down():
-    failure = check_health(
-        results("Active", "Timeout", "Error"), HealthPolicy(fail_on_down=True)
-    )
+    failure = check_health(results("Active", "Timeout", "Error"), HealthPolicy(fail_on_down=True))
 
     assert failure == "2 of 3 hosts are not active: 10.0.0.2, 10.0.0.3."
 
@@ -56,9 +54,7 @@ def test_min_active_compares_the_active_share_with_the_threshold(statuses, thres
 
 
 def test_min_active_failure_states_the_share_and_the_threshold():
-    failure = check_health(
-        results("Active", "Timeout", "Timeout"), HealthPolicy(min_active_pct=50)
-    )
+    failure = check_health(results("Active", "Timeout", "Timeout"), HealthPolicy(min_active_pct=50))
 
     assert failure == "Only 33.3% of 3 hosts are active, below --min-active 50%."
 

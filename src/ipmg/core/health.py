@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import ipaddress
 from dataclasses import dataclass
 from typing import Optional, Sequence
 
+from ipmg.core.diff import ip_sort_key
 from ipmg.core.engine import HostResult
 
 ACTIVE_STATUS = "Active"
@@ -28,18 +28,9 @@ class HealthPolicy:
         return self.fail_on_down or self.min_active_pct is not None
 
 
-def _address_order(ip: str):
-    """Sort key putting addresses in numeric order, and anything unparsable last."""
-    try:
-        address = ipaddress.ip_address(ip)
-    except ValueError:
-        return (1, 0, 0, ip)
-    return (0, address.version, int(address), ip)
-
-
 def _name_hosts(ips: Sequence[str]) -> str:
     # Results arrive in completion order; the message should read like the target list.
-    ips = sorted(ips, key=_address_order)
+    ips = sorted(ips, key=ip_sort_key)
     named = ", ".join(ips[:MAX_NAMED_HOSTS])
     hidden = len(ips) - MAX_NAMED_HOSTS
     return f"{named} and {hidden} more" if hidden > 0 else named
