@@ -154,7 +154,7 @@ def test_email_settings_come_from_flags():
             smtp_host="mail.example.test",
             smtp_user="ipmg@example.test",
         ),
-        environ={"IPMG_SMTP_PASSWORD": "hunter2"},
+        environ={"IPMG_SMTP_PASSWORD": "hunter2"},  # pragma: allowlist secret
     )
 
     assert options.email == SmtpSettings(
@@ -164,7 +164,7 @@ def test_email_settings_come_from_flags():
         sender="ipmg@example.test",
         recipients=("ops@example.test", "noc@example.test"),
         username="ipmg@example.test",
-        password="hunter2",
+        password="hunter2",  # pragma: allowlist secret
     )
 
 
@@ -336,7 +336,9 @@ def test_every_destination_is_notified(diff, capsys):
 
 def test_nothing_is_sent_without_changes():
     recorder = Recorder()
-    unchanged = make_diff([HostSnapshot("10.0.0.1", "Active", 1.0)], [HostSnapshot("10.0.0.1", "Active", 1.0)])
+    unchanged = make_diff(
+        [HostSnapshot("10.0.0.1", "Active", 1.0)], [HostSnapshot("10.0.0.1", "Active", 1.0)]
+    )
 
     send_notifications(unchanged, everything(), post=recorder.post, mail=recorder.mail)
 
@@ -366,10 +368,26 @@ def test_info_threshold_sends_info_changes(info_only_diff):
     recorder = Recorder()
 
     send_notifications(
-        info_only_diff, NotifyOptions(slack_url=SLACK_URL, min_severity=Severity.INFO), post=recorder.post
+        info_only_diff,
+        NotifyOptions(slack_url=SLACK_URL, min_severity=Severity.INFO),
+        post=recorder.post,
     )
 
     assert len(recorder.posts) == 1
+
+
+def test_a_message_that_cannot_be_built_is_reported_not_raised(diff, monkeypatch, capsys):
+    def broken(*_args):
+        raise ValueError("cannot serialise")
+
+    monkeypatch.setattr(notify, "webhook_payload", broken)
+    recorder = Recorder()
+
+    failed = send_notifications(diff, everything(), post=recorder.post, mail=recorder.mail)
+
+    assert failed == ["Webhook"]
+    assert "Webhook notification failed: cannot serialise" in capsys.readouterr().out
+    assert len(recorder.posts) == 2
 
 
 def test_a_failing_destination_is_reported_and_the_rest_still_sent(diff, capsys):

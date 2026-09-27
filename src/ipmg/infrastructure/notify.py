@@ -51,7 +51,7 @@ ENV_SMTP_HOST = "IPMG_SMTP_HOST"
 ENV_SMTP_PORT = "IPMG_SMTP_PORT"
 ENV_SMTP_SECURITY = "IPMG_SMTP_SECURITY"
 ENV_SMTP_USER = "IPMG_SMTP_USER"
-ENV_SMTP_PASSWORD = "IPMG_SMTP_PASSWORD"
+ENV_SMTP_PASSWORD = "IPMG_SMTP_PASSWORD"  # pragma: allowlist secret
 ENV_SMTP_FROM = "IPMG_SMTP_FROM"
 
 
@@ -120,7 +120,9 @@ def _smtp_settings(args, environ: Mapping[str, str]) -> Optional[SmtpSettings]:
 
     host = _flag_or_env(getattr(args, "smtp_host", None), environ, ENV_SMTP_HOST)
     if not host:
-        raise NotifyError(f"--notify-email needs a mail server: pass --smtp-host or set {ENV_SMTP_HOST}.")
+        raise NotifyError(
+            f"--notify-email needs a mail server: pass --smtp-host or set {ENV_SMTP_HOST}."
+        )
 
     security = _flag_or_env(getattr(args, "smtp_security", None), environ, ENV_SMTP_SECURITY)
     security = (security or "starttls").lower()
@@ -158,7 +160,9 @@ def notify_options(args, environ: Optional[Mapping[str, str]] = None) -> NotifyO
     """
     environ = os.environ if environ is None else environ
     return NotifyOptions(
-        webhook_url=_url(getattr(args, "notify_webhook", None), environ, "--notify-webhook", ENV_WEBHOOK),
+        webhook_url=_url(
+            getattr(args, "notify_webhook", None), environ, "--notify-webhook", ENV_WEBHOOK
+        ),
         slack_url=_url(getattr(args, "notify_slack", None), environ, "--notify-slack", ENV_SLACK),
         teams_url=_url(getattr(args, "notify_teams", None), environ, "--notify-teams", ENV_TEAMS),
         email=_smtp_settings(args, environ),
@@ -334,6 +338,30 @@ def _redact(text: str, options: NotifyOptions) -> str:
     return text
 
 
+Delivery = Tuple[str, Callable[[], None]]
+
+
+def _deliveries(diff: ScanDiff, options: NotifyOptions, post, mail) -> List[Delivery]:
+    """One named, deferred send per destination. Each builds its own message
+    when called, so an error while building one is caught like a send error."""
+    deliveries: List[Delivery] = []
+    if options.webhook_url:
+        deliveries.append(
+            (
+                "Webhook",
+                lambda: post(options.webhook_url, webhook_payload(diff, options.min_severity)),
+            )
+        )
+    if options.slack_url:
+        deliveries.append(("Slack", lambda: post(options.slack_url, slack_payload(diff))))
+    if options.teams_url:
+        deliveries.append(("Teams", lambda: post(options.teams_url, teams_payload(diff))))
+    if options.email:
+        settings = options.email
+        deliveries.append(("Email", lambda: mail(settings, email_message(diff, settings))))
+    return deliveries
+
+
 def send_notifications(
     diff: ScanDiff,
     options: NotifyOptions,
@@ -352,23 +380,9 @@ def send_notifications(
         ui.note(f"No change at or above {options.min_severity.value}; no notification sent.")
         return []
 
-    post = post or post_json
-    mail = mail or send_email
-    deliveries: List[Tuple[str, Callable[[], None]]] = []
-    if options.webhook_url:
-        payload = webhook_payload(diff, options.min_severity)
-        deliveries.append(("Webhook", lambda: post(options.webhook_url, payload)))
-    if options.slack_url:
-        deliveries.append(("Slack", lambda: post(options.slack_url, slack_payload(diff))))
-    if options.teams_url:
-        deliveries.append(("Teams", lambda: post(options.teams_url, teams_payload(diff))))
-    if options.email:
-        settings = options.email
-        deliveries.append(("Email", lambda: mail(settings, email_message(diff, settings))))
-
     sent: List[str] = []
     failed: List[str] = []
-    for name, deliver in deliveries:
+    for name, deliver in _deliveries(diff, options, post or post_json, mail or send_email):
         try:
             deliver()
         except Exception as exc:  # a failed alert must never fail the scan

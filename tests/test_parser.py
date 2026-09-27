@@ -50,23 +50,6 @@ def test_parser_streaming_defaults_off():
     assert args.stream_refresh == 0.25
 
 
-def test_parser_accepts_streaming_flags():
-    args = build_parser().parse_args(["--stream-all", "--stream-refresh", "1"])
-
-    assert args.stream_all is True
-    assert args.stream_refresh == 1.0
-
-
-def test_parser_resume_takes_an_optional_report():
-    parser = build_parser()
-
-    assert parser.parse_args([]).resume is None
-    assert parser.parse_args(["--resume"]).resume == ""
-    assert parser.parse_args(["--resume", "scan_20260917_120000.csv"]).resume == (
-        "scan_20260917_120000.csv"
-    )
-
-
 def test_parser_notifications_default_off():
     args = build_parser().parse_args([])
 
@@ -116,3 +99,20 @@ def test_diff_parser_accepts_notification_flags():
     args = build_diff_parser().parse_args(["--notify-teams", "https://example.test/teams"])
 
     assert args.notify_teams == "https://example.test/teams"
+
+
+def test_parser_accepts_streaming_flags():
+    args = build_parser().parse_args(["--stream-all", "--stream-refresh", "1"])
+
+    assert args.stream_all is True
+    assert args.stream_refresh == 1.0
+
+
+def test_parser_resume_takes_an_optional_report():
+    parser = build_parser()
+
+    assert parser.parse_args([]).resume is None
+    assert parser.parse_args(["--resume"]).resume == ""
+    assert parser.parse_args(["--resume", "scan_20260917_120000.csv"]).resume == (
+        "scan_20260917_120000.csv"
+    )
