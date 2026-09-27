@@ -5,7 +5,8 @@
 set -euo pipefail
 
 image="${1:?usage: docker-smoke.sh IMAGE}"
-token="smoke-test-token-0123456789"
+# A fresh throwaway token per run (IPMG_WEB_TOKEN needs 16+ characters).
+token="smoke-$RANDOM$RANDOM$RANDOM$RANDOM$RANDOM"
 volume="ipmg-smoke-$$"
 web="ipmg-smoke-web-$$"
 
