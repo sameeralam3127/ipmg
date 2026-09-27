@@ -306,6 +306,8 @@ uv tool install ipmg</code></pre>
                 <div class="advanced-grid">
                   <label class="field" for="scan-dnsTtl"><span>DNS cache (s) <small class="field-hint">with hostnames</small></span><input id="scan-dnsTtl" name="scan-dnsTtl" type="number" min="0" max="86400" value="300"></label>
                   <label class="field" for="scan-refresh"><span>Progress redraw (s) <small class="field-hint">when live</small></span><input id="scan-refresh" name="scan-refresh" type="number" min="0.05" max="5" step="0.05" value="0.25"></label>
+                  <label class="field" for="scan-minActive"><span>Fail below active (%) <small class="field-hint">exit code 3</small></span><input id="scan-minActive" name="scan-minActive" type="number" min="0" max="100" step="1" placeholder="off"></label>
+                  <label class="toggle"><input type="checkbox" name="scan-failOnDown"><span>Fail on down <small>exit code 3 for cron</small></span></label>
                   <label class="field span-2" for="scan-db"><span>History database <small class="field-hint">empty = ~/.ipmg/dashboard.db</small></span><input id="scan-db" name="scan-db" type="text" placeholder="~/.ipmg/dashboard.db" autocomplete="off" spellcheck="false" maxlength="300"></label>
                   <label class="toggle span-2"><input type="checkbox" name="scan-verbose"><span>Debug logging <small>--verbose</small></span></label>
                 </div>
@@ -511,7 +513,7 @@ ipmg diff --fail-on-change   # exit 2 for cron or CI</code></pre>
           </details>
           <details>
             <summary>Can I run it on a schedule?</summary>
-            <p><code>--interval 5</code> repeats a scan every five minutes. For unattended runs, use cron or a systemd timer with <code>--compare</code>, then <code>ipmg diff --fail-on-change</code> so a change shows up as exit code 2.</p>
+            <p><code>--interval 5</code> repeats a scan every five minutes. For unattended runs, use cron or a systemd timer: <code>--fail-on-down</code> or <code>--min-active 90</code> exits with code 3 when hosts are down, and <code>ipmg diff --fail-on-change</code> exits with code 2 when anything changed.</p>
           </details>
           <details>
             <summary>Every host comes back as Timeout. Why?</summary>

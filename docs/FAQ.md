@@ -33,8 +33,9 @@ Point it elsewhere with `--db`, or skip storing a scan with `--no-history`.
 ### Can I run it on a schedule?
 
 Yes — `--interval 5` repeats the scan every 5 minutes in the foreground. For
-unattended runs, use cron or a systemd timer with `--compare --fail-on-change`
-so a change shows up as a non-zero exit code.
+unattended runs, use cron or a systemd timer: `--fail-on-down` or
+`--min-active 90` makes the scan exit `3` when hosts are down, and
+`ipmg diff --fail-on-change` exits `2` when anything changed.
 
 ### Can it alert me when something changes?
 

@@ -53,6 +53,16 @@ def _port_list(value: str) -> tuple:
         raise argparse.ArgumentTypeError(str(exc)) from exc
 
 
+def _percent(value: str) -> float:
+    try:
+        percent = float(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid percentage: {value!r}") from None
+    if not 0 <= percent <= 100:
+        raise argparse.ArgumentTypeError(f"percentage out of range (0-100): {value}")
+    return percent
+
+
 def _add_database_argument(parser) -> None:
     parser.add_argument(
         "--db",
@@ -264,6 +274,20 @@ def build_parser() -> argparse.ArgumentParser:
         "--web",
         action="store_true",
         help="Start IPMG Web, the local browser UI (same as 'ipmg web').",
+    )
+
+    checks = parser.add_argument_group("exit status (for cron and monitoring)")
+    checks.add_argument(
+        "--fail-on-down",
+        action="store_true",
+        help="Exit with status 3 if any target is not Active. Reports are still written.",
+    )
+    checks.add_argument(
+        "--min-active",
+        type=_percent,
+        default=None,
+        metavar="PERCENT",
+        help="Exit with status 3 if fewer than PERCENT of the targets are Active (0-100).",
     )
 
     ports_group = parser.add_argument_group("TCP service discovery")

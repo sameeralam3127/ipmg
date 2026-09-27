@@ -419,10 +419,22 @@ Error messages never include a webhook URL or the password.
 | `0` | Success |
 | `1` | Error, such as an invalid target or a missing column |
 | `2` | Changes found by `ipmg diff --fail-on-change` — **or** an invalid command-line option |
+| `3` | Hosts down: the scan failed `--fail-on-down` or `--min-active` |
 | `130` | Interrupted with Ctrl+C |
 
 Because an invalid option also exits `2`, check a scheduled command by hand
 once before relying on its exit code.
+
+A scan exits `0` however many hosts are down, unless you ask it to check:
+
+```bash
+ipmg --input servers.txt --fail-on-down      # exit 3 if any target is not Active
+ipmg --input 10.0.0.0/24 --min-active 80     # exit 3 if fewer than 80% are Active
+```
+
+The reports and the history entry are written before the scan exits, so a
+failed check still leaves the evidence behind. With `--interval` the checks
+print a warning after every pass that fails them, and the scan keeps running.
 
 A scan-then-check job for cron or a systemd timer:
 
@@ -430,12 +442,19 @@ A scan-then-check job for cron or a systemd timer:
 #!/usr/bin/env bash
 cd /opt/ipmg-audit || exit 1
 mkdir -p reports    # --output needs the folder to exist
-ipmg --input targets.txt --formats csv --output reports/scan || exit 1
+ipmg --input targets.txt --formats csv --output reports/scan --fail-on-down
+scan_status=$?
+if [ "$scan_status" -eq 3 ]; then
+  echo "Hosts are down — see the latest reports/scan_*.csv"
+elif [ "$scan_status" -ne 0 ]; then
+  exit "$scan_status"
+fi
 ipmg diff --source targets.txt --fail-on-change --diff-formats md --diff-output reports/changes
 status=$?
 if [ "$status" -eq 2 ]; then
   echo "Network changed — see the latest reports/changes_*.md"
 fi
+[ "$status" -eq 0 ] && status=$scan_status
 exit "$status"
 ```
 

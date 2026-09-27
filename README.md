@@ -598,13 +598,21 @@ them — so piping IPMG into a file or a log gives you clean text.
 | `--stream-refresh` | `0.25` | Seconds between progress-bar redraws while streaming (0.05-5) |
 | `--verbose` | off | Debug logging |
 
+**Exit status**
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--fail-on-down` | off | Exit 3 if any target is not `Active` (reports are still written) |
+| `--min-active` | off | Exit 3 if fewer than this percentage of targets are `Active` |
+
 **History and changes** — see [Change detection](#change-detection) for
 `--compare`, `--no-history`, `--db`, `--diff-formats`, `--diff-output`,
 `--latency-threshold`, `--latency-pct`, `--fail-on-change`, and the
 `--notify-*` flags.
 
 Exit codes: `0` success, `1` error, `2` changes detected
-(`ipmg diff --fail-on-change`), `130` interrupted.
+(`ipmg diff --fail-on-change`), `3` hosts down (`--fail-on-down`,
+`--min-active`), `130` interrupted.
 
 ---
 

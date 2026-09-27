@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
+from ipmg.core.health import HostsDownError
 from ipmg.infrastructure.database import Database
 from ipmg.services.scan_service import run_scan
 from ipmg.utils.helpers import console
@@ -149,6 +150,52 @@ def test_run_scan_records_history(tmp_path, stub_scan):
     assert len(scans) == 1
     assert scans[0]["source"] == "targets.csv"
     assert scans[0]["status_counts"] == {"Active": 1}
+
+
+def test_run_scan_ignores_down_hosts_without_exit_status_checks(tmp_path, stub_scan):
+    stub_scan["statuses"] = {"10.0.0.1": ("Timeout", None)}
+
+    run_scan(scan_args(tmp_path, history=False))
+
+
+def test_run_scan_reports_hosts_down_after_writing_the_reports(tmp_path, stub_scan, monkeypatch):
+    saved = []
+    monkeypatch.setattr(
+        "ipmg.services.scan_service.save_results",
+        lambda df, *_args, **_kwargs: saved.append(len(df)),
+    )
+    stub_scan["statuses"] = {"10.0.0.1": ("Active", 1.0), "10.0.0.2": ("Timeout", None)}
+
+    with pytest.raises(HostsDownError, match=r"^1 of 2 hosts are not active: 10\.0\.0\.2\.$"):
+        run_scan(scan_args(tmp_path, fail_on_down=True))
+
+    assert saved == [2]
+    assert len(Database(tmp_path / "history.db").list_scans()) == 1
+
+
+def test_run_scan_min_active_passes_above_the_threshold(tmp_path, stub_scan):
+    stub_scan["statuses"] = {"10.0.0.1": ("Active", 1.0), "10.0.0.2": ("Timeout", None)}
+
+    run_scan(scan_args(tmp_path, history=False, min_active=50.0))
+    with pytest.raises(HostsDownError, match="below --min-active 60%"):
+        run_scan(scan_args(tmp_path, history=False, min_active=60.0))
+
+
+def test_run_scan_keeps_repeating_when_hosts_are_down(tmp_path, stub_scan, monkeypatch, capsys):
+    passes = []
+
+    def fake_sleep(_seconds):
+        passes.append(1)
+        if len(passes) == 2:
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr("ipmg.services.scan_service.time.sleep", fake_sleep)
+    stub_scan["statuses"] = {"10.0.0.1": ("Timeout", None)}
+
+    with pytest.raises(KeyboardInterrupt):
+        run_scan(scan_args(tmp_path, history=False, interval=1, fail_on_down=True))
+
+    assert capsys.readouterr().out.count("hosts are not active") == 2
 
 
 def test_run_scan_can_skip_history(tmp_path, stub_scan):

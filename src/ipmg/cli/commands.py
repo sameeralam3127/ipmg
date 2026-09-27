@@ -13,6 +13,7 @@ from ipmg.cli.parser import (
     build_web_parser,
 )
 from ipmg.core.diff import DiffOptions
+from ipmg.core.health import HostsDownError
 from ipmg.core.security import print_disclaimer_once
 from ipmg.exceptions import IPMGError
 from ipmg.infrastructure.notify import notify_options, send_notifications
@@ -26,6 +27,7 @@ from ipmg.utils.helpers import configure_logging
 EXIT_OK = 0
 EXIT_ERROR = 1
 EXIT_CHANGES_DETECTED = 2
+EXIT_HOSTS_DOWN = 3
 EXIT_INTERRUPTED = 130
 
 log = logging.getLogger(__name__)
@@ -137,6 +139,12 @@ def run(argv: Optional[List[str]] = None) -> int:
 
     try:
         return handler(handler_argv)
+    except HostsDownError as exc:
+        # Not an error: the scan finished and wrote its reports, but failed
+        # the check it was asked to make.
+        ui.blank()
+        ui.warn(str(exc))
+        return EXIT_HOSTS_DOWN
     except IPMGError as exc:
         ui.blank()
         ui.error(str(exc))
