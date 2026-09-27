@@ -111,9 +111,10 @@ if (Test-Command 'uv') {
 }
 
 # -------------------------------------------------------------- ipmg
-$target = $Package
+# The web extra too: someone running the one-liner expects `ipmg web` to work.
+$target = '{0}[web]' -f $Package
 if ($Version) {
-    $target = "$Package==$Version"
+    $target = '{0}[web]=={1}' -f $Package, $Version
 }
 
 Write-Step "Installing $target from PyPI..."
