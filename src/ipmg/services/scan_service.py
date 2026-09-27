@@ -30,6 +30,7 @@ from ipmg.infrastructure.incremental import (
     find_partial_report,
     load_partial_report,
 )
+from ipmg.infrastructure.notify import NotifyOptions, notify_options, send_notifications
 from ipmg.reporting import ui
 from ipmg.reporting.diff_report import export_diff, print_diff
 from ipmg.reporting.frames import results_dataframe
@@ -67,13 +68,16 @@ class HistoryOptions:
     export_formats: Tuple[str, ...] = ()
     export_base: str = "changes"
     diff: DiffOptions = field(default_factory=DiffOptions)
+    notify: NotifyOptions = field(default_factory=NotifyOptions)
 
 
 def _history_options(args) -> HistoryOptions:
     """Read history settings off the parsed arguments, with safe defaults."""
+    notify = notify_options(args)
     return HistoryOptions(
         enabled=bool(getattr(args, "history", True)),
-        compare=bool(getattr(args, "compare", False)),
+        # A notification is about changes, so asking for one asks for the comparison.
+        compare=bool(getattr(args, "compare", False)) or notify.enabled,
         any_source=bool(getattr(args, "compare_any_source", False)),
         db_path=getattr(args, "db", None),
         export_formats=tuple(getattr(args, "diff_formats", None) or ()),
@@ -82,6 +86,7 @@ def _history_options(args) -> HistoryOptions:
             latency_abs_ms=max(float(getattr(args, "latency_threshold", 5.0)), 0.0),
             latency_pct=max(float(getattr(args, "latency_pct", 25.0)), 0.0),
         ),
+        notify=notify,
     )
 
 
@@ -316,6 +321,8 @@ def _report_changes(
     print_diff(diff)
     if options.export_formats:
         export_diff(diff, options.export_base, options.export_formats)
+    # Last, so an alert that cannot be delivered has already cost nothing.
+    send_notifications(diff, options.notify)
 
 
 def _store_and_compare(

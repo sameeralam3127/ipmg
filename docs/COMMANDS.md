@@ -23,6 +23,7 @@ website. `ipmg --help` (and `ipmg web --help`, `ipmg history --help`,
 [Reports](#reports) ·
 [Scan history](#scan-history) ·
 [Change detection](#change-detection) ·
+[Notifications](#notifications) ·
 [Automation and exit codes](#automation-and-exit-codes) ·
 [IPMG Web](#ipmg-web) ·
 [Errors and what they mean](#errors-and-what-they-mean)
@@ -336,6 +337,78 @@ ipmg diff --latency-threshold 10 --latency-pct 50   # defaults: 5 ms and 25%
 | Host offline | critical |
 | New host, host removed, IP address changed, service changed | warning |
 | Host back online, hostname changed, latency changed | info |
+
+---
+
+## Notifications
+
+`--compare` prints what changed. The `--notify-*` flags send it somewhere, so
+someone hears about it without watching a terminal. They work on a scan and on
+`ipmg diff`, and any of them turns on `--compare` for a scan.
+
+```bash
+ipmg --input servers.txt --notify-slack https://hooks.slack.com/services/…
+ipmg --input servers.txt --notify-teams https://prod-00.westus.logic.azure.com/…
+ipmg --input servers.txt --notify-webhook https://ops.example.com/ipmg
+ipmg --input servers.txt --notify-email ops@example.com --smtp-host smtp.example.com
+ipmg diff --notify-slack                  # URL from $IPMG_NOTIFY_SLACK
+```
+
+| Flag | Sends |
+| --- | --- |
+| `--notify-webhook [URL]` | The change report as JSON: `ipmg diff --diff-formats json` plus `event`, `headline`, `min_severity`, and `ipmg_version` |
+| `--notify-slack [URL]` | A Slack message listing up to 20 changes, most severe first, to an [incoming webhook](https://api.slack.com/messaging/webhooks) |
+| `--notify-teams [URL]` | The same list as an Adaptive Card, to a Teams **Workflows** webhook ("Post to a channel when a webhook request is received") |
+| `--notify-email [ADDRESS ...]` | An email whose body is the Markdown change report |
+| `--notify-severity LEVEL` | Only notify when a change is at least `critical`, `warning` (default), or `info` — see [severities](#change-detection) |
+
+A notification is sent only when at least one change reaches
+`--notify-severity`, and then it carries every change, so you see the context.
+With `--interval`, each pass is compared with the one before it, so you hear
+about a host going offline once, when it happens, and again only when
+something else changes.
+
+### Secrets and the environment
+
+Webhook URLs contain their access token. Give a URL flag without a value and
+IPMG reads the URL from the environment instead. That keeps the token out of
+`ps`, your shell history, and your crontab:
+
+| Setting | Environment variable |
+| --- | --- |
+| `--notify-webhook` | `IPMG_NOTIFY_WEBHOOK` |
+| `--notify-slack` | `IPMG_NOTIFY_SLACK` |
+| `--notify-teams` | `IPMG_NOTIFY_TEAMS` |
+| `--notify-email` | `IPMG_NOTIFY_EMAIL` (comma-separated) |
+| `--smtp-host` | `IPMG_SMTP_HOST` |
+| `--smtp-port` | `IPMG_SMTP_PORT` (default 587; 465 with `ssl`, 25 with `none`) |
+| `--smtp-security` | `IPMG_SMTP_SECURITY`: `starttls` (default), `ssl`, or `none` |
+| `--smtp-user` | `IPMG_SMTP_USER` |
+| `--smtp-from` | `IPMG_SMTP_FROM` (default: the login, else `ipmg@<this host>`) |
+| — | `IPMG_SMTP_PASSWORD`, the only way to give the mail password |
+
+A flag with a value wins over its variable. A variable on its own never turns
+notifications on: you still pass the flag.
+
+```bash
+# /etc/ipmg/notify.env, readable only by the account that runs the scan
+IPMG_NOTIFY_SLACK=https://hooks.slack.com/services/…
+IPMG_SMTP_HOST=smtp.example.com
+IPMG_SMTP_USER=ipmg@example.com
+IPMG_SMTP_PASSWORD=…
+
+# crontab: scan every 15 minutes, alert Slack and email on warnings or worse
+*/15 * * * * set -a; . /etc/ipmg/notify.env; ipmg --input /opt/ipmg/targets.txt --formats csv --output /var/lib/ipmg/scan --notify-slack --notify-email ops@example.com
+```
+
+### When a notification fails
+
+A setting that cannot work, like `--notify-email` with no mail server or a
+URL that is not `http(s)://`, is an error before any host is probed (exit
+`1`). Delivery is different: if Slack is down or the mail server refuses the
+login, IPMG prints a warning and carries on. The scan, its reports, its
+history entry, the other notifications, and the exit code are unaffected.
+Error messages never include a webhook URL or the password.
 
 ---
 

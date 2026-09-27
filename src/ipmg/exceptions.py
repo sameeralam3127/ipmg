@@ -27,3 +27,7 @@ class ReportError(IPMGError):
 
 class HistoryError(IPMGError):
     """Raised when scan history cannot be stored, read, or compared."""
+
+
+class NotifyError(IPMGError):
+    """Raised when change notifications are configured incorrectly."""

@@ -260,3 +260,96 @@ def test_run_scan_without_input_reuses_an_existing_default_file(tmp_path, monkey
 
     assert pinged == ["10.0.0.1"]
     assert "Created" not in capsys.readouterr().out
+
+
+@pytest.fixture()
+def captured_posts(monkeypatch):
+    """Record every webhook post instead of sending it."""
+    posts = []
+    monkeypatch.setattr(
+        "ipmg.infrastructure.notify.post_json", lambda url, payload: posts.append((url, payload))
+    )
+    return posts
+
+
+def test_run_scan_notification_implies_compare(tmp_path, stub_scan, captured_posts, capsys):
+    stub_scan["statuses"] = {"10.0.0.1": ("Active", 5.0)}
+    run_scan(scan_args(tmp_path))
+
+    stub_scan["statuses"] = {"10.0.0.1": ("Timeout", None)}
+    run_scan(scan_args(tmp_path, notify_webhook="https://example.test/hook"))
+
+    assert "Host offline" in capsys.readouterr().out
+    [(url, payload)] = captured_posts
+    assert url == "https://example.test/hook"
+    assert payload["changes"][0]["type"] == "host_offline"
+
+
+def test_run_scan_notifies_on_every_interval_pass_that_changes(
+    tmp_path, stub_scan, captured_posts, monkeypatch
+):
+    timeline = [
+        {"10.0.0.1": ("Active", 5.0)},
+        {"10.0.0.1": ("Timeout", None)},
+        {"10.0.0.1": ("Timeout", None)},
+        {"10.0.0.1": ("Timeout", None), "10.0.0.2": ("Active", 1.0)},
+    ]
+    stub_scan["statuses"] = timeline.pop(0)
+
+    def next_pass(_seconds):
+        if not timeline:
+            raise KeyboardInterrupt
+        stub_scan["statuses"] = timeline.pop(0)
+
+    monkeypatch.setattr("ipmg.services.scan_service.time.sleep", next_pass)
+
+    with pytest.raises(KeyboardInterrupt):
+        run_scan(scan_args(tmp_path, interval=1, notify_slack="https://example.test/slack"))
+
+    # Pass 1 has no baseline and pass 3 changed nothing, so only 2 and 4 alert.
+    headlines = [payload["text"] for _url, payload in captured_posts]
+    assert headlines == [
+        "IPMG: 1 change (1 critical) in targets.csv",
+        "IPMG: 1 change (1 warning) in targets.csv",
+    ]
+
+
+def test_run_scan_keeps_its_results_when_a_notification_fails(
+    tmp_path, stub_scan, monkeypatch, capsys
+):
+    def refuse(_url, _payload):
+        raise OSError("connection refused")
+
+    saved = []
+    monkeypatch.setattr("ipmg.infrastructure.notify.post_json", refuse)
+    monkeypatch.setattr(
+        "ipmg.services.scan_service.save_results", lambda df, *_a, **_k: saved.append(len(df))
+    )
+    stub_scan["statuses"] = {"10.0.0.1": ("Active", 5.0)}
+    run_scan(scan_args(tmp_path))
+
+    stub_scan["statuses"] = {"10.0.0.1": ("Timeout", None)}
+    run_scan(
+        scan_args(
+            tmp_path,
+            notify_webhook="https://example.test/hook",
+            diff_formats=["md"],
+        )
+    )
+
+    assert "Webhook notification failed: connection refused" in capsys.readouterr().out
+    assert saved == [1, 1]
+    assert len(Database(tmp_path / "history.db").list_scans()) == 2
+    assert list(tmp_path.glob("changes_*.md"))
+
+
+def test_run_scan_rejects_notification_settings_before_scanning(tmp_path, monkeypatch):
+    from ipmg.exceptions import NotifyError
+
+    pinged = record_pings(monkeypatch)
+    monkeypatch.delenv("IPMG_NOTIFY_SLACK", raising=False)
+
+    with pytest.raises(NotifyError, match="IPMG_NOTIFY_SLACK"):
+        run_scan(scan_args(tmp_path, notify_slack=""))
+
+    assert pinged == []

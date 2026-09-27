@@ -15,6 +15,7 @@ from ipmg.cli.parser import (
 from ipmg.core.diff import DiffOptions
 from ipmg.core.security import print_disclaimer_once
 from ipmg.exceptions import IPMGError
+from ipmg.infrastructure.notify import notify_options, send_notifications
 from ipmg.reporting import ui
 from ipmg.reporting.diff_report import export_diff, print_diff
 from ipmg.reporting.summary import print_scan_history
@@ -77,6 +78,7 @@ def _diff_command(argv: List[str]) -> int:
         ui.error("Provide at most two scan ids: BASELINE TARGET.")
         return EXIT_ERROR
 
+    notify = notify_options(args)
     history = HistoryService.open(args.db)
     options = DiffOptions(
         latency_abs_ms=max(args.latency_threshold, 0.0),
@@ -93,6 +95,7 @@ def _diff_command(argv: List[str]) -> int:
     print_diff(diff, limit=args.limit)
     if args.diff_formats:
         export_diff(diff, args.diff_output, args.diff_formats)
+    send_notifications(diff, notify)
 
     if args.fail_on_change and diff.has_changes:
         return EXIT_CHANGES_DETECTED

@@ -13,6 +13,16 @@ from ipmg.infrastructure.incremental import (
     MIN_AUTOSAVE_S,
     REPORT_FORMATS,
 )
+from ipmg.infrastructure.notify import (
+    DEFAULT_NOTIFY_SEVERITY,
+    ENV_EMAIL,
+    ENV_SLACK,
+    ENV_SMTP_PASSWORD,
+    ENV_TEAMS,
+    ENV_WEBHOOK,
+    NOTIFY_SEVERITIES,
+    SMTP_SECURITY,
+)
 from ipmg.reporting.diff_report import DIFF_FORMATS
 from ipmg.reporting.live import DEFAULT_REFRESH_S, MAX_REFRESH_S, MIN_REFRESH_S
 
@@ -84,6 +94,84 @@ def _add_diff_export_arguments(parser) -> None:
         default="changes",
         metavar="BASENAME",
         help="Base filename for exported change summaries (default: changes).",
+    )
+
+
+def _add_notify_arguments(parser: argparse.ArgumentParser) -> None:
+    group = parser.add_argument_group(
+        "change notifications",
+        "Send the change report when a comparison finds changes. Each URL flag may be "
+        "given without a value to read it from its environment variable, which keeps "
+        "webhook secrets out of the process list and your crontab.",
+    )
+    group.add_argument(
+        "--notify-webhook",
+        nargs="?",
+        const="",
+        default=None,
+        metavar="URL",
+        help=f"POST the change report as JSON to URL (or ${ENV_WEBHOOK}).",
+    )
+    group.add_argument(
+        "--notify-slack",
+        nargs="?",
+        const="",
+        default=None,
+        metavar="URL",
+        help=f"Post the changes to a Slack incoming webhook (or ${ENV_SLACK}).",
+    )
+    group.add_argument(
+        "--notify-teams",
+        nargs="?",
+        const="",
+        default=None,
+        metavar="URL",
+        help=f"Post the changes to a Microsoft Teams Workflows webhook (or ${ENV_TEAMS}).",
+    )
+    group.add_argument(
+        "--notify-email",
+        nargs="*",
+        default=None,
+        metavar="ADDRESS",
+        help=(
+            "Email the Markdown change report to these addresses "
+            f"(or the comma-separated ${ENV_EMAIL}). Needs --smtp-host."
+        ),
+    )
+    group.add_argument(
+        "--notify-severity",
+        choices=NOTIFY_SEVERITIES,
+        default=DEFAULT_NOTIFY_SEVERITY,
+        help=(
+            "Only notify when a change is at least this severe "
+            f"(default: {DEFAULT_NOTIFY_SEVERITY})."
+        ),
+    )
+    group.add_argument(
+        "--smtp-host",
+        metavar="HOST",
+        help="Mail server for --notify-email (or $IPMG_SMTP_HOST).",
+    )
+    group.add_argument(
+        "--smtp-port",
+        type=int,
+        metavar="PORT",
+        help="Mail server port (or $IPMG_SMTP_PORT; default: 587, 465 with ssl, 25 with none).",
+    )
+    group.add_argument(
+        "--smtp-security",
+        choices=SMTP_SECURITY,
+        help="How to encrypt the mail connection (or $IPMG_SMTP_SECURITY; default: starttls).",
+    )
+    group.add_argument(
+        "--smtp-user",
+        metavar="USER",
+        help=f"Mail server login (or $IPMG_SMTP_USER). The password is read from ${ENV_SMTP_PASSWORD}.",
+    )
+    group.add_argument(
+        "--smtp-from",
+        metavar="ADDRESS",
+        help="Sender address (or $IPMG_SMTP_FROM; default: the login, else ipmg@<this host>).",
     )
 
 
@@ -264,7 +352,10 @@ def build_parser() -> argparse.ArgumentParser:
     history.add_argument(
         "--compare",
         action="store_true",
-        help="Compare this scan against the previous one and print a change report.",
+        help=(
+            "Compare this scan against the previous one and print a change report "
+            "(implied by any --notify-* flag)."
+        ),
     )
     history.add_argument(
         "--compare-any-source",
@@ -274,6 +365,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_database_argument(history)
     _add_diff_export_arguments(history)
     _add_diff_threshold_arguments(parser)
+    _add_notify_arguments(parser)
     parser.set_defaults(history=True)
     return parser
 
@@ -363,5 +455,6 @@ def build_diff_parser() -> argparse.ArgumentParser:
     _add_database_argument(parser)
     _add_diff_export_arguments(parser)
     _add_diff_threshold_arguments(parser)
+    _add_notify_arguments(parser)
     parser.add_argument("--verbose", action="store_true")
     return parser
