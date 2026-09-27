@@ -1,0 +1,70 @@
+name: Installer
+
+# Runs install.ps1 for real on Windows, under both Windows PowerShell 5.1
+# (`powershell`) and PowerShell 7 (`pwsh`), the way a user would.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - install.ps1
+      - .github/workflows/installer.yml
+  push:
+    branches: [main]
+    paths:
+      - install.ps1
+      - .github/workflows/installer.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: installer-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: install.ps1 (${{ matrix.shell }})
+    runs-on: windows-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        shell: [powershell, pwsh]
+
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The runner ships uv; hide it, so the installer's own uv install runs.
+      - name: Hide the runner's uv
+        run: |
+          Get-Command uv -All -ErrorAction SilentlyContinue | ForEach-Object {
+            Rename-Item $_.Source ($_.Source + '.hidden')
+          }
+          if (Get-Command uv -ErrorAction SilentlyContinue) { throw 'uv is still on PATH' }
+
+      # As the README says to run it: piped into iex, with no arguments.
+      - name: Install with irm | iex
+        run: Get-Content -Raw ./install.ps1 | Invoke-Expression
+
+      - name: A new session finds ipmg on the user PATH
+        run: |
+          $env:Path = [Environment]::GetEnvironmentVariable('Path', 'User') + ';' +
+                      [Environment]::GetEnvironmentVariable('Path', 'Machine')
+          ipmg --version
+          ipmg --input 127.0.0.1 --no-history --formats csv --output smoke --fail-on-down
+
+      - name: Pin a release with -Version
+        run: |
+          & ([scriptblock]::Create((Get-Content -Raw ./install.ps1))) -Version 2.3.0
+          $version = (& (Join-Path (uv tool dir --bin) 'ipmg.exe') --version | Out-String)
+          if ($version -notmatch '2\.3\.0') { throw "expected 2.3.0, got $version" }
+
+      - name: Run it a second time (an upgrade over an existing install)
+        run: Get-Content -Raw ./install.ps1 | Invoke-Expression

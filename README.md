@@ -102,11 +102,18 @@ The formula lives in
 and is updated with every release. Upgrade with `brew upgrade ipmg`, remove
 with `brew uninstall ipmg`.
 
-**Windows — two commands in PowerShell:**
+**Windows — one command in PowerShell:**
 
 ```powershell
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-uv tool install ipmg
+irm https://raw.githubusercontent.com/sameeralam3127/ipmg/main/install.ps1 | iex
+```
+
+It works in Windows PowerShell 5.1 and PowerShell 7 and needs no
+administrator rights: it installs uv if it is missing, installs IPMG, adds it
+to your user `PATH`, and checks that `ipmg --version` runs. To pin a release:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/sameeralam3127/ipmg/main/install.ps1))) -Version 2.3.0
 ```
 
 Then check it works, on any platform:

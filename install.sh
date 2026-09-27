@@ -87,9 +87,8 @@ case "$OS" in
   Linux|Darwin) ;;
   MINGW*|MSYS*|CYGWIN*)
     error "This installer is for Linux and macOS.
-On Windows, run these two commands in PowerShell instead:
-  powershell -ExecutionPolicy ByPass -c \"irm https://astral.sh/uv/install.ps1 | iex\"
-  uv tool install ${PACKAGE}"
+On Windows, run this in PowerShell instead:
+  irm https://raw.githubusercontent.com/sameeralam3127/ipmg/main/install.ps1 | iex"
     ;;
   *) error "Unsupported operating system: ${OS}" ;;
 esac
