@@ -2,6 +2,31 @@
 
 <!-- version list -->
 
+## v2.4.0 (2026-09-27)
+
+### Bug Fixes
+
+- Address CodeRabbit review on config files and JSON targets
+  ([#84](https://github.com/sameeralam3127/ipmg/pull/84),
+  [`3f33acc`](https://github.com/sameeralam3127/ipmg/commit/3f33acccd07eeacdd4e168aa4900bb75525b52e6))
+
+### Features
+
+- **cli**: Accept a file and extra targets together in one scan
+  ([#84](https://github.com/sameeralam3127/ipmg/pull/84),
+  [`3f33acc`](https://github.com/sameeralam3127/ipmg/commit/3f33acccd07eeacdd4e168aa4900bb75525b52e6))
+
+- **cli**: Accept JSON target files with --input
+  ([#84](https://github.com/sameeralam3127/ipmg/pull/84),
+  [`3f33acc`](https://github.com/sameeralam3127/ipmg/commit/3f33acccd07eeacdd4e168aa4900bb75525b52e6))
+
+### Testing
+
+- **json**: Compare the error text with rich's line wrapping undone
+  ([#84](https://github.com/sameeralam3127/ipmg/pull/84),
+  [`3f33acc`](https://github.com/sameeralam3127/ipmg/commit/3f33acccd07eeacdd4e168aa4900bb75525b52e6))
+
+
 ## v2.3.0 (2026-09-27)
 
 ### Bug Fixes
