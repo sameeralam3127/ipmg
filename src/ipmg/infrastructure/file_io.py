@@ -4,13 +4,13 @@ import io
 import ipaddress
 import json
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Sequence
 
 import pandas as pd
 
 from ipmg.core.ping import validate_ip
 from ipmg.exceptions import FileIOError
-from ipmg.infrastructure.incremental import atomic_write_bytes, jsonl_record
+from ipmg.infrastructure.incremental import atomic_write_bytes, frame_rows, jsonl_record
 from ipmg.reporting import ui
 from ipmg.utils.helpers import markdown_cell, spreadsheet_escape, timestamp_str
 
@@ -219,6 +219,35 @@ def load_targets(source: str) -> list[str]:
     )
 
 
+def describe_sources(sources: Sequence[str]) -> str:
+    """The one-line name for a set of target sources, as reports record it."""
+    return ", ".join(sources)
+
+
+def load_all_targets(sources: Sequence[str]) -> list[str]:
+    """Expand every target source and merge them into one de-duplicated list.
+
+    Sources are any mix of files, IPs, CIDR blocks, and ranges; each one is
+    expanded by :func:`load_targets`. Hosts keep the order they were first
+    seen in, and duplicates across sources collapse — scanning a file plus one
+    host already in it probes that host once.
+
+    De-duplication happens as each source lands rather than at the end, so the
+    :data:`MAX_EXPANDED_TARGETS` limit bounds the distinct hosts of the whole
+    run: two overlapping /17 blocks are the union they describe, not its sum.
+    """
+    if not sources:
+        raise FileIOError("No target source was given.")
+    if len(sources) == 1:
+        return load_targets(sources[0])
+
+    merged: dict[str, None] = {}
+    for source in sources:
+        merged.update(dict.fromkeys(load_targets(source)))
+        _check_target_limit(len(merged), describe_sources(sources))
+    return list(merged)
+
+
 def create_sample_file(path: str) -> None:
     df = pd.DataFrame({"IP Address": ["8.8.8.8", "1.1.1.1"]})
     suffix = Path(path).suffix.lower()
@@ -346,8 +375,7 @@ def write_report(df: pd.DataFrame, path: str, fmt: str) -> None:
     elif fmt == "jsonl":
         # Rendered row by row rather than through pandas, so the finished file
         # is written exactly like the one a running scan appends to.
-        rows = df.astype(object).where(pd.notna(df), None).to_dict(orient="records")
-        data = "".join(jsonl_record(row) for row in rows).encode("utf-8")
+        data = "".join(jsonl_record(row) for row in frame_rows(df)).encode("utf-8")
     elif fmt == "md":
         data = build_markdown_report(df).encode("utf-8")
     else:
