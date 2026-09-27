@@ -458,6 +458,20 @@ Anywhere IPMG takes `--input`, you can give it any of these:
   | 192.168.1.1 |
   | 10.0.1.0/30 |
 
+- **A JSON file** (`.json`) — a list of addresses, a list of objects keyed by
+  `IP Address`, `ip`, or `target`, or an object with a `targets` or `ips` array:
+
+  ```json
+  ["192.168.1.1", "10.0.1.0/30"]
+  ```
+
+  Because `IP Address` is one of the keys it accepts, a report IPMG wrote with
+  `--formats json` can be fed straight back in:
+
+  ```bash
+  ipmg --input results_20260628_120000.json
+  ```
+
 Duplicate targets are removed automatically, and one scan expands to at most
 65,536 hosts — larger CIDR blocks or ranges are rejected up front, before the
 scan starts.
@@ -534,7 +548,7 @@ them — so piping IPMG into a file or a log gives you clean text.
 
 | Flag | Default | Description |
 | --- | --- | --- |
-| `--input` | `ip_list.xlsx` | What to scan: a file (`.xlsx`, `.xls`, `.csv`, `.txt`, `.list`), a single IP, a CIDR block, or a range (`10.0.0.1-10.0.0.50`) |
+| `--input` | `ip_list.xlsx` | What to scan: a file (`.xlsx`, `.xls`, `.csv`, `.json`, `.txt`, `.list`), a single IP, a CIDR block, or a range (`10.0.0.1-10.0.0.50`) |
 | `--discover` | off | Auto-detect and scan the local subnet instead |
 | `--output` | `results` | Report file name prefix |
 | `--formats` | `xlsx` | One or more of `xlsx`, `csv`, `json`, `jsonl`, `md` |

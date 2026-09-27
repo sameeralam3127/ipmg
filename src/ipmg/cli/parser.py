@@ -105,7 +105,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="TARGETS",
         help=(
-            "IP, CIDR block, range, or target file (.txt, .list, .csv, .xls, .xlsx). "
+            "IP, CIDR block, range, or target file (.txt, .list, .csv, .json, .xls, .xlsx). "
             f"Without --input or --discover, {DEFAULT_INPUT_FILE} is used and "
             "created with sample targets if it does not exist."
         ),

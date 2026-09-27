@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import io
 import ipaddress
+import json
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable
 
 import pandas as pd
 
@@ -13,7 +14,7 @@ from ipmg.infrastructure.incremental import atomic_write_bytes, jsonl_record
 from ipmg.reporting import ui
 from ipmg.utils.helpers import markdown_cell, spreadsheet_escape, timestamp_str
 
-SUPPORTED_INPUT_SUFFIXES = {".xlsx", ".xls", ".csv", ".txt", ".list"}
+SUPPORTED_INPUT_SUFFIXES = {".xlsx", ".xls", ".csv", ".json", ".txt", ".list"}
 MAX_EXPANDED_TARGETS = 65_536
 DEFAULT_INPUT_FILE = "ip_list.xlsx"
 
@@ -116,6 +117,44 @@ def parse_manual_targets(text: str) -> list[str]:
     return targets
 
 
+#: Keys a JSON target object may carry its address under, most explicit first.
+#: ``IP Address`` comes first because it is the column IPMG's own JSON report
+#: writes, which is what makes a report usable as input again.
+JSON_TARGET_KEYS = ("IP Address", "ip", "target")
+
+
+def targets_from_json(data: Any, source: str = "JSON input") -> list[str]:
+    """Expand targets from already-parsed JSON, in any shape IPMG accepts.
+
+    A list of address strings, a list of objects keyed by any of
+    :data:`JSON_TARGET_KEYS`, or an object with a ``targets`` or ``ips`` array.
+    Shared by the CLI loader and the dashboard uploader so both accept exactly
+    the same documents.
+    """
+    if isinstance(data, dict):
+        data = data.get("targets") or data.get("ips") or []
+    if not isinstance(data, list):
+        raise FileIOError(f"{source} must contain a list of targets.")
+
+    tokens: list[str] = []
+    for entry in data:
+        if isinstance(entry, str):
+            tokens.append(entry)
+        elif isinstance(entry, dict):
+            value = next((entry[key] for key in JSON_TARGET_KEYS if entry.get(key)), None)
+            if value is not None:
+                tokens.append(str(value))
+
+    # strict=True: a JSON document is structured, so an entry that is not a
+    # target is a mistake worth naming, not a stray line to skip.
+    targets = _collect_targets(tokens, source, strict=True)
+
+    if not targets:
+        raise FileIOError(f"No valid IP targets were found in {source}.")
+
+    return targets
+
+
 def _load_from_dataframe(df: pd.DataFrame, source: str) -> list[str]:
     if "IP Address" not in df.columns:
         raise FileIOError(f"Input file '{source}' must contain an 'IP Address' column.")
@@ -142,6 +181,14 @@ def _load_from_text(path: str) -> list[str]:
     return targets
 
 
+def _load_from_json(path: str) -> list[str]:
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise FileIOError(f"Input file '{path}' is not valid JSON: {exc}") from exc
+    return targets_from_json(data, f"'{path}'")
+
+
 def load_targets(source: str) -> list[str]:
     path = Path(source)
 
@@ -151,6 +198,8 @@ def load_targets(source: str) -> list[str]:
             return _load_from_dataframe(pd.read_excel(path), source)
         if suffix == ".csv":
             return _load_from_dataframe(pd.read_csv(path), source)
+        if suffix == ".json":
+            return _load_from_json(source)
         if suffix in {".txt", ".list"}:
             return _load_from_text(source)
         raise FileIOError(
@@ -176,6 +225,10 @@ def create_sample_file(path: str) -> None:
 
     if suffix == ".csv":
         df.to_csv(path, index=False)
+        return
+
+    if suffix == ".json":
+        Path(path).write_text(json.dumps(["8.8.8.8", "1.1.1.1"], indent=2) + "\n", encoding="utf-8")
         return
 
     if suffix in {".txt", ".list"}:
