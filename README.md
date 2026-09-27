@@ -116,11 +116,49 @@ to your user `PATH`, and checks that `ipmg --version` runs. To pin a release:
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/sameeralam3127/ipmg/main/install.ps1))) -Version 2.3.0
 ```
 
+**Docker (amd64 and arm64):**
+
+```bash
+docker run --rm ghcr.io/sameeralam3127/ipmg --input 10.0.0.0/24
+```
+
 Then check it works, on any platform:
 
 ```bash
 ipmg --version
 ```
+
+### Running in Docker
+
+The image carries `ping`, runs as an unprivileged user (uid 10001), and keeps
+everything a scan writes (reports and the history database) in `/data`. Mount
+a volume there to keep it between runs:
+
+```bash
+docker run --rm -v ipmg-data:/data ghcr.io/sameeralam3127/ipmg --input 10.0.0.0/24 --compare
+```
+
+Ping needs no added capability: it uses the unprivileged ICMP sockets that
+Docker and containerd enable by default, so it also works with
+`--cap-drop ALL` and under Kubernetes' restricted pod security profile. To
+scan your LAN rather than the container's network, add `--network host`
+(Linux).
+
+For IPMG Web, use the [`compose.yaml`](https://github.com/sameeralam3127/ipmg/blob/main/compose.yaml)
+in this repository. Inside a container IPMG Web must listen on `0.0.0.0` or
+nothing outside the container could reach it, so the compose file starts it
+with `web --host 0.0.0.0` and publishes the port on the host's `127.0.0.1`
+only. Set a fixed `IPMG_WEB_TOKEN` in `.env`, then:
+
+```bash
+docker compose up -d                                      # http://127.0.0.1:8080/#token=<your token>
+docker compose run --rm scan --input 10.0.0.0/24          # CLI scans land in the same history
+```
+
+Publishing the port more widely (`8080:8080`) exposes IPMG Web on your
+network over plain HTTP; put a reverse proxy with TLS in front first. Images
+are tagged with the release version (`2.4.0`), the minor line (`2.4`), and
+`latest`.
 
 ### Installing with pip
 

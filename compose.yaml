@@ -1,0 +1,34 @@
+# IPMG Web with a persistent scan history.
+#
+#   echo "IPMG_WEB_TOKEN=$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')" > .env
+#   docker compose up -d
+#   open "http://127.0.0.1:8080/#token=<the token from .env>"
+#
+# Inside a container, IPMG Web has to listen on 0.0.0.0 or nothing outside
+# the container can reach it. The port is still published on 127.0.0.1 only,
+# so the host's network sees nothing; widen it deliberately, and put a reverse
+# proxy with TLS in front before you do.
+
+services:
+  ipmg-web:
+    image: ghcr.io/sameeralam3127/ipmg:latest
+    command: ["web", "--host", "0.0.0.0", "--no-browser"]
+    environment:
+      # A fixed token, so the link keeps working across restarts.
+      IPMG_WEB_TOKEN: ${IPMG_WEB_TOKEN:?set IPMG_WEB_TOKEN in .env}
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ipmg-data:/data
+    restart: unless-stopped
+
+  # Scans run by the CLI land in the same history, so IPMG Web shows them too:
+  #   docker compose run --rm scan --input 10.0.0.0/24 --compare
+  scan:
+    image: ghcr.io/sameeralam3127/ipmg:latest
+    profiles: ["cli"]
+    volumes:
+      - ipmg-data:/data
+
+volumes:
+  ipmg-data:

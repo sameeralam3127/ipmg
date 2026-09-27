@@ -1,0 +1,8 @@
+# Only pyproject.toml, README.md, LICENSE, and src/ go into the image.
+*
+!pyproject.toml
+!README.md
+!LICENSE
+!src/
+src/**/__pycache__
+src/*.egg-info
