@@ -344,3 +344,57 @@ def test_websocket_closes_a_subscriber_that_falls_behind(client):
         with pytest.raises(WebSocketDisconnect) as closed:
             websocket.receive_json()
     assert closed.value.code == 1013
+
+
+def test_validation_errors_use_the_error_model(client):
+    response = client.post("/api/v1/scans", json={"targets": "10.0.0.1", "threads": "many"})
+    assert response.status_code == 422
+    body = response.json()
+    assert body["detail"].startswith("Invalid request: body.threads:")
+    assert body["errors"][0]["loc"] == ["body", "threads"]
+    assert {"msg", "type"} <= set(body["errors"][0])
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "status"),
+    [
+        ("get", "/api/v1/scans/999", 404),
+        ("post", "/api/v1/scans/999/cancel", 409),
+        ("get", "/api/v1/scans/999/report?fmt=pdf", 400),
+        ("get", "/api/v1/does-not-exist", 404),
+    ],
+)
+def test_http_errors_use_the_error_model(client, method, path, status):
+    response = client.request(method, path)
+    assert response.status_code == status
+    assert set(response.json()) == {"detail"}
+    assert isinstance(response.json()["detail"], str)
+
+
+def test_responses_match_their_models(client):
+    from ipmg.web.schemas import Asset, HostResultRow, ScanSummary, Stats
+
+    scan_id = client.post("/api/v1/scans", json={"targets": "10.0.0.1"}).json()["id"]
+    wait_for_completion(client, scan_id)
+
+    Stats.model_validate(client.get("/api/v1/stats").json())
+    for row in client.get("/api/v1/assets").json():
+        Asset.model_validate(row)
+    for scan in client.get("/api/v1/scans").json():
+        ScanSummary.model_validate(scan)
+    for row in client.get(f"/api/v1/scans/{scan_id}/results").json():
+        HostResultRow.model_validate(row)
+
+
+def test_websocket_events_match_their_models(client):
+    from pydantic import TypeAdapter
+
+    from ipmg.web.schemas import WebSocketEvent
+
+    adapter = TypeAdapter(WebSocketEvent)
+    with client.websocket_connect("/api/v1/ws", subprotocols=WS_AUTH) as websocket:
+        client.post("/api/v1/scans", json={"targets": "10.0.0.1"})
+        types = []
+        while not types or types[-1] != "scan_finished":
+            types.append(adapter.validate_python(websocket.receive_json()).type)
+    assert types == ["scan_started", "result", "scan_finished"]

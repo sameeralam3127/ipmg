@@ -53,6 +53,7 @@ dependencies = [
     "openpyxl>=3.1",
     "rich>=13.0",
     "fastapi>=0.110",
+    "pydantic>=2.7",
     "uvicorn>=0.27",
     "websockets>=12",
     "python-multipart>=0.0.9",
@@ -111,6 +112,9 @@ tag_format = "v{version}"
 commit_message = "chore(release): {version}"
 build_command = "python -m build"
 major_on_zero = false
+
+[tool.semantic_release.changelog.default_templates]
+changelog_file = ".github/CHANGELOG.md"
 
 
 # ==========================================================

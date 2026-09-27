@@ -14,8 +14,10 @@ from ipmg.cli.parser import (
     build_web_parser,
 )
 from ipmg.core.diff import DiffOptions
+from ipmg.core.health import HostsDownError
 from ipmg.core.security import print_disclaimer_once
 from ipmg.exceptions import IPMGError
+from ipmg.infrastructure.notify import notify_options, send_notifications
 from ipmg.reporting import ui
 from ipmg.reporting.diff_report import export_diff, print_diff
 from ipmg.reporting.summary import print_scan_history
@@ -26,6 +28,7 @@ from ipmg.utils.helpers import configure_logging
 EXIT_OK = 0
 EXIT_ERROR = 1
 EXIT_CHANGES_DETECTED = 2
+EXIT_HOSTS_DOWN = 3
 EXIT_INTERRUPTED = 130
 
 log = logging.getLogger(__name__)
@@ -86,6 +89,7 @@ def _diff_command(argv: List[str]) -> int:
         ui.error("Provide at most two scan ids: BASELINE TARGET.")
         return EXIT_ERROR
 
+    notify = notify_options(args)
     history = HistoryService.open(args.db)
     options = DiffOptions(
         latency_abs_ms=max(args.latency_threshold, 0.0),
@@ -102,6 +106,7 @@ def _diff_command(argv: List[str]) -> int:
     print_diff(diff, limit=args.limit)
     if args.diff_formats:
         export_diff(diff, args.diff_output, args.diff_formats)
+    send_notifications(diff, notify)
 
     if args.fail_on_change and diff.has_changes:
         return EXIT_CHANGES_DETECTED
@@ -143,6 +148,12 @@ def run(argv: Optional[List[str]] = None) -> int:
 
     try:
         return handler(handler_argv)
+    except HostsDownError as exc:
+        # Not an error: the scan finished and wrote its reports, but failed
+        # the check it was asked to make.
+        ui.blank()
+        ui.warn(str(exc))
+        return EXIT_HOSTS_DOWN
     except IPMGError as exc:
         ui.blank()
         ui.error(str(exc))

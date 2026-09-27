@@ -25,14 +25,25 @@ on.
 
 ### Where does my scan history live?
 
-In `~/.ipmg/dashboard.db`, on your machine only. Nothing is uploaded anywhere.
+In `~/.ipmg/dashboard.db`, on your machine only. Nothing is uploaded anywhere;
+the only thing IPMG ever sends is a change notification you ask for with a
+`--notify-*` flag.
 Point it elsewhere with `--db`, or skip storing a scan with `--no-history`.
 
 ### Can I run it on a schedule?
 
 Yes — `--interval 5` repeats the scan every 5 minutes in the foreground. For
-unattended runs, use cron or a systemd timer with `--compare --fail-on-change`
-so a change shows up as a non-zero exit code.
+unattended runs, use cron or a systemd timer: `--fail-on-down` or
+`--min-active 90` makes the scan exit `3` when hosts are down, and
+`ipmg diff --fail-on-change` exits `2` when anything changed.
+
+### Can it alert me when something changes?
+
+Yes. `--notify-slack`, `--notify-teams`, `--notify-webhook`, and
+`--notify-email` send the change report whenever a scan finds a change at or
+above `--notify-severity` (default `warning`). Combine them with `--interval`
+or cron to monitor a network. See
+[Notifications](COMMANDS.md#notifications).
 
 ### How big a range can I scan?
 

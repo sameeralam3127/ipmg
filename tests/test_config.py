@@ -235,6 +235,38 @@ def test_a_value_the_flags_type_rejects(in_project):
         parse([])
 
 
+@pytest.mark.parametrize("value, expected", [("90", 90.0), ("12.5", 12.5)])
+def test_a_number_goes_through_the_flags_own_type(in_project, value, expected):
+    """--min-active checks its 0-100 range in its type, so a TOML number must reach it."""
+    write(in_project / "ipmg.toml", f"min-active = {value}\nports = 22\n")
+
+    args = parse([])
+
+    assert args.min_active == expected
+    assert args.ports == (22,)
+
+
+def test_a_number_the_flags_own_type_rejects(in_project):
+    write(in_project / "ipmg.toml", "min-active = 150\n")
+
+    with pytest.raises(ConfigError, match="'min-active' in ipmg.toml: percentage out of range"):
+        parse([])
+
+
+def test_notification_settings_can_come_from_the_file(in_project):
+    write(
+        in_project / "ipmg.toml",
+        'notify-severity = "critical"\nnotify-email = ["ops@example.test"]\n'
+        'smtp-host = "mail.example.test"\n',
+    )
+
+    args = parse([])
+
+    assert args.notify_severity == "critical"
+    assert args.notify_email == ["ops@example.test"]
+    assert args.smtp_host == "mail.example.test"
+
+
 def test_a_list_for_a_single_valued_flag(in_project):
     write(in_project / "ipmg.toml", "threads = [1, 2]\n")
 

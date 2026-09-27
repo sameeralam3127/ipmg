@@ -31,3 +31,7 @@ class HistoryError(IPMGError):
 
 class ConfigError(IPMGError):
     """Raised when a configuration file cannot be read or understood."""
+
+
+class NotifyError(IPMGError):
+    """Raised when change notifications are configured incorrectly."""

@@ -2,6 +2,7 @@ import pytest
 
 from ipmg.cli import commands
 from ipmg.core.engine import HostResult, ScanConfig
+from ipmg.core.health import HostsDownError
 from ipmg.exceptions import FileIOError
 from ipmg.infrastructure.database import Database
 from ipmg.services.history_service import HistoryService
@@ -152,6 +153,27 @@ def test_scan_arguments_are_forwarded(monkeypatch):
     assert captured["history"] is False
 
 
+def test_scan_that_fails_its_health_check_exits_three(monkeypatch, capsys):
+    def hosts_down(_args):
+        raise HostsDownError("1 of 2 hosts are not active: 10.0.0.2.")
+
+    monkeypatch.setattr(commands, "run_scan", hosts_down)
+
+    assert commands.run(["--fail-on-down"]) == commands.EXIT_HOSTS_DOWN == 3
+    assert "1 of 2 hosts are not active" in capsys.readouterr().out
+
+
+def test_scan_with_every_host_down_exits_zero_without_the_flags(tmp_path, monkeypatch):
+    monkeypatch.setattr("ipmg.core.engine.ping_ip", lambda *_args: ("Timeout", None))
+    base = ["--input", "10.0.0.1", "--no-history", "--formats", "csv"]
+    base += ["--output", str(tmp_path / "scan")]
+
+    assert commands.run(base) == commands.EXIT_OK
+    assert commands.run(base + ["--fail-on-down"]) == commands.EXIT_HOSTS_DOWN
+    assert commands.run(base + ["--min-active", "1"]) == commands.EXIT_HOSTS_DOWN
+    assert len(list(tmp_path.glob("scan_*.csv"))) >= 1
+
+
 def test_scan_without_input_leaves_the_default_to_the_scan_service(monkeypatch):
     captured = {}
     monkeypatch.setattr(commands, "run_scan", lambda args: captured.update(vars(args)))
@@ -224,3 +246,31 @@ def test_scan_flags_are_documented(capsys):
         "same as 'ipmg web'",
     ):
         assert phrase in out
+
+
+def test_diff_command_sends_notifications(db_path, monkeypatch, capsys):
+    posts = []
+    monkeypatch.setattr(
+        "ipmg.infrastructure.notify.post_json", lambda url, payload: posts.append(url)
+    )
+    monkeypatch.setenv("IPMG_NOTIFY_TEAMS", "https://example.test/teams")
+    seed(
+        db_path,
+        [HostResult("10.0.0.1", "Active", 2.0)],
+        [HostResult("10.0.0.1", "Timeout", None)],
+    )
+
+    exit_code = commands.run(["diff", "--db", db_path, "--notify-teams", "--fail-on-change"])
+
+    assert exit_code == commands.EXIT_CHANGES_DETECTED
+    assert posts == ["https://example.test/teams"]
+    assert "Notified" in capsys.readouterr().out
+
+
+def test_diff_command_notification_misconfiguration_is_an_error(db_path, monkeypatch, capsys):
+    monkeypatch.delenv("IPMG_SMTP_HOST", raising=False)
+
+    exit_code = commands.run(["diff", "--db", db_path, "--notify-email", "ops@example.test"])
+
+    assert exit_code == commands.EXIT_ERROR
+    assert "--smtp-host" in capsys.readouterr().out

@@ -48,6 +48,12 @@ _SEVERITY_BY_TYPE: Dict[ChangeType, Severity] = {
 
 _SEVERITY_RANK = {Severity.CRITICAL: 0, Severity.WARNING: 1, Severity.INFO: 2}
 
+
+def meets_severity(severity: Severity, minimum: Severity) -> bool:
+    """Whether ``severity`` is at least as serious as ``minimum``."""
+    return _SEVERITY_RANK[severity] <= _SEVERITY_RANK[minimum]
+
+
 _TYPE_RANK = {change_type: index for index, change_type in enumerate(ChangeType)}
 
 CHANGE_LABELS: Dict[ChangeType, str] = {

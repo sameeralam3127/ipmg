@@ -206,6 +206,13 @@ def _one_value(action: argparse.Action, key: str, value: Any, path: Path) -> Any
     """Check and convert one scalar against the flag it will become."""
     where = f"'{key}' in {path}"
 
+    # A flag with its own converter (--min-active, --ports) validates there, so
+    # a TOML number goes through it as the text it would be on the command line;
+    # otherwise min-active = 150 would skip the 0-100 check.
+    custom_type = action.type is not None and action.type not in (int, float, str)
+    if custom_type and isinstance(value, (int, float)) and not isinstance(value, bool):
+        value = str(value)
+
     if action.type is not None and isinstance(value, str):
         try:
             value = action.type(value)

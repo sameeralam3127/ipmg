@@ -484,6 +484,10 @@ const BUILDERS = {
     if (count !== 1) line.flag("--count", `Send ${count} pings to each host.`, count);
     if (interval > 0) line.flag("--interval", `Repeat the whole scan every ${interval} minute${interval === 1 ? "" : "s"}, until Ctrl+C.`, interval);
 
+    if (form.on("scan-failOnDown")) line.flag("--fail-on-down", "Exit with code 3 if any host is down, so cron or monitoring can react.");
+    const minActive = decimalIn(form.value("scan-minActive"), null, { min: 0, max: 100 });
+    if (minActive !== null) line.flag("--min-active", `Exit with code 3 if fewer than ${minActive}% of the hosts answer.`, minActive);
+
     addCommon(form, line, "scan");
     if (defaultFormat) line.info(`An Excel report is saved as ${prefix}_<timestamp>.xlsx when the scan finishes.`);
   },

@@ -345,6 +345,21 @@ ipmg diff --fail-on-change            # exit 2 when anything changed (CI)
 ipmg history --limit 10               # list stored scans
 ```
 
+To hear about changes without watching the terminal, send them to Slack,
+Microsoft Teams, any JSON webhook, or email. Any `--notify-*` flag turns on
+`--compare`, and with `--interval` every pass that changes something alerts:
+
+```bash
+ipmg --input targets.txt --interval 15 --notify-slack        # URL from $IPMG_NOTIFY_SLACK
+ipmg --input targets.txt --notify-email ops@example.com --smtp-host smtp.example.com
+ipmg diff --notify-webhook https://ops.example.com/ipmg --notify-severity critical
+```
+
+Only changes at or above `--notify-severity` (default `warning`) trigger a
+notification. A notification that fails is reported but never fails the scan.
+Secrets such as webhook URLs and `IPMG_SMTP_PASSWORD` can come from environment
+variables; see [Notifications](docs/COMMANDS.md#notifications) for all of them.
+
 What counts as a change:
 
 | Change | Severity | Meaning |
@@ -377,6 +392,11 @@ source**, so file-based and `--discover` runs do not get mixed up. Pass
 | `--latency-threshold` | `5` | Minimum latency delta in ms |
 | `--latency-pct` | `25` | Minimum relative latency change |
 | `--fail-on-change` | off | `ipmg diff` exits 2 when changes are found |
+| `--notify-webhook` | off | POST the change report as JSON to a URL |
+| `--notify-slack` | off | Post changes to a Slack incoming webhook |
+| `--notify-teams` | off | Post changes to a Microsoft Teams Workflows webhook |
+| `--notify-email` | off | Email the Markdown change report (with `--smtp-host`, `--smtp-port`, `--smtp-security`, `--smtp-user`, `--smtp-from`) |
+| `--notify-severity` | `warning` | Only notify for changes at least this severe |
 
 ---
 
@@ -416,6 +436,14 @@ package, nothing is loaded from a CDN. It gives you:
 | `--host` | `127.0.0.1` | Bind address (local-only by default) |
 | `--no-browser` | off | Don't open the browser automatically |
 | `--db` | `~/.ipmg/dashboard.db` | History database location |
+
+### Scripting IPMG Web
+
+Everything the dashboard does goes through a documented, versioned REST API
+under `/api/v1`, so you can start scans, fetch results, and compare scans from
+your own scripts. The [API guide](https://github.com/sameeralam3127/ipmg/blob/main/docs/API.md)
+covers authentication, errors, and worked `curl` examples; the running server
+also serves interactive docs at `http://127.0.0.1:8080/docs`.
 
 ### On a server with no browser
 
@@ -665,12 +693,21 @@ flag's choices is an error naming the key and the file it came from:
 | `--no-config` | off | Ignore every configuration file |
 | `--profile` | none | Apply a `[profile.NAME]` section from the configuration file |
 
+**Exit status**
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--fail-on-down` | off | Exit 3 if any target is not `Active` (reports are still written) |
+| `--min-active` | off | Exit 3 if fewer than this percentage of targets are `Active` |
+
 **History and changes** — see [Change detection](#change-detection) for
 `--compare`, `--no-history`, `--db`, `--diff-formats`, `--diff-output`,
-`--latency-threshold`, `--latency-pct`, and `--fail-on-change`.
+`--latency-threshold`, `--latency-pct`, `--fail-on-change`, and the
+`--notify-*` flags.
 
 Exit codes: `0` success, `1` error, `2` changes detected
-(`ipmg diff --fail-on-change`), `130` interrupted.
+(`ipmg diff --fail-on-change`), `3` hosts down (`--fail-on-down`,
+`--min-active`), `130` interrupted.
 
 ---
 
@@ -691,12 +728,15 @@ itself is hardened accordingly:
 - Uploads are capped at 5 MB and one scan expands to at most 65,536 hosts,
   so a bad input file cannot exhaust memory
 - All database access uses parameterized SQL
+- The only outbound requests IPMG makes are the notifications you ask for
+  with a `--notify-*` flag. Their URLs and the SMTP password can come from
+  environment variables, and error messages never repeat them
 
 If you bind to a non-local address with `--host`, the token still guards the
 API. It travels over plain HTTP, though, so use an SSH tunnel or a reverse
 proxy with TLS on any network you don't trust.
 
-Found a vulnerability? See [SECURITY.md](SECURITY.md) for how to report it.
+Found a vulnerability? See [SECURITY.md](.github/SECURITY.md) for how to report it.
 
 ---
 
@@ -705,6 +745,9 @@ Found a vulnerability? See [SECURITY.md](SECURITY.md) for how to report it.
 - **[Command reference](https://github.com/sameeralam3127/ipmg/blob/main/docs/COMMANDS.md)** —
   every command and flag with copy-paste examples, a safe session that tries
   everything on your own machine, exit codes, and error messages
+- **[Web API guide](https://github.com/sameeralam3127/ipmg/blob/main/docs/API.md)** —
+  script IPMG Web over HTTP: start scans, fetch results, compare scans,
+  and follow live events
 - **[Troubleshooting](https://github.com/sameeralam3127/ipmg/blob/main/docs/TROUBLESHOOTING.md)** —
   install errors, `command not found`, every host timing out, slow scans,
   rejected input files
@@ -718,11 +761,11 @@ Found a vulnerability? See [SECURITY.md](SECURITY.md) for how to report it.
 ## Contributing
 
 Contributions are welcome.
-[CONTRIBUTING.md](https://github.com/sameeralam3127/ipmg/blob/main/CONTRIBUTING.md)
+[CONTRIBUTING.md](https://github.com/sameeralam3127/ipmg/blob/main/.github/CONTRIBUTING.md)
 covers setting up a development environment, running the tests, the commit
 message format that drives automated releases, and how the project website and
 IPMG Web demo are built. Everyone taking part is expected to follow the
-[Code of Conduct](https://github.com/sameeralam3127/ipmg/blob/main/CODE_OF_CONDUCT.md).
+[Code of Conduct](https://github.com/sameeralam3127/ipmg/blob/main/.github/CODE_OF_CONDUCT.md).
 
 ---
 

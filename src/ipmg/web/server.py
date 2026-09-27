@@ -101,7 +101,7 @@ def run_dashboard(
     else:
         ui.note(
             "Listening beyond this machine over plain HTTP: anyone who can see the traffic "
-            "can read the token. Prefer an SSH tunnel, or a reverse proxy with TLS (see SECURITY.md)."
+            "can read the token. Prefer an SSH tunnel, or a reverse proxy with TLS (see .github/SECURITY.md)."
         )
 
     ui.blank()

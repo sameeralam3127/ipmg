@@ -30,8 +30,8 @@ Found a security problem? Please report it privately as described in
   [`good first issue`](https://github.com/sameeralam3127/ipmg/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
   are scoped for newcomers. Comment on one before starting so work isn't
   duplicated.
-- **Improve the docs.** The [README](README.md), [FAQ](docs/FAQ.md), and
-  [troubleshooting guide](docs/TROUBLESHOOTING.md) all welcome fixes.
+- **Improve the docs.** The [README](../README.md), [FAQ](../docs/FAQ.md), and
+  [troubleshooting guide](../docs/TROUBLESHOOTING.md) all welcome fixes.
 
 ---
 
@@ -40,7 +40,7 @@ Found a security problem? Please report it privately as described in
 You need **Git** and **Python 3.9 or newer**. IPMG probes hosts with the
 system `ping` command; macOS and Windows include it, and on minimal Linux
 images you may need to install it (see
-[the README](README.md#the-one-thing-ipmg-needs-from-your-system)).
+[the README](../README.md#the-one-thing-ipmg-needs-from-your-system)).
 
 ```bash
 # 1. Fork the repository on GitHub, then clone your fork
@@ -89,6 +89,19 @@ Run one file or one test while you work:
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/test_diff.py -q
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -q -k latency
 ```
+
+### Changing the web API
+
+`tests/test_api_contract.py` compares the `/api/v1` schema with the committed
+snapshot in `tests/snapshots/`, so an API change fails the tests until you
+update it:
+
+```bash
+UPDATE_API_SNAPSHOT=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/test_api_contract.py -q
+```
+
+Review the snapshot diff before committing: `/api/v1` may only gain endpoints
+and fields, never lose or change them (see [docs/API.md](../docs/API.md#versioning-and-stability)).
 
 CI also runs a quick end-to-end scan against your own machine. It is worth
 running before you open a pull request:
@@ -147,8 +160,10 @@ src/ipmg/
   infrastructure/  SQLite history and file input/output
   reporting/       terminal output, live streaming, reports
   services/        scan and history orchestration
-  web/             IPMG Web (FastAPI); static/ holds its HTML, CSS, and JS
-tests/             pytest suite (one file per module, roughly)
+  web/             IPMG Web (FastAPI); schemas.py is the API contract,
+                   static/ holds its HTML, CSS, and JS
+tests/             pytest suite (one file per module, roughly); snapshots/
+                   holds the committed API contract
 site/              project website published to GitHub Pages
 install.sh         one-line installer for Linux and macOS
 .github/workflows  CI: tests, security scan, release, Pages deploy

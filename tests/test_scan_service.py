@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
+from ipmg.core.health import HostsDownError
 from ipmg.infrastructure.database import Database
 from ipmg.services.scan_service import run_scan
 from ipmg.utils.helpers import console
@@ -151,6 +152,52 @@ def test_run_scan_records_history(tmp_path, stub_scan):
     assert scans[0]["status_counts"] == {"Active": 1}
 
 
+def test_run_scan_ignores_down_hosts_without_exit_status_checks(tmp_path, stub_scan):
+    stub_scan["statuses"] = {"10.0.0.1": ("Timeout", None)}
+
+    run_scan(scan_args(tmp_path, history=False))
+
+
+def test_run_scan_reports_hosts_down_after_writing_the_reports(tmp_path, stub_scan, monkeypatch):
+    saved = []
+    monkeypatch.setattr(
+        "ipmg.services.scan_service.save_results",
+        lambda df, *_args, **_kwargs: saved.append(len(df)),
+    )
+    stub_scan["statuses"] = {"10.0.0.1": ("Active", 1.0), "10.0.0.2": ("Timeout", None)}
+
+    with pytest.raises(HostsDownError, match=r"^1 of 2 hosts are not active: 10\.0\.0\.2\.$"):
+        run_scan(scan_args(tmp_path, fail_on_down=True))
+
+    assert saved == [2]
+    assert len(Database(tmp_path / "history.db").list_scans()) == 1
+
+
+def test_run_scan_min_active_passes_above_the_threshold(tmp_path, stub_scan):
+    stub_scan["statuses"] = {"10.0.0.1": ("Active", 1.0), "10.0.0.2": ("Timeout", None)}
+
+    run_scan(scan_args(tmp_path, history=False, min_active=50.0))
+    with pytest.raises(HostsDownError, match="below --min-active 60%"):
+        run_scan(scan_args(tmp_path, history=False, min_active=60.0))
+
+
+def test_run_scan_keeps_repeating_when_hosts_are_down(tmp_path, stub_scan, monkeypatch, capsys):
+    passes = []
+
+    def fake_sleep(_seconds):
+        passes.append(1)
+        if len(passes) == 2:
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr("ipmg.services.scan_service.time.sleep", fake_sleep)
+    stub_scan["statuses"] = {"10.0.0.1": ("Timeout", None)}
+
+    with pytest.raises(KeyboardInterrupt):
+        run_scan(scan_args(tmp_path, history=False, interval=1, fail_on_down=True))
+
+    assert capsys.readouterr().out.count("hosts are not active") == 2
+
+
 def test_run_scan_can_skip_history(tmp_path, stub_scan):
     stub_scan["statuses"] = {"10.0.0.1": ("Active", 5.0)}
 
@@ -186,6 +233,99 @@ def test_run_scan_warns_when_comparing_without_history(tmp_path, stub_scan, caps
     run_scan(scan_args(tmp_path, history=False, compare=True))
 
     assert "Change detection needs scan history" in capsys.readouterr().out
+
+
+@pytest.fixture()
+def captured_posts(monkeypatch):
+    """Record every webhook post instead of sending it."""
+    posts = []
+    monkeypatch.setattr(
+        "ipmg.infrastructure.notify.post_json", lambda url, payload: posts.append((url, payload))
+    )
+    return posts
+
+
+def test_run_scan_notification_implies_compare(tmp_path, stub_scan, captured_posts, capsys):
+    stub_scan["statuses"] = {"10.0.0.1": ("Active", 5.0)}
+    run_scan(scan_args(tmp_path))
+
+    stub_scan["statuses"] = {"10.0.0.1": ("Timeout", None)}
+    run_scan(scan_args(tmp_path, notify_webhook="https://example.test/hook"))
+
+    assert "Host offline" in capsys.readouterr().out
+    [(url, payload)] = captured_posts
+    assert url == "https://example.test/hook"
+    assert payload["changes"][0]["type"] == "host_offline"
+
+
+def test_run_scan_notifies_on_every_interval_pass_that_changes(
+    tmp_path, stub_scan, captured_posts, monkeypatch
+):
+    timeline = [
+        {"10.0.0.1": ("Active", 5.0)},
+        {"10.0.0.1": ("Timeout", None)},
+        {"10.0.0.1": ("Timeout", None)},
+        {"10.0.0.1": ("Timeout", None), "10.0.0.2": ("Active", 1.0)},
+    ]
+    stub_scan["statuses"] = timeline.pop(0)
+
+    def next_pass(_seconds):
+        if not timeline:
+            raise KeyboardInterrupt
+        stub_scan["statuses"] = timeline.pop(0)
+
+    monkeypatch.setattr("ipmg.services.scan_service.time.sleep", next_pass)
+
+    with pytest.raises(KeyboardInterrupt):
+        run_scan(scan_args(tmp_path, interval=1, notify_slack="https://example.test/slack"))
+
+    # Pass 1 has no baseline and pass 3 changed nothing, so only 2 and 4 alert.
+    headlines = [payload["text"] for _url, payload in captured_posts]
+    assert headlines == [
+        "IPMG: 1 change (1 critical) in targets.csv",
+        "IPMG: 1 change (1 warning) in targets.csv",
+    ]
+
+
+def test_run_scan_keeps_its_results_when_a_notification_fails(
+    tmp_path, stub_scan, monkeypatch, capsys
+):
+    def refuse(_url, _payload):
+        raise OSError("connection refused")
+
+    saved = []
+    monkeypatch.setattr("ipmg.infrastructure.notify.post_json", refuse)
+    monkeypatch.setattr(
+        "ipmg.services.scan_service.save_results", lambda df, *_a, **_k: saved.append(len(df))
+    )
+    stub_scan["statuses"] = {"10.0.0.1": ("Active", 5.0)}
+    run_scan(scan_args(tmp_path))
+
+    stub_scan["statuses"] = {"10.0.0.1": ("Timeout", None)}
+    run_scan(
+        scan_args(
+            tmp_path,
+            notify_webhook="https://example.test/hook",
+            diff_formats=["md"],
+        )
+    )
+
+    assert "Webhook notification failed: connection refused" in capsys.readouterr().out
+    assert saved == [1, 1]
+    assert len(Database(tmp_path / "history.db").list_scans()) == 2
+    assert list(tmp_path.glob("changes_*.md"))
+
+
+def test_run_scan_rejects_notification_settings_before_scanning(tmp_path, monkeypatch):
+    from ipmg.exceptions import NotifyError
+
+    pinged = record_pings(monkeypatch)
+    monkeypatch.delenv("IPMG_NOTIFY_SLACK", raising=False)
+
+    with pytest.raises(NotifyError, match="IPMG_NOTIFY_SLACK"):
+        run_scan(scan_args(tmp_path, notify_slack=""))
+
+    assert pinged == []
 
 
 def test_run_scan_streams_each_host_as_it_finishes(tmp_path, stub_scan, capsys):

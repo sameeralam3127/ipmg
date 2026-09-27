@@ -23,6 +23,7 @@ website. `ipmg --help` (and `ipmg web --help`, `ipmg history --help`,
 [Reports](#reports) ·
 [Scan history](#scan-history) ·
 [Change detection](#change-detection) ·
+[Notifications](#notifications) ·
 [Automation and exit codes](#automation-and-exit-codes) ·
 [IPMG Web](#ipmg-web) ·
 [Errors and what they mean](#errors-and-what-they-mean)
@@ -339,6 +340,78 @@ ipmg diff --latency-threshold 10 --latency-pct 50   # defaults: 5 ms and 25%
 
 ---
 
+## Notifications
+
+`--compare` prints what changed. The `--notify-*` flags send it somewhere, so
+someone hears about it without watching a terminal. They work on a scan and on
+`ipmg diff`, and any of them turns on `--compare` for a scan.
+
+```bash
+ipmg --input servers.txt --notify-slack https://hooks.slack.com/services/…
+ipmg --input servers.txt --notify-teams https://prod-00.westus.logic.azure.com/…
+ipmg --input servers.txt --notify-webhook https://ops.example.com/ipmg
+ipmg --input servers.txt --notify-email ops@example.com --smtp-host smtp.example.com
+ipmg diff --notify-slack                  # URL from $IPMG_NOTIFY_SLACK
+```
+
+| Flag | Sends |
+| --- | --- |
+| `--notify-webhook [URL]` | The change report as JSON: `ipmg diff --diff-formats json` plus `event`, `headline`, `min_severity`, and `ipmg_version` |
+| `--notify-slack [URL]` | A Slack message listing up to 20 changes, most severe first, to an [incoming webhook](https://api.slack.com/messaging/webhooks) |
+| `--notify-teams [URL]` | The same list as an Adaptive Card, to a Teams **Workflows** webhook ("Post to a channel when a webhook request is received") |
+| `--notify-email [ADDRESS ...]` | An email whose body is the Markdown change report |
+| `--notify-severity LEVEL` | Only notify when a change is at least `critical`, `warning` (default), or `info` — see [severities](#change-detection) |
+
+A notification is sent only when at least one change reaches
+`--notify-severity`, and then it carries every change, so you see the context.
+With `--interval`, each pass is compared with the one before it, so you hear
+about a host going offline once, when it happens, and again only when
+something else changes.
+
+### Secrets and the environment
+
+Webhook URLs contain their access token. Give a URL flag without a value and
+IPMG reads the URL from the environment instead. That keeps the token out of
+`ps`, your shell history, and your crontab:
+
+| Setting | Environment variable |
+| --- | --- |
+| `--notify-webhook` | `IPMG_NOTIFY_WEBHOOK` |
+| `--notify-slack` | `IPMG_NOTIFY_SLACK` |
+| `--notify-teams` | `IPMG_NOTIFY_TEAMS` |
+| `--notify-email` | `IPMG_NOTIFY_EMAIL` (comma-separated) |
+| `--smtp-host` | `IPMG_SMTP_HOST` |
+| `--smtp-port` | `IPMG_SMTP_PORT` (default 587; 465 with `ssl`, 25 with `none`) |
+| `--smtp-security` | `IPMG_SMTP_SECURITY`: `starttls` (default), `ssl`, or `none` |
+| `--smtp-user` | `IPMG_SMTP_USER` |
+| `--smtp-from` | `IPMG_SMTP_FROM` (default: the login, else `ipmg@<this host>`) |
+| — | `IPMG_SMTP_PASSWORD`, the only way to give the mail password |
+
+A flag with a value wins over its variable. A variable on its own never turns
+notifications on: you still pass the flag.
+
+```bash
+# /etc/ipmg/notify.env, readable only by the account that runs the scan
+IPMG_NOTIFY_SLACK=https://hooks.slack.com/services/…
+IPMG_SMTP_HOST=smtp.example.com
+IPMG_SMTP_USER=ipmg@example.com
+IPMG_SMTP_PASSWORD=…
+
+# crontab: scan every 15 minutes, alert Slack and email on warnings or worse
+*/15 * * * * set -a; . /etc/ipmg/notify.env; ipmg --input /opt/ipmg/targets.txt --formats csv --output /var/lib/ipmg/scan --notify-slack --notify-email ops@example.com
+```
+
+### When a notification fails
+
+A setting that cannot work, like `--notify-email` with no mail server or a
+URL that is not `http(s)://`, is an error before any host is probed (exit
+`1`). Delivery is different: if Slack is down or the mail server refuses the
+login, IPMG prints a warning and carries on. The scan, its reports, its
+history entry, the other notifications, and the exit code are unaffected.
+Error messages never include a webhook URL or the password.
+
+---
+
 ## Automation and exit codes
 
 | Exit code | Meaning |
@@ -346,10 +419,22 @@ ipmg diff --latency-threshold 10 --latency-pct 50   # defaults: 5 ms and 25%
 | `0` | Success |
 | `1` | Error, such as an invalid target or a missing column |
 | `2` | Changes found by `ipmg diff --fail-on-change` — **or** an invalid command-line option |
+| `3` | Hosts down: the scan failed `--fail-on-down` or `--min-active` |
 | `130` | Interrupted with Ctrl+C |
 
 Because an invalid option also exits `2`, check a scheduled command by hand
 once before relying on its exit code.
+
+A scan exits `0` however many hosts are down, unless you ask it to check:
+
+```bash
+ipmg --input servers.txt --fail-on-down      # exit 3 if any target is not Active
+ipmg --input 10.0.0.0/24 --min-active 80     # exit 3 if fewer than 80% are Active
+```
+
+The reports and the history entry are written before the scan exits, so a
+failed check still leaves the evidence behind. With `--interval` the checks
+print a warning after every pass that fails them, and the scan keeps running.
 
 A scan-then-check job for cron or a systemd timer:
 
@@ -357,12 +442,19 @@ A scan-then-check job for cron or a systemd timer:
 #!/usr/bin/env bash
 cd /opt/ipmg-audit || exit 1
 mkdir -p reports    # --output needs the folder to exist
-ipmg --input targets.txt --formats csv --output reports/scan || exit 1
+ipmg --input targets.txt --formats csv --output reports/scan --fail-on-down
+scan_status=$?
+if [ "$scan_status" -eq 3 ]; then
+  echo "Hosts are down — see the latest reports/scan_*.csv"
+elif [ "$scan_status" -ne 0 ]; then
+  exit "$scan_status"
+fi
 ipmg diff --source targets.txt --fail-on-change --diff-formats md --diff-output reports/changes
 status=$?
 if [ "$status" -eq 2 ]; then
   echo "Network changed — see the latest reports/changes_*.md"
 fi
+[ "$status" -eq 0 ] && status=$scan_status
 exit "$status"
 ```
 
@@ -418,4 +510,4 @@ Invalid input is rejected before any host is contacted.
 | `ipmg --timeout 0.5` | `argument --timeout: invalid int value: '0.5'` | `2` |
 
 More symptoms and fixes are in [Troubleshooting](TROUBLESHOOTING.md); for
-running the test suite, see [CONTRIBUTING.md](../CONTRIBUTING.md#run-the-tests).
+running the test suite, see [CONTRIBUTING.md](../.github/CONTRIBUTING.md#run-the-tests).

@@ -14,6 +14,7 @@ import pandas as pd
 from ipmg.core.diff import DiffOptions
 from ipmg.core.discovery import discover_local_subnet
 from ipmg.core.engine import HostResult, ScanConfig, execute_scan
+from ipmg.core.health import HealthPolicy, HostsDownError, check_health
 from ipmg.core.portscan import DEFAULT_PORTS
 from ipmg.exceptions import FileIOError, HistoryError
 from ipmg.infrastructure.file_io import (
@@ -31,6 +32,7 @@ from ipmg.infrastructure.incremental import (
     find_partial_report,
     load_partial_report,
 )
+from ipmg.infrastructure.notify import NotifyOptions, notify_options, send_notifications
 from ipmg.reporting import ui
 from ipmg.reporting.diff_report import export_diff, print_diff
 from ipmg.reporting.frames import results_dataframe
@@ -72,13 +74,16 @@ class HistoryOptions:
     export_formats: Tuple[str, ...] = ()
     export_base: str = "changes"
     diff: DiffOptions = field(default_factory=DiffOptions)
+    notify: NotifyOptions = field(default_factory=NotifyOptions)
 
 
 def _history_options(args) -> HistoryOptions:
     """Read history settings off the parsed arguments, with safe defaults."""
+    notify = notify_options(args)
     return HistoryOptions(
         enabled=bool(getattr(args, "history", True)),
-        compare=bool(getattr(args, "compare", False)),
+        # A notification is about changes, so asking for one asks for the comparison.
+        compare=bool(getattr(args, "compare", False)) or notify.enabled,
         any_source=bool(getattr(args, "compare_any_source", False)),
         db_path=getattr(args, "db", None),
         export_formats=tuple(getattr(args, "diff_formats", None) or ()),
@@ -87,6 +92,7 @@ def _history_options(args) -> HistoryOptions:
             latency_abs_ms=max(float(getattr(args, "latency_threshold", 5.0)), 0.0),
             latency_pct=max(float(getattr(args, "latency_pct", 25.0)), 0.0),
         ),
+        notify=notify,
     )
 
 
@@ -159,6 +165,14 @@ def _config_from_args(args) -> ScanConfig:
         ports=tuple(getattr(args, "ports", None) or DEFAULT_PORTS),
         port_timeout=getattr(args, "port_timeout", 1.0),
     ).clamped()
+
+
+def _health_policy(args) -> HealthPolicy:
+    """Read the --fail-on-down and --min-active checks off the parsed arguments."""
+    return HealthPolicy(
+        fail_on_down=bool(getattr(args, "fail_on_down", False)),
+        min_active_pct=getattr(args, "min_active", None),
+    )
 
 
 def _ensure_input_file(args) -> None:
@@ -360,6 +374,8 @@ def _report_changes(
     print_diff(diff)
     if options.export_formats:
         export_diff(diff, options.export_base, options.export_formats)
+    # Last, so an alert that cannot be delivered has already cost nothing.
+    send_notifications(diff, options.notify)
 
 
 def _store_and_compare(
@@ -402,6 +418,7 @@ def run_scan(args) -> None:
 
     config = _config_from_args(args)
     history_options = _history_options(args)
+    health = _health_policy(args)
     stream = _stream_options(args)
     incremental = _incremental_options(args)
     _ensure_input_file(args)
@@ -421,7 +438,16 @@ def run_scan(args) -> None:
         save_results(outcome.frame, outcome.output, args.formats, timestamp=outcome.timestamp)
         _store_and_compare(history_options, config, outcome)
 
+        failure = check_health(outcome.results, health)
         if not args.interval:
+            if failure:
+                # Raised only now, with the reports and history already written.
+                raise HostsDownError(failure)
             return
 
+        # A repeating scan keeps going when hosts are down: it is the monitor,
+        # and stopping it would end the watch at the moment it matters.
+        if failure:
+            ui.blank()
+            ui.warn(failure)
         time.sleep(args.interval * 60)
