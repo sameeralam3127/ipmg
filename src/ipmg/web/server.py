@@ -69,10 +69,11 @@ def run_dashboard(
     port: int = 8080,
     open_browser: bool = True,
     db_path: Optional[str] = None,
+    metrics_sources: Optional[int] = None,
 ) -> None:
     database = Database(Path(db_path) if db_path else DEFAULT_DB_PATH)
     token = _access_token()
-    app = create_app(database, token)
+    app = create_app(database, token, metrics_sources=metrics_sources)
     # The token goes in the fragment, which browsers never send to the server,
     # so it stays out of access logs and proxies.
     url = f"http://{_display_host(host)}:{port}/#token={token}"
@@ -94,6 +95,11 @@ def run_dashboard(
         threading.Timer(1.0, webbrowser.open, args=(url,)).start()
 
     ui.note("The link carries this session's access token; the API refuses requests without it.")
+    if metrics_sources is not None:
+        ui.note(
+            f"Prometheus metrics at http://{_display_host(host)}:{port}/metrics "
+            "(send the token as a Bearer credential; pin it with IPMG_WEB_TOKEN)."
+        )
     if _is_loopback(host):
         ui.note(
             f"Remote access: ssh -L {port}:127.0.0.1:{port} user@this-host, then open the link."

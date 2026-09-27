@@ -65,6 +65,7 @@ def _web_command(argv: List[str]) -> int:
         port=args.port,
         open_browser=not args.no_browser,
         db_path=args.db,
+        metrics_sources=max(args.metrics_sources, 1) if args.metrics else None,
     )
     return EXIT_OK
 

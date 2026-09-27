@@ -26,6 +26,7 @@ from ipmg.infrastructure.notify import (
 )
 from ipmg.reporting.diff_report import DIFF_FORMATS
 from ipmg.reporting.live import DEFAULT_REFRESH_S, MAX_REFRESH_S, MIN_REFRESH_S
+from ipmg.reporting.metrics import DEFAULT_MAX_SOURCES
 
 PROG = "IPMG - IP Management & Ping Monitoring Tool"
 
@@ -448,6 +449,24 @@ def build_web_parser() -> argparse.ArgumentParser:
         "--no-browser",
         action="store_true",
         help="Do not open IPMG Web in a browser automatically.",
+    )
+    parser.add_argument(
+        "--metrics",
+        action="store_true",
+        help=(
+            "Serve Prometheus metrics at /metrics for the latest completed scan of "
+            "each source (off by default; needs the access token)."
+        ),
+    )
+    parser.add_argument(
+        "--metrics-sources",
+        type=int,
+        default=DEFAULT_MAX_SOURCES,
+        metavar="N",
+        help=(
+            "Export only the N most recently scanned sources, which bounds the "
+            f"number of series (default: {DEFAULT_MAX_SOURCES})."
+        ),
     )
     _add_database_argument(parser)
     parser.add_argument("--verbose", action="store_true")

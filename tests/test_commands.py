@@ -208,7 +208,15 @@ def test_both_spellings_of_web_start_it(argv, monkeypatch):
     calls = web_calls(monkeypatch)
 
     assert commands.run(argv) == commands.EXIT_OK
-    assert calls == [{"host": "127.0.0.1", "port": 8080, "open_browser": True, "db_path": None}]
+    assert calls == [
+        {
+            "host": "127.0.0.1",
+            "port": 8080,
+            "open_browser": True,
+            "db_path": None,
+            "metrics_sources": None,
+        }
+    ]
 
 
 def test_web_flag_still_takes_the_web_options(monkeypatch):
