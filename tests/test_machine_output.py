@@ -141,5 +141,7 @@ def test_a_failing_scan_still_reports_its_error_and_exit_code(tmp_path, capsys):
     assert exit_code == commands.EXIT_ERROR
     # Errors are for the operator, so they follow the rest of the UI to stderr
     # and leave stdout empty rather than emitting a half-written document.
-    assert "was not found" in captured.err
+    # Rich wraps at the console width, and where it breaks depends on how long
+    # the temp path is, so compare with the wrapping undone.
+    assert "was not found" in " ".join(captured.err.split())
     assert captured.out == ""
