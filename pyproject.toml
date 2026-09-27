@@ -109,6 +109,9 @@ commit_message = "chore(release): {version}"
 build_command = "python -m build"
 major_on_zero = false
 
+[tool.semantic_release.changelog.default_templates]
+changelog_file = ".github/CHANGELOG.md"
+
 
 # ==========================================================
 # Setuptools (src layout)

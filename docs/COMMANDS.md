@@ -418,4 +418,4 @@ Invalid input is rejected before any host is contacted.
 | `ipmg --timeout 0.5` | `argument --timeout: invalid int value: '0.5'` | `2` |
 
 More symptoms and fixes are in [Troubleshooting](TROUBLESHOOTING.md); for
-running the test suite, see [CONTRIBUTING.md](../CONTRIBUTING.md#run-the-tests).
+running the test suite, see [CONTRIBUTING.md](../.github/CONTRIBUTING.md#run-the-tests).
