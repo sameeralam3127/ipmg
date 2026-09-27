@@ -2,6 +2,53 @@
 
 <!-- version list -->
 
+## v3.0.0 (2026-09-27)
+
+### Build System
+
+- **docker**: Install the web extra, so the image keeps IPMG Web after the lean-core split
+  ([#92](https://github.com/sameeralam3127/ipmg/pull/92),
+  [`2f97eb0`](https://github.com/sameeralam3127/ipmg/commit/2f97eb0358b0addb160298a4cd5a280ab0e8f3e4))
+
+### Continuous Integration
+
+- **docker**: Use a random token per smoke-test run
+  ([#92](https://github.com/sameeralam3127/ipmg/pull/92),
+  [`2f97eb0`](https://github.com/sameeralam3127/ipmg/commit/2f97eb0358b0addb160298a4cd5a280ab0e8f3e4))
+
+### Documentation
+
+- Place the extras section after Installing with pip
+  ([#95](https://github.com/sameeralam3127/ipmg/pull/95),
+  [`b0f2072`](https://github.com/sameeralam3127/ipmg/commit/b0f2072daea374745e72c7777a678da3bb42743f))
+
+### Features
+
+- **docker**: Official multi-arch image on GHCR
+  ([#92](https://github.com/sameeralam3127/ipmg/pull/92),
+  [`2f97eb0`](https://github.com/sameeralam3127/ipmg/commit/2f97eb0358b0addb160298a4cd5a280ab0e8f3e4))
+
+- **install**: Install.ps1 installs the web extra, like install.sh
+  ([#93](https://github.com/sameeralam3127/ipmg/pull/93),
+  [`5c7d2ca`](https://github.com/sameeralam3127/ipmg/commit/5c7d2cae767d6e84f5c3d781812072da7d644ad5))
+
+- **install**: PowerShell installer for Windows (install.ps1)
+  ([#93](https://github.com/sameeralam3127/ipmg/pull/93),
+  [`5c7d2ca`](https://github.com/sameeralam3127/ipmg/commit/5c7d2cae767d6e84f5c3d781812072da7d644ad5))
+
+- **packaging**: Lean core install without pandas; IPMG Web becomes the `web` extra
+  ([#95](https://github.com/sameeralam3127/ipmg/pull/95),
+  [`b0f2072`](https://github.com/sameeralam3127/ipmg/commit/b0f2072daea374745e72c7777a678da3bb42743f))
+
+- **packaging**: Lean core install without pandas; IPMG Web becomes the web extra
+  ([#95](https://github.com/sameeralam3127/ipmg/pull/95),
+  [`b0f2072`](https://github.com/sameeralam3127/ipmg/commit/b0f2072daea374745e72c7777a678da3bb42743f))
+
+- **scan**: IPv6 targets, probing, and neighbour discovery
+  ([#90](https://github.com/sameeralam3127/ipmg/pull/90),
+  [`64e84a5`](https://github.com/sameeralam3127/ipmg/commit/64e84a52a1432d66b84072fb1bc8eb8d9c595e28))
+
+
 ## v2.4.0 (2026-09-27)
 
 ### Bug Fixes
