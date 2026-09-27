@@ -36,6 +36,7 @@ ipmg.log
 *.xls
 *.csv
 *.json
+!tests/snapshots/*.json
 
 # But allow sample Excel in repo if needed:
 # !Sample Data/

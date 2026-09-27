@@ -1,0 +1,707 @@
+{
+  "paths": {
+    "DELETE /api/v1/scans/{scan_id}": {
+      "parameters": {
+        "scan_id": {
+          "in": "path",
+          "required": true,
+          "type": "integer"
+        }
+      },
+      "responses": {
+        "204": {},
+        "401": {
+          "application/json": "ErrorResponse"
+        },
+        "404": {
+          "application/json": "ErrorResponse"
+        },
+        "422": {
+          "application/json": "ErrorResponse"
+        }
+      },
+      "security": [
+        "HTTPBearer"
+      ]
+    },
+    "GET /api/v1/assets": {
+      "parameters": {},
+      "responses": {
+        "200": {
+          "application/json": "array[Asset]"
+        },
+        "401": {
+          "application/json": "ErrorResponse"
+        },
+        "422": {
+          "application/json": "ErrorResponse"
+        }
+      },
+      "security": [
+        "HTTPBearer"
+      ]
+    },
+    "GET /api/v1/scans": {
+      "parameters": {
+        "limit": {
+          "in": "query",
+          "required": false,
+          "type": "integer"
+        }
+      },
+      "responses": {
+        "200": {
+          "application/json": "array[ScanSummary]"
+        },
+        "401": {
+          "application/json": "ErrorResponse"
+        },
+        "422": {
+          "application/json": "ErrorResponse"
+        }
+      },
+      "security": [
+        "HTTPBearer"
+      ]
+    },
+    "GET /api/v1/scans/{scan_id}": {
+      "parameters": {
+        "scan_id": {
+          "in": "path",
+          "required": true,
+          "type": "integer"
+        }
+      },
+      "responses": {
+        "200": {
+          "application/json": "ScanSummary"
+        },
+        "401": {
+          "application/json": "ErrorResponse"
+        },
+        "404": {
+          "application/json": "ErrorResponse"
+        },
+        "422": {
+          "application/json": "ErrorResponse"
+        }
+      },
+      "security": [
+        "HTTPBearer"
+      ]
+    },
+    "GET /api/v1/scans/{scan_id}/diff": {
+      "parameters": {
+        "baseline": {
+          "in": "query",
+          "required": false,
+          "type": "integer | null"
+        },
+        "latency_pct": {
+          "in": "query",
+          "required": false,
+          "type": "number"
+        },
+        "latency_threshold": {
+          "in": "query",
+          "required": false,
+          "type": "number"
+        },
+        "scan_id": {
+          "in": "path",
+          "required": true,
+          "type": "integer"
+        }
+      },
+      "responses": {
+        "200": {
+          "application/json": "ScanDiffModel"
+        },
+        "401": {
+          "application/json": "ErrorResponse"
+        },
+        "404": {
+          "application/json": "ErrorResponse"
+        },
+        "422": {
+          "application/json": "ErrorResponse"
+        }
+      },
+      "security": [
+        "HTTPBearer"
+      ]
+    },
+    "GET /api/v1/scans/{scan_id}/diff/report": {
+      "parameters": {
+        "baseline": {
+          "in": "query",
+          "required": false,
+          "type": "integer | null"
+        },
+        "fmt": {
+          "in": "query",
+          "required": false,
+          "type": "string"
+        },
+        "latency_pct": {
+          "in": "query",
+          "required": false,
+          "type": "number"
+        },
+        "latency_threshold": {
+          "in": "query",
+          "required": false,
+          "type": "number"
+        },
+        "scan_id": {
+          "in": "path",
+          "required": true,
+          "type": "integer"
+        }
+      },
+      "responses": {
+        "200": {
+          "application/json": "string",
+          "text/csv": "string",
+          "text/markdown": "string"
+        },
+        "400": {
+          "application/json": "ErrorResponse"
+        },
+        "401": {
+          "application/json": "ErrorResponse"
+        },
+        "404": {
+          "application/json": "ErrorResponse"
+        },
+        "422": {
+          "application/json": "ErrorResponse"
+        }
+      },
+      "security": [
+        "HTTPBearer"
+      ]
+    },
+    "GET /api/v1/scans/{scan_id}/report": {
+      "parameters": {
+        "fmt": {
+          "in": "query",
+          "required": false,
+          "type": "string"
+        },
+        "scan_id": {
+          "in": "path",
+          "required": true,
+          "type": "integer"
+        }
+      },
+      "responses": {
+        "200": {
+          "application/json": "string",
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "string",
+          "text/csv": "string",
+          "text/markdown": "string"
+        },
+        "400": {
+          "application/json": "ErrorResponse"
+        },
+        "401": {
+          "application/json": "ErrorResponse"
+        },
+        "404": {
+          "application/json": "ErrorResponse"
+        },
+        "422": {
+          "application/json": "ErrorResponse"
+        }
+      },
+      "security": [
+        "HTTPBearer"
+      ]
+    },
+    "GET /api/v1/scans/{scan_id}/results": {
+      "parameters": {
+        "scan_id": {
+          "in": "path",
+          "required": true,
+          "type": "integer"
+        },
+        "search": {
+          "in": "query",
+          "required": false,
+          "type": "null | string"
+        },
+        "status": {
+          "in": "query",
+          "required": false,
+          "type": "null | string"
+        }
+      },
+      "responses": {
+        "200": {
+          "application/json": "array[HostResultRow]"
+        },
+        "401": {
+          "application/json": "ErrorResponse"
+        },
+        "404": {
+          "application/json": "ErrorResponse"
+        },
+        "422": {
+          "application/json": "ErrorResponse"
+        }
+      },
+      "security": [
+        "HTTPBearer"
+      ]
+    },
+    "GET /api/v1/stats": {
+      "parameters": {},
+      "responses": {
+        "200": {
+          "application/json": "Stats"
+        },
+        "401": {
+          "application/json": "ErrorResponse"
+        },
+        "422": {
+          "application/json": "ErrorResponse"
+        }
+      },
+      "security": [
+        "HTTPBearer"
+      ]
+    },
+    "POST /api/v1/scans": {
+      "parameters": {},
+      "requestBody": {
+        "application/json": "ScanRequest"
+      },
+      "responses": {
+        "201": {
+          "application/json": "ScanCreated"
+        },
+        "400": {
+          "application/json": "ErrorResponse"
+        },
+        "401": {
+          "application/json": "ErrorResponse"
+        },
+        "422": {
+          "application/json": "ErrorResponse"
+        }
+      },
+      "security": [
+        "HTTPBearer"
+      ]
+    },
+    "POST /api/v1/scans/{scan_id}/cancel": {
+      "parameters": {
+        "scan_id": {
+          "in": "path",
+          "required": true,
+          "type": "integer"
+        }
+      },
+      "responses": {
+        "200": {
+          "application/json": "ScanCancelled"
+        },
+        "401": {
+          "application/json": "ErrorResponse"
+        },
+        "409": {
+          "application/json": "ErrorResponse"
+        },
+        "422": {
+          "application/json": "ErrorResponse"
+        }
+      },
+      "security": [
+        "HTTPBearer"
+      ]
+    },
+    "POST /api/v1/upload": {
+      "parameters": {},
+      "requestBody": {
+        "multipart/form-data": "Body_upload_targets_api_v1_upload_post"
+      },
+      "responses": {
+        "200": {
+          "application/json": "UploadResult"
+        },
+        "400": {
+          "application/json": "ErrorResponse"
+        },
+        "401": {
+          "application/json": "ErrorResponse"
+        },
+        "413": {
+          "application/json": "ErrorResponse"
+        },
+        "422": {
+          "application/json": "ErrorResponse"
+        }
+      },
+      "security": [
+        "HTTPBearer"
+      ]
+    }
+  },
+  "schemas": {
+    "Asset": {
+      "properties": {
+        "avg_latency": "null | number",
+        "hostname": "null | string",
+        "ip": "string",
+        "last_checked": "string",
+        "last_scan_id": "integer",
+        "last_seen": "null | string",
+        "scan_count": "integer",
+        "status": "string"
+      },
+      "required": [
+        "avg_latency",
+        "hostname",
+        "ip",
+        "last_checked",
+        "last_scan_id",
+        "last_seen",
+        "scan_count",
+        "status"
+      ]
+    },
+    "Body_upload_targets_api_v1_upload_post": {
+      "properties": {
+        "file": "string"
+      },
+      "required": [
+        "file"
+      ]
+    },
+    "DiffOptionsModel": {
+      "properties": {
+        "include_unresolved_hostnames": "boolean",
+        "latency_abs_ms": "number",
+        "latency_pct": "number"
+      },
+      "required": [
+        "include_unresolved_hostnames",
+        "latency_abs_ms",
+        "latency_pct"
+      ]
+    },
+    "DiffSummary": {
+      "properties": {
+        "baseline_hosts": "integer",
+        "changed_hosts": "integer",
+        "compared_hosts": "integer",
+        "counts": "object[integer]",
+        "current_hosts": "integer",
+        "severity_counts": "object[integer]",
+        "total_changes": "integer",
+        "unchanged_hosts": "integer"
+      },
+      "required": [
+        "baseline_hosts",
+        "changed_hosts",
+        "compared_hosts",
+        "counts",
+        "current_hosts",
+        "severity_counts",
+        "total_changes",
+        "unchanged_hosts"
+      ]
+    },
+    "ErrorResponse": {
+      "properties": {
+        "detail": "string",
+        "errors": "array[ValidationIssue] | null"
+      },
+      "required": [
+        "detail"
+      ]
+    },
+    "HostChangeModel": {
+      "properties": {
+        "current": "null | string",
+        "delta": "null | number",
+        "description": "string",
+        "hostname": "string",
+        "ip": "string",
+        "label": "string",
+        "previous": "null | string",
+        "severity": "string",
+        "type": "string"
+      },
+      "required": [
+        "current",
+        "delta",
+        "description",
+        "hostname",
+        "ip",
+        "label",
+        "previous",
+        "severity",
+        "type"
+      ]
+    },
+    "HostResultModel": {
+      "properties": {
+        "hostname": "string",
+        "ip": "string",
+        "latency": "null | number",
+        "open_ports": "array[integer]",
+        "status": "string"
+      },
+      "required": [
+        "hostname",
+        "ip",
+        "latency",
+        "open_ports",
+        "status"
+      ]
+    },
+    "HostResultRow": {
+      "properties": {
+        "checked_at": "string",
+        "hostname": "string",
+        "ip": "string",
+        "latency": "null | number",
+        "open_ports": "string",
+        "status": "string"
+      },
+      "required": [
+        "checked_at",
+        "hostname",
+        "ip",
+        "latency",
+        "open_ports",
+        "status"
+      ]
+    },
+    "ResultEvent": {
+      "properties": {
+        "completed": "integer",
+        "result": "HostResultModel",
+        "scan_id": "integer",
+        "total": "integer",
+        "type": "const 'result'"
+      },
+      "required": [
+        "completed",
+        "result",
+        "scan_id",
+        "total"
+      ]
+    },
+    "ScanCancelled": {
+      "properties": {
+        "cancelling": "boolean",
+        "id": "integer"
+      },
+      "required": [
+        "cancelling",
+        "id"
+      ]
+    },
+    "ScanCreated": {
+      "properties": {
+        "id": "integer",
+        "total": "integer"
+      },
+      "required": [
+        "id",
+        "total"
+      ]
+    },
+    "ScanDiffModel": {
+      "properties": {
+        "baseline": "ScanRefModel",
+        "changes": "array[HostChangeModel]",
+        "current": "ScanRefModel",
+        "options": "DiffOptionsModel",
+        "summary": "DiffSummary"
+      },
+      "required": [
+        "baseline",
+        "changes",
+        "current",
+        "options",
+        "summary"
+      ]
+    },
+    "ScanFinishedEvent": {
+      "properties": {
+        "duration_s": "number",
+        "scan_id": "integer",
+        "status": "string",
+        "type": "const 'scan_finished'"
+      },
+      "required": [
+        "duration_s",
+        "scan_id",
+        "status"
+      ]
+    },
+    "ScanRecord": {
+      "properties": {
+        "completed": "integer",
+        "config": "object",
+        "duration_s": "null | number",
+        "error": "null | string",
+        "finished_at": "null | string",
+        "id": "integer",
+        "source": "string",
+        "started_at": "string",
+        "status": "string",
+        "total": "integer"
+      },
+      "required": [
+        "completed",
+        "config",
+        "duration_s",
+        "error",
+        "finished_at",
+        "id",
+        "source",
+        "started_at",
+        "status",
+        "total"
+      ]
+    },
+    "ScanRefModel": {
+      "properties": {
+        "id": "integer | null",
+        "label": "string",
+        "source": "string",
+        "started_at": "string"
+      },
+      "required": [
+        "id",
+        "label",
+        "source",
+        "started_at"
+      ]
+    },
+    "ScanRequest": {
+      "properties": {
+        "count": "integer",
+        "dns_cache_ttl": "integer",
+        "ips": "array[string] | null",
+        "resolve": "boolean",
+        "source": "string",
+        "targets": "null | string",
+        "threads": "integer",
+        "timeout": "integer"
+      },
+      "required": []
+    },
+    "ScanStartedEvent": {
+      "properties": {
+        "scan_id": "integer",
+        "total": "integer",
+        "type": "const 'scan_started'"
+      },
+      "required": [
+        "scan_id",
+        "total"
+      ]
+    },
+    "ScanSummary": {
+      "properties": {
+        "avg_latency": "null | number",
+        "completed": "integer",
+        "config": "object",
+        "duration_s": "null | number",
+        "error": "null | string",
+        "finished_at": "null | string",
+        "id": "integer",
+        "source": "string",
+        "started_at": "string",
+        "status": "string",
+        "status_counts": "object[integer]",
+        "total": "integer"
+      },
+      "required": [
+        "avg_latency",
+        "completed",
+        "config",
+        "duration_s",
+        "error",
+        "finished_at",
+        "id",
+        "source",
+        "started_at",
+        "status",
+        "status_counts",
+        "total"
+      ]
+    },
+    "Stats": {
+      "properties": {
+        "host_count": "integer",
+        "latest_scan": "ScanSummary | null",
+        "running_scans": "array[ScanRecord]",
+        "scan_count": "integer",
+        "trend": "array[TrendPoint]"
+      },
+      "required": [
+        "host_count",
+        "latest_scan",
+        "running_scans",
+        "scan_count",
+        "trend"
+      ]
+    },
+    "TrendPoint": {
+      "properties": {
+        "active": "integer",
+        "avg_latency": "null | number",
+        "id": "integer",
+        "started_at": "string",
+        "total": "integer"
+      },
+      "required": [
+        "active",
+        "avg_latency",
+        "id",
+        "started_at",
+        "total"
+      ]
+    },
+    "UploadResult": {
+      "properties": {
+        "count": "integer",
+        "filename": "null | string",
+        "targets": "array[string]"
+      },
+      "required": [
+        "count",
+        "filename",
+        "targets"
+      ]
+    },
+    "ValidationIssue": {
+      "properties": {
+        "loc": "array[integer | string]",
+        "msg": "string",
+        "type": "string"
+      },
+      "required": [
+        "loc",
+        "msg",
+        "type"
+      ]
+    },
+    "WebSocketEvent": {
+      "type": "ResultEvent | ScanFinishedEvent | ScanStartedEvent"
+    }
+  },
+  "securitySchemes": {
+    "HTTPBearer": {
+      "scheme": "bearer",
+      "type": "http"
+    }
+  }
+}
