@@ -138,12 +138,17 @@ def targets_from_json(data: Any, source: str = "JSON input") -> list[str]:
 
     tokens: list[str] = []
     for entry in data:
-        if isinstance(entry, str):
-            tokens.append(entry)
-        elif isinstance(entry, dict):
-            value = next((entry[key] for key in JSON_TARGET_KEYS if entry.get(key)), None)
-            if value is not None:
-                tokens.append(str(value))
+        if isinstance(entry, dict):
+            entry_value = next((entry[key] for key in JSON_TARGET_KEYS if entry.get(key)), None)
+        else:
+            entry_value = entry
+        if isinstance(entry_value, str):
+            tokens.append(entry_value)
+        else:
+            raise FileIOError(
+                f"Unsupported entry in {source}: {entry!r}. Each entry must be an address "
+                f"or an object with one of: {', '.join(JSON_TARGET_KEYS)}."
+            )
 
     # strict=True: a JSON document is structured, so an entry that is not a
     # target is a mistake worth naming, not a stray line to skip.

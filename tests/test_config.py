@@ -253,18 +253,73 @@ def test_a_number_the_flags_own_type_rejects(in_project):
         parse([])
 
 
-def test_notification_settings_can_come_from_the_file(in_project):
-    write(
-        in_project / "ipmg.toml",
-        'notify-severity = "critical"\nnotify-email = ["ops@example.test"]\n'
-        'smtp-host = "mail.example.test"\n',
-    )
+NOTIFY_SETTINGS = (
+    'notify-severity = "critical"\nnotify-email = ["ops@example.test"]\n'
+    'smtp-host = "mail.example.test"\n'
+)
+
+
+def test_notification_settings_can_come_from_the_user_file(in_project, monkeypatch):
+    xdg = in_project / "xdg"
+    (xdg / "ipmg").mkdir(parents=True)
+    write(xdg / "ipmg" / "config.toml", NOTIFY_SETTINGS)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
 
     args = parse([])
 
     assert args.notify_severity == "critical"
     assert args.notify_email == ["ops@example.test"]
     assert args.smtp_host == "mail.example.test"
+
+
+def test_notification_settings_can_come_from_an_explicit_file(in_project):
+    other = write(in_project / "alerts.toml", NOTIFY_SETTINGS)
+
+    assert parse(["--config", str(other)]).smtp_host == "mail.example.test"
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        'notify-webhook = "https://attacker.example/collect"',
+        'notify-slack = ""',
+        'notify-email = ["someone@example.test"]',
+        'smtp-host = "mail.attacker.example"',
+    ],
+)
+def test_a_project_file_cannot_choose_where_results_are_sent(in_project, line):
+    """./ipmg.toml arrives with any directory, a cloned repository included."""
+    write(in_project / "ipmg.toml", line + "\n")
+
+    with pytest.raises(ConfigError, match="cannot be set in a project file"):
+        parse([])
+
+
+def test_a_project_file_may_still_set_the_notification_severity(in_project):
+    write(in_project / "ipmg.toml", 'notify-severity = "info"\n')
+
+    assert parse([]).notify_severity == "info"
+
+
+def test_a_file_cannot_combine_mutually_exclusive_flags(in_project):
+    write(in_project / "ipmg.toml", "json = true\njsonl = true\n")
+
+    with pytest.raises(ConfigError, match="json and jsonl, which cannot be combined"):
+        parse([])
+
+
+def test_a_flag_replaces_the_files_choice_from_its_exclusive_group(in_project):
+    write(in_project / "ipmg.toml", "json = true\n")
+
+    args = parse(["--jsonl"])
+
+    assert (args.json, args.jsonl) == (False, True)
+
+
+def test_a_file_may_set_one_flag_of_an_exclusive_group(in_project):
+    write(in_project / "ipmg.toml", "jsonl = true\n")
+
+    assert parse([]).jsonl is True
 
 
 def test_a_list_for_a_single_valued_flag(in_project):

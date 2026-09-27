@@ -61,6 +61,24 @@ _NOT_CONFIGURABLE = {
     "version": "it is not a scan option",
 }
 
+#: Where scan results can be sent. A project's ./ipmg.toml comes with whatever
+#: directory you scan from, a cloned repository included, so it may not choose
+#: these: it could send your results to an address its author picked. Your own
+#: config file and an explicit --config file can.
+_NOT_FROM_PROJECT = frozenset(
+    {
+        "notify_webhook",
+        "notify_slack",
+        "notify_teams",
+        "notify_email",
+        "smtp_host",
+        "smtp_port",
+        "smtp_security",
+        "smtp_user",
+        "smtp_from",
+    }
+)
+
 #: Sentinel for "this key is valid but should leave the flag's own default
 #: alone" — a boolean key set to false, meaning the flag was simply not passed.
 _KEEP = object()
@@ -302,10 +320,17 @@ def resolve(
     known = _flag_actions(parser)
     defaults: Dict[str, Any] = {}
     for (path, table), found in zip(sources, profiles):
+        from_project = explicit is None and path == Path(PROJECT_CONFIG)
         for key, value, origin in _select(table, path, profile, found):
             action = known.get(key)
             if action is None:
                 raise _unknown_key(key, origin, known)
+            if from_project and action.dest in _NOT_FROM_PROJECT:
+                raise ConfigError(
+                    f"'{key}' in {origin} cannot be set in a project file, which could "
+                    f"send your scan results elsewhere. Put it in {_user_config_path()} "
+                    "or a file you pass with --config."
+                )
             if action.dest in given:
                 continue
             resolved = _coerce(action, key, value, origin)
@@ -313,7 +338,31 @@ def resolve(
                 defaults.pop(action.dest, None)
             else:
                 defaults[action.dest] = resolved
+    _check_exclusive(parser, defaults, given)
     return defaults
+
+
+def _check_exclusive(
+    parser: argparse.ArgumentParser, defaults: Dict[str, Any], given: Set[str]
+) -> None:
+    """Enforce the parser's mutually exclusive groups on the file's values.
+
+    argparse checks them only among flags on the command line, never defaults,
+    so without this a file could turn on --json and --jsonl together. A flag
+    on the command line wins over the file's choice from its group, as a flag
+    wins over the file everywhere else.
+    """
+    # _mutually_exclusive_groups is, like _actions, argparse's only route to them.
+    for group in parser._mutually_exclusive_groups:
+        members = group._group_actions
+        if any(action.dest in given for action in members):
+            for action in members:
+                defaults.pop(action.dest, None)
+            continue
+        chosen = [action for action in members if action.dest in defaults]
+        if len(chosen) > 1:
+            names = " and ".join(action.option_strings[-1][2:] for action in chosen)
+            raise ConfigError(f"The configuration sets {names}, which cannot be combined.")
 
 
 def _given_dests(build, argv: List[str]) -> Set[str]:

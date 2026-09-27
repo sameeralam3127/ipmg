@@ -259,6 +259,19 @@ def test_load_targets_names_a_bad_entry_in_json(tmp_path):
         load_targets(str(path))
 
 
+@pytest.mark.parametrize(
+    "entry",
+    [42, None, {"host": "10.0.0.1"}, {"ip": 167772161}, ["10.0.0.1"]],
+)
+def test_load_targets_names_a_json_entry_that_is_not_a_target(tmp_path, entry):
+    """Numbers, nulls, and objects without a known key used to be dropped silently."""
+    path = tmp_path / "targets.json"
+    path.write_text(json.dumps(["8.8.8.8", entry]), encoding="utf-8")
+
+    with pytest.raises(FileIOError, match="Unsupported entry in .*IP Address, ip, target"):
+        load_targets(str(path))
+
+
 def test_load_targets_rejects_empty_json(tmp_path):
     path = tmp_path / "targets.json"
     path.write_text("[]", encoding="utf-8")

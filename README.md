@@ -642,6 +642,12 @@ flag's choices is an error naming the key and the file it came from:
 ✗ 'formats' in ipmg.toml: 'pdf' is not one of xlsx, csv, json, jsonl, md.
 ```
 
+A project's `./ipmg.toml` comes with whatever directory you scan from,
+including a repository you just cloned, so it cannot say where results are
+sent: the `--notify-*` destinations and `--smtp-*` settings are only read from
+`~/.config/ipmg/config.toml` or a file you pass with `--config`. A file also
+cannot combine flags that exclude each other, such as `json` and `jsonl`.
+
 ---
 
 ## All options
