@@ -90,6 +90,19 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/test_diff.py -q
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -q -k latency
 ```
 
+### Changing the web API
+
+`tests/test_api_contract.py` compares the `/api/v1` schema with the committed
+snapshot in `tests/snapshots/`, so an API change fails the tests until you
+update it:
+
+```bash
+UPDATE_API_SNAPSHOT=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/test_api_contract.py -q
+```
+
+Review the snapshot diff before committing: `/api/v1` may only gain endpoints
+and fields, never lose or change them (see [docs/API.md](../docs/API.md#versioning-and-stability)).
+
 CI also runs a quick end-to-end scan against your own machine. It is worth
 running before you open a pull request:
 
@@ -147,8 +160,10 @@ src/ipmg/
   infrastructure/  SQLite history and file input/output
   reporting/       terminal output, live streaming, reports
   services/        scan and history orchestration
-  web/             IPMG Web (FastAPI); static/ holds its HTML, CSS, and JS
-tests/             pytest suite (one file per module, roughly)
+  web/             IPMG Web (FastAPI); schemas.py is the API contract,
+                   static/ holds its HTML, CSS, and JS
+tests/             pytest suite (one file per module, roughly); snapshots/
+                   holds the committed API contract
 site/              project website published to GitHub Pages
 install.sh         one-line installer for Linux and macOS
 .github/workflows  CI: tests, security scan, release, Pages deploy

@@ -415,6 +415,14 @@ package, nothing is loaded from a CDN. It gives you:
 | `--no-browser` | off | Don't open the browser automatically |
 | `--db` | `~/.ipmg/dashboard.db` | History database location |
 
+### Scripting IPMG Web
+
+Everything the dashboard does goes through a documented, versioned REST API
+under `/api/v1`, so you can start scans, fetch results, and compare scans from
+your own scripts. The [API guide](https://github.com/sameeralam3127/ipmg/blob/main/docs/API.md)
+covers authentication, errors, and worked `curl` examples; the running server
+also serves interactive docs at `http://127.0.0.1:8080/docs`.
+
 ### On a server with no browser
 
 On a Linux server with no display (e.g. accessed over plain SSH), IPMG detects
@@ -610,6 +618,9 @@ Found a vulnerability? See [SECURITY.md](.github/SECURITY.md) for how to report 
 - **[Command reference](https://github.com/sameeralam3127/ipmg/blob/main/docs/COMMANDS.md)** —
   every command and flag with copy-paste examples, a safe session that tries
   everything on your own machine, exit codes, and error messages
+- **[Web API guide](https://github.com/sameeralam3127/ipmg/blob/main/docs/API.md)** —
+  script IPMG Web over HTTP: start scans, fetch results, compare scans,
+  and follow live events
 - **[Troubleshooting](https://github.com/sameeralam3127/ipmg/blob/main/docs/TROUBLESHOOTING.md)** —
   install errors, `command not found`, every host timing out, slow scans,
   rejected input files

@@ -10,6 +10,12 @@ from typing import Any, Dict, List, Optional, Set
 
 from ipmg.core.engine import HostResult, ScanConfig, execute_scan
 from ipmg.web.db import Database
+from ipmg.web.schemas import (
+    HostResultModel,
+    ResultEvent,
+    ScanFinishedEvent,
+    ScanStartedEvent,
+)
 
 #: Events buffered per WebSocket subscriber. A client this far behind is
 #: disconnected instead of letting its backlog grow without bound; the browser
@@ -101,19 +107,17 @@ class ScanManager:
         stop: threading.Event,
     ) -> None:
         started_at = time.perf_counter()
-        self._broadcast({"type": "scan_started", "scan_id": scan_id, "total": len(ips)})
+        self._broadcast(ScanStartedEvent(scan_id=scan_id, total=len(ips)).model_dump())
 
         def on_result(result: HostResult, completed: int, total: int) -> None:
             self._db.add_result(scan_id, result)
-            self._broadcast(
-                {
-                    "type": "result",
-                    "scan_id": scan_id,
-                    "completed": completed,
-                    "total": total,
-                    "result": asdict(result),
-                }
+            event = ResultEvent(
+                scan_id=scan_id,
+                completed=completed,
+                total=total,
+                result=HostResultModel(**asdict(result)),
             )
+            self._broadcast(event.model_dump())
 
         try:
             execute_scan(ips, config, on_result=on_result, should_stop=stop.is_set)
@@ -127,11 +131,9 @@ class ScanManager:
             with self._lock:
                 self._stops.pop(scan_id, None)
 
-        self._broadcast(
-            {
-                "type": "scan_finished",
-                "scan_id": scan_id,
-                "status": final_status,
-                "duration_s": round(time.perf_counter() - started_at, 3),
-            }
+        finished = ScanFinishedEvent(
+            scan_id=scan_id,
+            status=final_status,
+            duration_s=round(time.perf_counter() - started_at, 3),
         )
+        self._broadcast(finished.model_dump())
