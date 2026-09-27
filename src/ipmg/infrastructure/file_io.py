@@ -10,7 +10,7 @@ import pandas as pd
 
 from ipmg.core.ping import validate_ip
 from ipmg.exceptions import FileIOError
-from ipmg.infrastructure.incremental import atomic_write_bytes, jsonl_record
+from ipmg.infrastructure.incremental import atomic_write_bytes, frame_rows, jsonl_record
 from ipmg.reporting import ui
 from ipmg.utils.helpers import markdown_cell, spreadsheet_escape, timestamp_str
 
@@ -375,8 +375,7 @@ def write_report(df: pd.DataFrame, path: str, fmt: str) -> None:
     elif fmt == "jsonl":
         # Rendered row by row rather than through pandas, so the finished file
         # is written exactly like the one a running scan appends to.
-        rows = df.astype(object).where(pd.notna(df), None).to_dict(orient="records")
-        data = "".join(jsonl_record(row) for row in rows).encode("utf-8")
+        data = "".join(jsonl_record(row) for row in frame_rows(df)).encode("utf-8")
     elif fmt == "md":
         data = build_markdown_report(df).encode("utf-8")
     else:

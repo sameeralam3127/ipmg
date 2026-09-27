@@ -56,6 +56,9 @@ dependencies = [
     "uvicorn>=0.27",
     "websockets>=12",
     "python-multipart>=0.0.9",
+    # tomllib is in the standard library from 3.11; tomli 2.x is the same
+    # parser with the same API, so the floor must not drop below it.
+    "tomli>=2.0.1; python_version < '3.11'",
 ]
 
 [project.urls]

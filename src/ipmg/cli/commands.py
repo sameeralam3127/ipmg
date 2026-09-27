@@ -6,6 +6,7 @@ import logging
 import sys
 from typing import Callable, Dict, List, Optional
 
+from ipmg.cli import config
 from ipmg.cli.parser import (
     build_diff_parser,
     build_history_parser,
@@ -19,7 +20,7 @@ from ipmg.reporting import ui
 from ipmg.reporting.diff_report import export_diff, print_diff
 from ipmg.reporting.summary import print_scan_history
 from ipmg.services.history_service import HistoryService
-from ipmg.services.scan_service import run_scan
+from ipmg.services.scan_service import machine_output, run_scan
 from ipmg.utils.helpers import configure_logging
 
 EXIT_OK = 0
@@ -31,8 +32,16 @@ log = logging.getLogger(__name__)
 
 
 def _scan_command(argv: List[str]) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    # Before parsing: the file supplies the defaults, so anything on the
+    # command line still overrides it.
+    config.apply(parser, build_parser, argv)
+    args = parser.parse_args(argv)
     configure_logging(args.verbose)
+    if machine_output(args).enabled:
+        # Before the banner: with --json or --jsonl stdout carries the results
+        # and nothing else, so every line a person reads goes to stderr.
+        ui.use_stderr()
     ui.header("scan")
     print_disclaimer_once()
     run_scan(args)
