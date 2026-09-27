@@ -16,7 +16,7 @@ from ipmg.core.discovery import discover_local_subnet
 from ipmg.core.engine import HostResult, ScanConfig, execute_scan
 from ipmg.core.health import HealthPolicy, check_health
 from ipmg.core.portscan import DEFAULT_PORTS
-from ipmg.exceptions import FileIOError, HistoryError
+from ipmg.exceptions import FileIOError, HistoryError, HostsDownError
 from ipmg.infrastructure.file_io import (
     DEFAULT_INPUT_FILE,
     create_sample_file,
@@ -108,14 +108,6 @@ def _load_resume(args) -> Optional[PartialReport]:
     return load_partial_report(path)
 
 
-def _health_policy(args) -> HealthPolicy:
-    """Read the --fail-on-down and --min-active checks off the parsed arguments."""
-    return HealthPolicy(
-        fail_on_down=bool(getattr(args, "fail_on_down", False)),
-        min_active_pct=getattr(args, "min_active", None),
-    )
-
-
 def _stream_options(args) -> StreamOptions:
     """Read live-output settings off the parsed arguments."""
     all_hosts = bool(getattr(args, "stream_all", False))
@@ -138,6 +130,14 @@ def _config_from_args(args) -> ScanConfig:
         ports=tuple(getattr(args, "ports", None) or DEFAULT_PORTS),
         port_timeout=getattr(args, "port_timeout", 1.0),
     ).clamped()
+
+
+def _health_policy(args) -> HealthPolicy:
+    """Read the --fail-on-down and --min-active checks off the parsed arguments."""
+    return HealthPolicy(
+        fail_on_down=bool(getattr(args, "fail_on_down", False)),
+        min_active_pct=getattr(args, "min_active", None),
+    )
 
 
 def _ensure_input_file(args) -> None:
@@ -357,13 +357,7 @@ def _store_and_compare(
     return scan_id
 
 
-def run_scan(args) -> Optional[str]:
-    """Scan, save the reports, and store the history, once or every --interval.
-
-    Returns why the scan failed --fail-on-down or --min-active, or None when it
-    passed or neither check was asked for. The reports are already written by
-    the time it returns, so the caller only has to turn that into an exit code.
-    """
+def run_scan(args) -> None:
     config = _config_from_args(args)
     history_options = _history_options(args)
     health = _health_policy(args)
@@ -385,13 +379,15 @@ def run_scan(args) -> Optional[str]:
         _store_and_compare(history_options, config, outcome)
 
         failure = check_health(outcome.results, health)
-        if failure:
-            ui.blank()
-            ui.warn(failure)
-
         if not args.interval:
-            return failure
+            if failure:
+                # Raised only now, with the reports and history already written.
+                raise HostsDownError(failure)
+            return
 
         # A repeating scan keeps going when hosts are down: it is the monitor,
         # and stopping it would end the watch at the moment it matters.
+        if failure:
+            ui.blank()
+            ui.warn(failure)
         time.sleep(args.interval * 60)

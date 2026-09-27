@@ -14,7 +14,7 @@ from ipmg.cli.parser import (
 )
 from ipmg.core.diff import DiffOptions
 from ipmg.core.security import print_disclaimer_once
-from ipmg.exceptions import IPMGError
+from ipmg.exceptions import HostsDownError, IPMGError
 from ipmg.reporting import ui
 from ipmg.reporting.diff_report import export_diff, print_diff
 from ipmg.reporting.summary import print_scan_history
@@ -36,8 +36,7 @@ def _scan_command(argv: List[str]) -> int:
     configure_logging(args.verbose)
     ui.header("scan")
     print_disclaimer_once()
-    if run_scan(args):
-        return EXIT_HOSTS_DOWN
+    run_scan(args)
     return EXIT_OK
 
 
@@ -136,6 +135,12 @@ def run(argv: Optional[List[str]] = None) -> int:
 
     try:
         return handler(handler_argv)
+    except HostsDownError as exc:
+        # Not an error: the scan finished and wrote its reports, but failed
+        # the check it was asked to make.
+        ui.blank()
+        ui.warn(str(exc))
+        return EXIT_HOSTS_DOWN
     except IPMGError as exc:
         ui.blank()
         ui.error(str(exc))

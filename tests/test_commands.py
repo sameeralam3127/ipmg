@@ -2,7 +2,7 @@ import pytest
 
 from ipmg.cli import commands
 from ipmg.core.engine import HostResult, ScanConfig
-from ipmg.exceptions import FileIOError
+from ipmg.exceptions import FileIOError, HostsDownError
 from ipmg.infrastructure.database import Database
 from ipmg.services.history_service import HistoryService
 from ipmg.utils.helpers import console
@@ -152,10 +152,14 @@ def test_scan_arguments_are_forwarded(monkeypatch):
     assert captured["history"] is False
 
 
-def test_scan_that_fails_its_health_check_exits_three(monkeypatch):
-    monkeypatch.setattr(commands, "run_scan", lambda _args: "1 of 2 hosts are not active")
+def test_scan_that_fails_its_health_check_exits_three(monkeypatch, capsys):
+    def hosts_down(_args):
+        raise HostsDownError("1 of 2 hosts are not active: 10.0.0.2.")
+
+    monkeypatch.setattr(commands, "run_scan", hosts_down)
 
     assert commands.run(["--fail-on-down"]) == commands.EXIT_HOSTS_DOWN == 3
+    assert "1 of 2 hosts are not active" in capsys.readouterr().out
 
 
 def test_scan_with_every_host_down_exits_zero_without_the_flags(tmp_path, monkeypatch):

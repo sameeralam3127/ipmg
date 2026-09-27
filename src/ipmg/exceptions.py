@@ -17,6 +17,10 @@ class PingError(IPMGError):
     """Raised when ping execution fails unexpectedly."""
 
 
+class HostsDownError(IPMGError):
+    """Raised after a finished scan fails --fail-on-down or --min-active."""
+
+
 class FileIOError(IPMGError):
     """Raised when input/output file operations fail."""
 

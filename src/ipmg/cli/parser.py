@@ -188,6 +188,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="Start IPMG Web, the local browser UI (same as 'ipmg web').",
     )
 
+    checks = parser.add_argument_group("exit status (for cron and monitoring)")
+    checks.add_argument(
+        "--fail-on-down",
+        action="store_true",
+        help="Exit with status 3 if any target is not Active. Reports are still written.",
+    )
+    checks.add_argument(
+        "--min-active",
+        type=_percent,
+        default=None,
+        metavar="PERCENT",
+        help="Exit with status 3 if fewer than PERCENT of the targets are Active (0-100).",
+    )
+
     ports_group = parser.add_argument_group("TCP service discovery")
     ports_group.add_argument(
         "--scan-ports",
@@ -240,20 +254,6 @@ def build_parser() -> argparse.ArgumentParser:
             "complete that report. REPORT is its jsonl, csv, json, or xlsx file "
             "(default: the newest report named after --output)."
         ),
-    )
-
-    checks = parser.add_argument_group("exit status (for cron and monitoring)")
-    checks.add_argument(
-        "--fail-on-down",
-        action="store_true",
-        help="Exit with status 3 if any target is not Active. Reports are still written.",
-    )
-    checks.add_argument(
-        "--min-active",
-        type=_percent,
-        default=None,
-        metavar="PERCENT",
-        help="Exit with status 3 if fewer than PERCENT of the targets are Active (0-100).",
     )
 
     live = parser.add_argument_group("live output")
