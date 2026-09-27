@@ -51,7 +51,8 @@ ENV_SMTP_HOST = "IPMG_SMTP_HOST"
 ENV_SMTP_PORT = "IPMG_SMTP_PORT"
 ENV_SMTP_SECURITY = "IPMG_SMTP_SECURITY"
 ENV_SMTP_USER = "IPMG_SMTP_USER"
-ENV_SMTP_PASSWORD = "IPMG_SMTP_PASSWORD"  # pragma: allowlist secret
+# A variable name, not a password.
+ENV_SMTP_PASSWORD = "IPMG_SMTP_PASSWORD"  # nosec B105  # pragma: allowlist secret
 ENV_SMTP_FROM = "IPMG_SMTP_FROM"
 
 
@@ -301,13 +302,16 @@ def email_message(diff: ScanDiff, settings: SmtpSettings) -> EmailMessage:
 
 def post_json(url: str, payload: Mapping[str, Any]) -> None:
     """POST ``payload`` as JSON; any HTTP error status raises."""
+    # urlopen also opens file:// and ftp:// URLs; a webhook is only ever http(s).
+    if urlsplit(url).scheme not in ("http", "https"):
+        raise ValueError("only http:// and https:// webhook URLs are allowed")
     request = urllib.request.Request(
         url,
         data=json.dumps(payload).encode("utf-8"),
         headers={"Content-Type": "application/json", "User-Agent": f"ipmg/{__version__}"},
         method="POST",
     )
-    with urllib.request.urlopen(request, timeout=SEND_TIMEOUT_S) as response:
+    with urllib.request.urlopen(request, timeout=SEND_TIMEOUT_S) as response:  # nosec B310
         response.read()
 
 

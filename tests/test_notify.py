@@ -443,6 +443,14 @@ def test_post_json_sends_a_json_body(http_server):
     assert json.loads(body) == {"hello": "world"}
 
 
+def test_post_json_refuses_non_http_urls(tmp_path):
+    secret = tmp_path / "secret.txt"
+    secret.write_text("x")
+
+    with pytest.raises(ValueError, match="http"):
+        post_json(secret.as_uri(), {})
+
+
 def test_post_json_raises_on_an_error_status(http_server):
     _Handler.status = 500
     url = f"http://127.0.0.1:{http_server.server_port}/hook"
