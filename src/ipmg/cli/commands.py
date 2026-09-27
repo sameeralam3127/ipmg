@@ -13,8 +13,9 @@ from ipmg.cli.parser import (
     build_web_parser,
 )
 from ipmg.core.diff import DiffOptions
+from ipmg.core.health import HostsDownError
 from ipmg.core.security import print_disclaimer_once
-from ipmg.exceptions import HostsDownError, IPMGError
+from ipmg.exceptions import IPMGError
 from ipmg.reporting import ui
 from ipmg.reporting.diff_report import export_diff, print_diff
 from ipmg.reporting.summary import print_scan_history

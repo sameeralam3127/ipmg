@@ -14,9 +14,9 @@ import pandas as pd
 from ipmg.core.diff import DiffOptions
 from ipmg.core.discovery import discover_local_subnet
 from ipmg.core.engine import HostResult, ScanConfig, execute_scan
-from ipmg.core.health import HealthPolicy, check_health
+from ipmg.core.health import HealthPolicy, HostsDownError, check_health
 from ipmg.core.portscan import DEFAULT_PORTS
-from ipmg.exceptions import FileIOError, HistoryError, HostsDownError
+from ipmg.exceptions import FileIOError, HistoryError
 from ipmg.infrastructure.file_io import (
     DEFAULT_INPUT_FILE,
     create_sample_file,

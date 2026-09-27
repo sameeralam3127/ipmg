@@ -7,11 +7,16 @@ from typing import Optional, Sequence
 
 from ipmg.core.diff import ip_sort_key
 from ipmg.core.engine import HostResult
+from ipmg.exceptions import IPMGError
 
 ACTIVE_STATUS = "Active"
 
 #: How many down hosts a failure message names before it summarises the rest.
 MAX_NAMED_HOSTS = 5
+
+
+class HostsDownError(IPMGError):
+    """Raised after a finished scan fails --fail-on-down or --min-active."""
 
 
 @dataclass(frozen=True)

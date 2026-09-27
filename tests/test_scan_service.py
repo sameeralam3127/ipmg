@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
-from ipmg.exceptions import HostsDownError
+from ipmg.core.health import HostsDownError
 from ipmg.infrastructure.database import Database
 from ipmg.services.scan_service import run_scan
 from ipmg.utils.helpers import console

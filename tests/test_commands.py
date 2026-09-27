@@ -2,7 +2,8 @@ import pytest
 
 from ipmg.cli import commands
 from ipmg.core.engine import HostResult, ScanConfig
-from ipmg.exceptions import FileIOError, HostsDownError
+from ipmg.core.health import HostsDownError
+from ipmg.exceptions import FileIOError
 from ipmg.infrastructure.database import Database
 from ipmg.services.history_service import HistoryService
 from ipmg.utils.helpers import console
