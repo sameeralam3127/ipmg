@@ -100,14 +100,20 @@ def build_parser() -> argparse.ArgumentParser:
     )
     # No default here, so the scan service can tell "no --input given" (use the
     # sample file) apart from an explicit file name that does not exist (error).
+    # "extend" rather than "store": repeating the flag adds sources instead of
+    # replacing them, so a shell alias carrying --input can still be added to.
     parser.add_argument(
         "--input",
+        action="extend",
+        nargs="+",
         default=None,
         metavar="TARGETS",
         help=(
-            "IP, CIDR block, range, or target file (.txt, .list, .csv, .json, .xls, .xlsx). "
-            f"Without --input or --discover, {DEFAULT_INPUT_FILE} is used and "
-            "created with sample targets if it does not exist."
+            "One or more IPs, CIDR blocks, ranges, or target files "
+            "(.txt, .list, .csv, .json, .xls, .xlsx). Every source is merged and "
+            "de-duplicated, and the flag may be repeated. Without --input or "
+            f"--discover, {DEFAULT_INPUT_FILE} is used and created with sample "
+            "targets if it does not exist."
         ),
     )
     parser.add_argument(

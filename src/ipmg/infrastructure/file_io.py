@@ -4,7 +4,7 @@ import io
 import ipaddress
 import json
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Sequence
 
 import pandas as pd
 
@@ -217,6 +217,35 @@ def load_targets(source: str) -> list[str]:
     raise FileIOError(
         f"Input '{source}' is neither a readable file nor a valid IP/CIDR/range target."
     )
+
+
+def describe_sources(sources: Sequence[str]) -> str:
+    """The one-line name for a set of target sources, as reports record it."""
+    return ", ".join(sources)
+
+
+def load_all_targets(sources: Sequence[str]) -> list[str]:
+    """Expand every target source and merge them into one de-duplicated list.
+
+    Sources are any mix of files, IPs, CIDR blocks, and ranges; each one is
+    expanded by :func:`load_targets`. Hosts keep the order they were first
+    seen in, and duplicates across sources collapse — scanning a file plus one
+    host already in it probes that host once.
+
+    De-duplication happens as each source lands rather than at the end, so the
+    :data:`MAX_EXPANDED_TARGETS` limit bounds the distinct hosts of the whole
+    run: two overlapping /17 blocks are the union they describe, not its sum.
+    """
+    if not sources:
+        raise FileIOError("No target source was given.")
+    if len(sources) == 1:
+        return load_targets(sources[0])
+
+    merged: dict[str, None] = {}
+    for source in sources:
+        merged.update(dict.fromkeys(load_targets(source)))
+        _check_target_limit(len(merged), describe_sources(sources))
+    return list(merged)
 
 
 def create_sample_file(path: str) -> None:

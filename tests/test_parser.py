@@ -65,3 +65,20 @@ def test_parser_resume_takes_an_optional_report():
     assert parser.parse_args(["--resume", "scan_20260917_120000.csv"]).resume == (
         "scan_20260917_120000.csv"
     )
+
+
+def test_parser_input_takes_several_sources():
+    args = build_parser().parse_args(["--input", "targets.txt", "10.0.0.0/30", "10.0.0.5"])
+
+    assert args.input == ["targets.txt", "10.0.0.0/30", "10.0.0.5"]
+
+
+def test_parser_input_can_be_repeated():
+    """Repeating the flag adds sources, so an alias carrying --input stays usable."""
+    args = build_parser().parse_args(["--input", "targets.txt", "--input", "10.0.0.5"])
+
+    assert args.input == ["targets.txt", "10.0.0.5"]
+
+
+def test_parser_input_defaults_to_nothing():
+    assert build_parser().parse_args([]).input is None

@@ -156,7 +156,7 @@ def test_save_results_reuses_a_supplied_timestamp(tmp_path):
 
 def _scan_args(tmp_path, **overrides):
     args = SimpleNamespace(
-        input="targets.csv",
+        input=["targets.csv"],
         output=str(tmp_path / "scan"),
         timeout=1,
         count=1,
@@ -185,7 +185,7 @@ def _interrupted_ping(stop_at: str):
 
 def test_interrupted_scan_keeps_the_hosts_already_scanned(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(
-        "ipmg.services.scan_service.load_targets", lambda _source: ["8.8.8.8", "1.1.1.1"]
+        "ipmg.services.scan_service.load_all_targets", lambda _sources: ["8.8.8.8", "1.1.1.1"]
     )
     monkeypatch.setattr("ipmg.core.engine.ping_ip", _interrupted_ping("1.1.1.1"))
 
@@ -201,7 +201,7 @@ def test_interrupted_scan_keeps_the_hosts_already_scanned(tmp_path, monkeypatch,
 
 def test_no_incremental_leaves_nothing_behind_when_interrupted(tmp_path, monkeypatch):
     monkeypatch.setattr(
-        "ipmg.services.scan_service.load_targets", lambda _source: ["8.8.8.8", "1.1.1.1"]
+        "ipmg.services.scan_service.load_all_targets", lambda _sources: ["8.8.8.8", "1.1.1.1"]
     )
     monkeypatch.setattr("ipmg.core.engine.ping_ip", _interrupted_ping("1.1.1.1"))
 
@@ -213,7 +213,7 @@ def test_no_incremental_leaves_nothing_behind_when_interrupted(tmp_path, monkeyp
 
 def test_finished_scan_writes_one_set_of_reports(tmp_path, monkeypatch):
     monkeypatch.setattr(
-        "ipmg.services.scan_service.load_targets", lambda _source: ["8.8.8.8", "1.1.1.1"]
+        "ipmg.services.scan_service.load_all_targets", lambda _sources: ["8.8.8.8", "1.1.1.1"]
     )
     monkeypatch.setattr("ipmg.core.engine.ping_ip", lambda *_args: ("Active", 1.0))
 
@@ -242,7 +242,7 @@ def _pinged(calls):
 
 
 def _interrupt_first_run(tmp_path, monkeypatch, targets, stop_at, **overrides):
-    monkeypatch.setattr("ipmg.services.scan_service.load_targets", lambda _source: targets)
+    monkeypatch.setattr("ipmg.services.scan_service.load_all_targets", lambda _sources: targets)
     monkeypatch.setattr("ipmg.core.engine.ping_ip", _interrupted_ping(stop_at))
     with pytest.raises(KeyboardInterrupt):
         run_scan(_scan_args(tmp_path, **overrides))
@@ -293,7 +293,8 @@ def test_interrupting_a_resumed_scan_keeps_both_runs(tmp_path, monkeypatch):
     (partial,) = tmp_path.glob("scan_*.jsonl")
 
     monkeypatch.setattr(
-        "ipmg.services.scan_service.load_targets", lambda _source: ["8.8.8.8", "9.9.9.9", "1.1.1.1"]
+        "ipmg.services.scan_service.load_all_targets",
+        lambda _sources: ["8.8.8.8", "9.9.9.9", "1.1.1.1"],
     )
     with pytest.raises(KeyboardInterrupt):
         run_scan(_scan_args(tmp_path, formats=["jsonl"], resume=str(partial)))
@@ -312,7 +313,7 @@ def test_resume_drops_hosts_no_longer_targeted(tmp_path, monkeypatch):
         encoding="utf-8",
     )
     monkeypatch.setattr(
-        "ipmg.services.scan_service.load_targets", lambda _source: ["8.8.8.8", "1.1.1.1"]
+        "ipmg.services.scan_service.load_all_targets", lambda _sources: ["8.8.8.8", "1.1.1.1"]
     )
     monkeypatch.setattr("ipmg.core.engine.ping_ip", _pinged([]))
 

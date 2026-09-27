@@ -19,7 +19,8 @@ from ipmg.exceptions import FileIOError, HistoryError
 from ipmg.infrastructure.file_io import (
     DEFAULT_INPUT_FILE,
     create_sample_file,
-    load_targets,
+    describe_sources,
+    load_all_targets,
     save_results,
 )
 from ipmg.infrastructure.incremental import (
@@ -138,9 +139,9 @@ def _ensure_input_file(args) -> None:
     creating it would silently scan the sample addresses instead of the hosts
     the user meant, so ``load_targets`` reports it as missing.
     """
-    if args.discover or args.input is not None:
+    if args.discover or args.input:
         return
-    args.input = DEFAULT_INPUT_FILE
+    args.input = [DEFAULT_INPUT_FILE]
     if not os.path.exists(DEFAULT_INPUT_FILE):
         create_sample_file(DEFAULT_INPUT_FILE)
         ui.blank()
@@ -150,12 +151,14 @@ def _ensure_input_file(args) -> None:
         )
 
 
-def _print_configuration(source: str, targets: int, config: ScanConfig) -> None:
+def _print_configuration(sources: List[str], targets: int, config: ScanConfig) -> None:
     ping_word = "ping" if config.count == 1 else "pings"
     ui.blank()
+    # One source per line: a scan that merges a file with a few extra hosts
+    # should show which hosts those were, not one run-together line.
+    ui.field_list("Source", sources)
     ui.fields(
         [
-            ("Source", source),
             ("Targets", ui.plural(targets, "host")),
             (
                 "Config",
@@ -264,8 +267,9 @@ def _run_single_pass(
     output = resume.base if resume else args.output
     started_at = time.perf_counter()
 
-    ip_list = discover_local_subnet() if args.discover else load_targets(args.input)
-    source = "auto-discovery" if args.discover else args.input
+    sources = ["auto-discovery"] if args.discover else list(args.input)
+    ip_list = discover_local_subnet() if args.discover else load_all_targets(sources)
+    source = describe_sources(sources)
 
     # Hosts the earlier run finished are kept only if they are still targets,
     # so resuming against an edited list never reports hosts it no longer has.
@@ -275,7 +279,7 @@ def _run_single_pass(
     scanned = {result.ip for result in previous}
     remaining = [ip for ip in ip_list if ip not in scanned]
 
-    _print_configuration(source, len(ip_list), config)
+    _print_configuration(sources, len(ip_list), config)
     if resume:
         _announce_resume(resume, len(previous), len(ip_list))
     report = _open_report(

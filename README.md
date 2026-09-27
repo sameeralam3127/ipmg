@@ -283,6 +283,7 @@ Or pick a ready-made command:
 | --- | --- |
 | Scan the network I am on | `ipmg --discover` |
 | Scan hosts listed in a file | `ipmg --input targets.txt` |
+| Scan a file plus a few extra hosts | `ipmg --input targets.txt 10.0.0.0/30 10.0.0.5` |
 | Get names, not just IP addresses | `ipmg --input targets.txt --resolve` |
 | Get a report I can send to someone | `ipmg --input targets.txt --formats md csv` |
 | See hosts appear as they answer | `ipmg --input 192.168.1.0/24 --stream` |
@@ -472,9 +473,18 @@ Anywhere IPMG takes `--input`, you can give it any of these:
   ipmg --input results_20260628_120000.json
   ```
 
-Duplicate targets are removed automatically, and one scan expands to at most
-65,536 hosts — larger CIDR blocks or ranges are rejected up front, before the
-scan starts.
+`--input` takes as many of these as you like, in any mix, and may also be
+repeated:
+
+```bash
+ipmg --input targets.txt 10.0.0.0/30 10.0.0.5
+ipmg --input targets.txt --input 10.0.0.5     # the same thing
+```
+
+Duplicate targets are removed automatically — across sources too, so a host
+that is both in the file and on the command line is scanned once — and one scan
+expands to at most 65,536 hosts in total. Larger CIDR blocks, ranges, or
+combinations are rejected up front, before the scan starts.
 
 ---
 
@@ -548,7 +558,7 @@ them — so piping IPMG into a file or a log gives you clean text.
 
 | Flag | Default | Description |
 | --- | --- | --- |
-| `--input` | `ip_list.xlsx` | What to scan: a file (`.xlsx`, `.xls`, `.csv`, `.json`, `.txt`, `.list`), a single IP, a CIDR block, or a range (`10.0.0.1-10.0.0.50`) |
+| `--input` | `ip_list.xlsx` | What to scan: one or more files (`.xlsx`, `.xls`, `.csv`, `.json`, `.txt`, `.list`), IPs, CIDR blocks, or ranges (`10.0.0.1-10.0.0.50`), merged and de-duplicated |
 | `--discover` | off | Auto-detect and scan the local subnet instead |
 | `--output` | `results` | Report file name prefix |
 | `--formats` | `xlsx` | One or more of `xlsx`, `csv`, `json`, `jsonl`, `md` |
