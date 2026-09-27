@@ -65,3 +65,25 @@ def test_parser_resume_takes_an_optional_report():
     assert parser.parse_args(["--resume", "scan_20260917_120000.csv"]).resume == (
         "scan_20260917_120000.csv"
     )
+
+
+def test_parser_exit_status_checks_default_off():
+    args = build_parser().parse_args([])
+
+    assert args.fail_on_down is False
+    assert args.min_active is None
+
+
+def test_parser_accepts_exit_status_checks():
+    args = build_parser().parse_args(["--fail-on-down", "--min-active", "90.5"])
+
+    assert args.fail_on_down is True
+    assert args.min_active == 90.5
+
+
+@pytest.mark.parametrize("value", ["-1", "101", "most"])
+def test_parser_rejects_an_invalid_min_active(value, capsys):
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["--min-active", value])
+
+    assert "--min-active" in capsys.readouterr().err

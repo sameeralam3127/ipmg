@@ -25,6 +25,7 @@ from ipmg.utils.helpers import configure_logging
 EXIT_OK = 0
 EXIT_ERROR = 1
 EXIT_CHANGES_DETECTED = 2
+EXIT_HOSTS_DOWN = 3
 EXIT_INTERRUPTED = 130
 
 log = logging.getLogger(__name__)
@@ -35,7 +36,8 @@ def _scan_command(argv: List[str]) -> int:
     configure_logging(args.verbose)
     ui.header("scan")
     print_disclaimer_once()
-    run_scan(args)
+    if run_scan(args):
+        return EXIT_HOSTS_DOWN
     return EXIT_OK
 
 

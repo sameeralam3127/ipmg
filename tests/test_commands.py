@@ -152,6 +152,23 @@ def test_scan_arguments_are_forwarded(monkeypatch):
     assert captured["history"] is False
 
 
+def test_scan_that_fails_its_health_check_exits_three(monkeypatch):
+    monkeypatch.setattr(commands, "run_scan", lambda _args: "1 of 2 hosts are not active")
+
+    assert commands.run(["--fail-on-down"]) == commands.EXIT_HOSTS_DOWN == 3
+
+
+def test_scan_with_every_host_down_exits_zero_without_the_flags(tmp_path, monkeypatch):
+    monkeypatch.setattr("ipmg.core.engine.ping_ip", lambda *_args: ("Timeout", None))
+    base = ["--input", "10.0.0.1", "--no-history", "--formats", "csv"]
+    base += ["--output", str(tmp_path / "scan")]
+
+    assert commands.run(base) == commands.EXIT_OK
+    assert commands.run(base + ["--fail-on-down"]) == commands.EXIT_HOSTS_DOWN
+    assert commands.run(base + ["--min-active", "1"]) == commands.EXIT_HOSTS_DOWN
+    assert len(list(tmp_path.glob("scan_*.csv"))) >= 1
+
+
 def test_scan_without_input_leaves_the_default_to_the_scan_service(monkeypatch):
     captured = {}
     monkeypatch.setattr(commands, "run_scan", lambda args: captured.update(vars(args)))

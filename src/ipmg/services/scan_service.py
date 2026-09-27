@@ -14,6 +14,7 @@ import pandas as pd
 from ipmg.core.diff import DiffOptions
 from ipmg.core.discovery import discover_local_subnet
 from ipmg.core.engine import HostResult, ScanConfig, execute_scan
+from ipmg.core.health import HealthPolicy, check_health
 from ipmg.core.portscan import DEFAULT_PORTS
 from ipmg.exceptions import FileIOError, HistoryError
 from ipmg.infrastructure.file_io import (
@@ -105,6 +106,14 @@ def _load_resume(args) -> Optional[PartialReport]:
             "was found. Pass the report's path, as in --resume results_20260917_120000.jsonl."
         )
     return load_partial_report(path)
+
+
+def _health_policy(args) -> HealthPolicy:
+    """Read the --fail-on-down and --min-active checks off the parsed arguments."""
+    return HealthPolicy(
+        fail_on_down=bool(getattr(args, "fail_on_down", False)),
+        min_active_pct=getattr(args, "min_active", None),
+    )
 
 
 def _stream_options(args) -> StreamOptions:
@@ -348,9 +357,16 @@ def _store_and_compare(
     return scan_id
 
 
-def run_scan(args) -> None:
+def run_scan(args) -> Optional[str]:
+    """Scan, save the reports, and store the history, once or every --interval.
+
+    Returns why the scan failed --fail-on-down or --min-active, or None when it
+    passed or neither check was asked for. The reports are already written by
+    the time it returns, so the caller only has to turn that into an exit code.
+    """
     config = _config_from_args(args)
     history_options = _history_options(args)
+    health = _health_policy(args)
     stream = _stream_options(args)
     incremental = _incremental_options(args)
     _ensure_input_file(args)
@@ -368,7 +384,14 @@ def run_scan(args) -> None:
         save_results(outcome.frame, outcome.output, args.formats, timestamp=outcome.timestamp)
         _store_and_compare(history_options, config, outcome)
 
-        if not args.interval:
-            return
+        failure = check_health(outcome.results, health)
+        if failure:
+            ui.blank()
+            ui.warn(failure)
 
+        if not args.interval:
+            return failure
+
+        # A repeating scan keeps going when hosts are down: it is the monitor,
+        # and stopping it would end the watch at the moment it matters.
         time.sleep(args.interval * 60)

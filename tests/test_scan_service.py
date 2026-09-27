@@ -260,3 +260,51 @@ def test_run_scan_without_input_reuses_an_existing_default_file(tmp_path, monkey
 
     assert pinged == ["10.0.0.1"]
     assert "Created" not in capsys.readouterr().out
+
+
+def test_run_scan_returns_none_without_exit_status_checks(tmp_path, stub_scan):
+    stub_scan["statuses"] = {"10.0.0.1": ("Timeout", None)}
+
+    assert run_scan(scan_args(tmp_path, history=False)) is None
+
+
+def test_run_scan_reports_hosts_down_after_writing_the_reports(
+    tmp_path, stub_scan, monkeypatch, capsys
+):
+    saved = []
+    monkeypatch.setattr(
+        "ipmg.services.scan_service.save_results",
+        lambda df, *_args, **_kwargs: saved.append(len(df)),
+    )
+    stub_scan["statuses"] = {"10.0.0.1": ("Active", 1.0), "10.0.0.2": ("Timeout", None)}
+
+    failure = run_scan(scan_args(tmp_path, fail_on_down=True))
+
+    assert failure == "1 of 2 hosts are not active: 10.0.0.2."
+    assert failure in capsys.readouterr().out
+    assert saved == [2]
+    assert len(Database(tmp_path / "history.db").list_scans()) == 1
+
+
+def test_run_scan_min_active_passes_above_the_threshold(tmp_path, stub_scan):
+    stub_scan["statuses"] = {"10.0.0.1": ("Active", 1.0), "10.0.0.2": ("Timeout", None)}
+
+    assert run_scan(scan_args(tmp_path, history=False, min_active=50.0)) is None
+    assert run_scan(scan_args(tmp_path, history=False, min_active=60.0)) is not None
+
+
+def test_run_scan_keeps_repeating_when_hosts_are_down(tmp_path, stub_scan, monkeypatch, capsys):
+    passes = []
+
+    def fake_sleep(_seconds):
+        passes.append(1)
+        if len(passes) == 2:
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr("ipmg.services.scan_service.time.sleep", fake_sleep)
+    stub_scan["statuses"] = {"10.0.0.1": ("Timeout", None)}
+
+    with pytest.raises(KeyboardInterrupt):
+        run_scan(scan_args(tmp_path, history=False, interval=1, fail_on_down=True))
+
+    assert capsys.readouterr().out.count("hosts are not active") == 2
