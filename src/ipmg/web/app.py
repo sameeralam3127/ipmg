@@ -51,7 +51,6 @@ from ipmg.infrastructure.file_io import (
 )
 from ipmg.reporting.diff_report import DIFF_FORMATS, render_diff
 from ipmg.reporting.frames import results_dataframe
-from ipmg.reporting.metrics import CONTENT_TYPE as METRICS_CONTENT_TYPE, render_metrics
 from ipmg.services.history_service import HistoryService
 from ipmg.web.manager import OVERFLOW, ScanManager
 from ipmg.web.schemas import (
@@ -582,6 +581,9 @@ def _install_openapi(app: FastAPI) -> None:
 def _register_metrics_route(app: FastAPI, database: Database, token: str, max_sources: int) -> None:
     # Outside /api/v1 because /metrics is where Prometheus looks, but behind
     # the same token: a scrape config sends it as a Bearer credential.
+    # Imported here: the renderer is only needed when --metrics turns it on.
+    from ipmg.reporting.metrics import CONTENT_TYPE as METRICS_CONTENT_TYPE, render_metrics
+
     @app.get(
         "/metrics",
         dependencies=[Depends(_require_token(token))],
