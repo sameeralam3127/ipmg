@@ -601,7 +601,7 @@ If you bind to a non-local address with `--host`, the token still guards the
 API. It travels over plain HTTP, though, so use an SSH tunnel or a reverse
 proxy with TLS on any network you don't trust.
 
-Found a vulnerability? See [SECURITY.md](SECURITY.md) for how to report it.
+Found a vulnerability? See [SECURITY.md](.github/SECURITY.md) for how to report it.
 
 ---
 
@@ -623,11 +623,11 @@ Found a vulnerability? See [SECURITY.md](SECURITY.md) for how to report it.
 ## Contributing
 
 Contributions are welcome.
-[CONTRIBUTING.md](https://github.com/sameeralam3127/ipmg/blob/main/CONTRIBUTING.md)
+[CONTRIBUTING.md](https://github.com/sameeralam3127/ipmg/blob/main/.github/CONTRIBUTING.md)
 covers setting up a development environment, running the tests, the commit
 message format that drives automated releases, and how the project website and
 IPMG Web demo are built. Everyone taking part is expected to follow the
-[Code of Conduct](https://github.com/sameeralam3127/ipmg/blob/main/CODE_OF_CONDUCT.md).
+[Code of Conduct](https://github.com/sameeralam3127/ipmg/blob/main/.github/CODE_OF_CONDUCT.md).
 
 ---
 

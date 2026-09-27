@@ -30,8 +30,8 @@ Found a security problem? Please report it privately as described in
   [`good first issue`](https://github.com/sameeralam3127/ipmg/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
   are scoped for newcomers. Comment on one before starting so work isn't
   duplicated.
-- **Improve the docs.** The [README](README.md), [FAQ](docs/FAQ.md), and
-  [troubleshooting guide](docs/TROUBLESHOOTING.md) all welcome fixes.
+- **Improve the docs.** The [README](../README.md), [FAQ](../docs/FAQ.md), and
+  [troubleshooting guide](../docs/TROUBLESHOOTING.md) all welcome fixes.
 
 ---
 
@@ -40,7 +40,7 @@ Found a security problem? Please report it privately as described in
 You need **Git** and **Python 3.9 or newer**. IPMG probes hosts with the
 system `ping` command; macOS and Windows include it, and on minimal Linux
 images you may need to install it (see
-[the README](README.md#the-one-thing-ipmg-needs-from-your-system)).
+[the README](../README.md#the-one-thing-ipmg-needs-from-your-system)).
 
 ```bash
 # 1. Fork the repository on GitHub, then clone your fork
