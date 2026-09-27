@@ -506,6 +506,57 @@ your own scripts. The [API guide](https://github.com/sameeralam3127/ipmg/blob/ma
 covers authentication, errors, and worked `curl` examples; the running server
 also serves interactive docs at `http://127.0.0.1:8080/docs`.
 
+### Prometheus metrics
+
+`ipmg web --metrics` serves `/metrics` in the Prometheus text format, so the
+results of every scan, whether run from cron with the CLI or from the browser,
+land in the dashboards and alerts you already have. It reports the latest
+completed scan of each source, and it is off unless you pass the flag:
+
+```bash
+IPMG_WEB_TOKEN=$(cat /etc/ipmg/token) ipmg web --metrics --no-browser
+```
+
+```yaml
+# prometheus.yml: the token is the same one the web UI uses
+scrape_configs:
+  - job_name: ipmg
+    authorization:
+      credentials_file: /etc/prometheus/ipmg-token
+    static_configs:
+      - targets: ["127.0.0.1:8080"]
+
+# an alert rule: a host that stopped answering
+groups:
+  - name: ipmg
+    rules:
+      - alert: HostDown
+        expr: ipmg_host_up == 0
+        for: 10m
+        annotations:
+          summary: "{{ $labels.ip }} ({{ $labels.source }}) is not answering ping"
+```
+
+| Metric | Labels | Meaning |
+| --- | --- | --- |
+| `ipmg_host_up` | `source`, `ip` | 1 if the host answered, else 0 |
+| `ipmg_host_latency_seconds` | `source`, `ip` | Round-trip time, for hosts that answered |
+| `ipmg_host_open_ports` | `source`, `ip` | Open TCP ports, for scans run with `--scan-ports` |
+| `ipmg_host_info` | `source`, `ip`, `hostname` | Always 1; carries the reverse DNS name |
+| `ipmg_scan_hosts` | `source`, `status` | Hosts in the latest scan, by status |
+| `ipmg_scan_duration_seconds` | `source` | How long the latest scan took |
+| `ipmg_scan_timestamp_seconds` | `source` | When the latest scan finished; alert on `time() - this` to catch a stalled cron job |
+| `ipmg_scans_total` | `source` | Completed scans stored for the source |
+| `ipmg_metrics_sources_omitted` | | Sources left out by `--metrics-sources` |
+| `ipmg_build_info` | `version` | Always 1 |
+
+**Cardinality is bounded.** Host series carry only `source` and `ip`, never
+the hostname or status, which change, so a rename does not start a new series.
+Only the `--metrics-sources` most recently scanned sources are exported
+(default 20), and a scan holds at most 65,536 hosts, so the page stays at
+about `sources × hosts × 4` series at most. Give recurring scans a stable
+input (the same file) so each one updates its source rather than adding one.
+
 ### On a server with no browser
 
 On a Linux server with no display (e.g. accessed over plain SSH), IPMG detects

@@ -480,6 +480,7 @@ ipmg web                                # http://127.0.0.1:8080, opens your brow
 ipmg web --no-browser                   # don't open a browser
 ipmg web --port 9000                    # another port
 ipmg web --db ./project.db              # another history database
+ipmg web --metrics --no-browser         # also serve Prometheus metrics at /metrics
 ipmg --web                              # same as ipmg web
 ```
 
@@ -497,6 +498,13 @@ ssh -L 8080:127.0.0.1:8080 user@server
 
 Every API request needs the access token in that link. A new token is made
 each time IPMG Web starts; set `IPMG_WEB_TOKEN` to keep one fixed.
+
+`--metrics` adds `/metrics` for Prometheus, behind the same token, sent as a
+Bearer credential (`authorization.credentials_file` in a scrape config). Pin
+the token with `IPMG_WEB_TOKEN` so a restart does not break the scrape.
+`--metrics-sources N` (default 20) limits it to the N most recently scanned
+sources. The metrics and a sample alert rule are listed in the
+[README](../README.md#prometheus-metrics).
 
 `--host 0.0.0.0` makes IPMG Web reachable from the network. The token still
 guards it, but it travels over plain HTTP, so use a reverse proxy with TLS on

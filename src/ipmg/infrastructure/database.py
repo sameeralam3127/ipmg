@@ -13,7 +13,7 @@ import threading
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from ipmg.core.diff import HostSnapshot, ScanRef, ip_sort_key
 from ipmg.core.engine import HostResult
@@ -298,6 +298,22 @@ class Database:
 
         with self._session() as conn:
             return [dict(row) for row in conn.execute(query, params).fetchall()]
+
+    def latest_completed_scans(self, limit: int) -> Tuple[List[Dict[str, Any]], int]:
+        """The newest completed scan of each source, most recent source first.
+
+        Returns at most ``limit`` scans, each with a ``completed_count`` of the
+        completed scans its source has, plus how many sources exist in all, so
+        a caller can say how many it left out.
+        """
+        with self._session() as conn:
+            rows = conn.execute(
+                "SELECT s.*, latest.completed_count FROM scans s JOIN ("
+                "  SELECT source, MAX(id) AS id, COUNT(*) AS completed_count "
+                "  FROM scans WHERE status = 'complete' GROUP BY source"
+                ") latest ON s.id = latest.id ORDER BY s.id DESC"
+            ).fetchall()
+        return [self._scan_dict(row) for row in rows[:limit]], len(rows)
 
     # ------------------------------------------------------- aggregates
 

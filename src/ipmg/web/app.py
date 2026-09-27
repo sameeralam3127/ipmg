@@ -568,8 +568,31 @@ def _install_openapi(app: FastAPI) -> None:
     app.openapi = openapi  # type: ignore[method-assign]
 
 
-def create_app(db: Optional[Database] = None, token: Optional[str] = None) -> FastAPI:
-    """Build the app. ``token`` guards every API route; a random one is made if omitted."""
+def _register_metrics_route(app: FastAPI, database: Database, token: str, max_sources: int) -> None:
+    # Outside /api/v1 because /metrics is where Prometheus looks, but behind
+    # the same token: a scrape config sends it as a Bearer credential.
+    # Imported here: the renderer is only needed when --metrics turns it on.
+    from ipmg.reporting.metrics import CONTENT_TYPE as METRICS_CONTENT_TYPE, render_metrics
+
+    @app.get(
+        "/metrics",
+        dependencies=[Depends(_require_token(token))],
+        include_in_schema=False,
+    )
+    def metrics() -> Response:
+        return Response(render_metrics(database, max_sources), media_type=METRICS_CONTENT_TYPE)
+
+
+def create_app(
+    db: Optional[Database] = None,
+    token: Optional[str] = None,
+    metrics_sources: Optional[int] = None,
+) -> FastAPI:
+    """Build the app. ``token`` guards every API route; a random one is made if omitted.
+
+    ``metrics_sources`` turns on ``/metrics`` for that many of the most
+    recently scanned sources; left as None, the endpoint does not exist.
+    """
     database = db if db is not None else Database(DEFAULT_DB_PATH)
     token = token or secrets.token_urlsafe(32)
     manager = ScanManager(database)
@@ -601,6 +624,8 @@ def create_app(db: Optional[Database] = None, token: Optional[str] = None) -> Fa
     app.include_router(api)
 
     _register_websocket(app, manager, token)
+    if metrics_sources is not None:
+        _register_metrics_route(app, database, token, metrics_sources)
     _register_error_handlers(app)
     _install_openapi(app)
 
