@@ -468,9 +468,11 @@ of it (see [Security](#security)).
 
 Anywhere IPMG takes `--input`, you can give it any of these:
 
-- **A single IP** — `8.8.8.8`
-- **A CIDR block** — `10.0.0.0/24`
-- **A range** — `10.0.0.1-10.0.0.200`
+- **A single IP** — `8.8.8.8`, or IPv6 such as `2001:db8::1` or a link-local
+  `fe80::1%eth0`
+- **A CIDR block** — `10.0.0.0/24`, or an IPv6 prefix up to 65,536 hosts
+  (`2001:db8::/112`)
+- **A range** — `10.0.0.1-10.0.0.200` or `2001:db8::10-2001:db8::20`
 - **A text file** — one IP or CIDR per line. Blank lines and `#` comments are
   ignored, so you can annotate it:
 
@@ -508,6 +510,16 @@ repeated:
 ```bash
 ipmg --input targets.txt 10.0.0.0/30 10.0.0.5
 ipmg --input targets.txt --input 10.0.0.5     # the same thing
+```
+
+IPv4 and IPv6 targets mix freely in one scan, and reports, history, and change
+detection handle both. An IPv6 `/64` holds 2^64 addresses, far too many to
+sweep one by one, so it is rejected with a pointer to `--discover ipv6`, which
+finds the hosts on your local links through neighbour discovery instead:
+
+```bash
+ipmg --discover ipv6      # IPv6 neighbours on the local links
+ipmg --discover all       # the IPv4 /24 and the IPv6 neighbours together
 ```
 
 Duplicate targets are removed automatically — across sources too, so a host
@@ -659,7 +671,7 @@ cannot combine flags that exclude each other, such as `json` and `jsonl`.
 | Flag | Default | Description |
 | --- | --- | --- |
 | `--input` | `ip_list.xlsx` | What to scan: one or more files (`.xlsx`, `.xls`, `.csv`, `.json`, `.txt`, `.list`), IPs, CIDR blocks, or ranges (`10.0.0.1-10.0.0.50`), merged and de-duplicated |
-| `--discover` | off | Auto-detect and scan the local subnet instead |
+| `--discover [FAMILY]` | off | Scan this machine's networks instead: `ipv4` (the default) sweeps the local /24, `ipv6` finds link neighbours, `all` does both |
 | `--output` | `results` | Report file name prefix |
 | `--formats` | `xlsx` | One or more of `xlsx`, `csv`, `json`, `jsonl`, `md` (no file at all with `--json`/`--jsonl`) |
 | `--json` | off | Print the finished scan to stdout as a JSON array, human output on stderr |

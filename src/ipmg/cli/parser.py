@@ -6,6 +6,7 @@ import argparse
 
 from ipmg import __version__
 from ipmg.cli.config import add_config_arguments, config_help
+from ipmg.core.discovery import DISCOVERY_FAMILIES
 from ipmg.core.portscan import DEFAULT_PORTS, parse_port_list
 from ipmg.infrastructure.file_io import DEFAULT_INPUT_FILE
 from ipmg.infrastructure.incremental import (
@@ -259,8 +260,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--discover",
-        action="store_true",
-        help="Auto-detect this machine's subnet and scan it instead of --input.",
+        nargs="?",
+        const="ipv4",
+        default=None,
+        choices=DISCOVERY_FAMILIES,
+        metavar="FAMILY",
+        help=(
+            "Scan this machine's networks instead of --input: ipv4 (the default) "
+            "sweeps the local /24, ipv6 finds hosts on the local links through "
+            "neighbour discovery, all does both."
+        ),
     )
     parser.add_argument(
         "--resolve",

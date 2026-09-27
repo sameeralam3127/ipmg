@@ -422,7 +422,7 @@ function addCommon(form, line, prefix) {
 const BUILDERS = {
   scan(form, line) {
     if (form.value("scan-mode") === "discover") {
-      line.flag("--discover", "Find this machine's address and scan the /24 network around it.");
+      line.flag("--discover", "Find this machine's address and scan the /24 network around it (add ipv6 or all for IPv6 neighbours).");
     } else {
       const target = form.target() || "192.168.1.0/24";
       line.flag("--input", describeTarget(target), shellQuote(target));

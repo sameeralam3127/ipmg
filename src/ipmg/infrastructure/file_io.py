@@ -40,10 +40,18 @@ def _expand_cidr(target: str) -> list[str]:
         return [str(parsed.network_address)]
 
     if parsed.num_addresses - 2 > MAX_EXPANDED_TARGETS:
-        raise FileIOError(
+        message = (
             f"CIDR target '{target}' expands to too many hosts. "
             f"Maximum allowed hosts: {MAX_EXPANDED_TARGETS}."
         )
+        if parsed.version == 6:
+            # A /64 is 2^64 addresses: no sweep can walk it, so point at what works.
+            message += (
+                " An IPv6 network cannot be swept address by address; use "
+                "'--discover ipv6' to find the hosts on the local link, or scan "
+                "a /112 or smaller."
+            )
+        raise FileIOError(message)
 
     return [str(ip) for ip in parsed.hosts()]
 

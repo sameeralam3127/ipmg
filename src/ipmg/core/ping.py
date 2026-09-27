@@ -22,11 +22,25 @@ _WINDOWS_LATENCY_FALLBACK = re.compile(r"[=<]\s*(\d+)\s*ms")
 #: prints "round-trip min/avg/max = ..." with no mdev field.
 _POSIX_LATENCY = re.compile(r"min/avg/max(?:/[^\s=]+)?\s*=\s*[\d.]+/([\d.]+)/")
 
+#: One echo reply line, "... time=0.077 ms" (POSIX) or "time=1ms"/"time<1ms"
+#: (Windows), for output cut short before the summary was printed.
+_REPLY_TIME = re.compile(r"time[=<]\s*([\d.]+)\s*ms", re.IGNORECASE)
+
+#: Systems whose ``ping`` handles only IPv4; IPv6 needs the separate ``ping6``.
+_PING6_SYSTEMS = frozenset({"darwin", "freebsd", "openbsd", "netbsd"})
+
 
 def validate_ip(ip: str) -> bool:
     try:
         ipaddress.ip_address(ip)
         return True
+    except ValueError:
+        return False
+
+
+def is_ipv6(ip: str) -> bool:
+    try:
+        return ipaddress.ip_address(ip).version == 6
     except ValueError:
         return False
 
@@ -59,11 +73,18 @@ def build_ping_command(
     The timeout flag is not portable: Windows ``-w`` and BSD/macOS ``-W`` take
     milliseconds, while Linux ``-W`` takes seconds. Sending seconds everywhere
     made macOS wait 2 ms per host and report healthy hosts as timed out.
+
+    Linux and Windows ``ping`` pick the address family from the address. macOS
+    and the BSDs need ``ping6`` for IPv6, and it has no reply timeout at all:
+    :func:`ping_ip` ends it at the same deadline it gives every probe.
     """
     system = (system or platform.system()).lower()
 
     if system == "windows":
         return ["ping", "-n", str(count), "-w", str(timeout * 1000), ip]
+
+    if system in _PING6_SYSTEMS and is_ipv6(ip):
+        return ["ping6", "-c", str(count), ip]
 
     wait = timeout * 1000 if system in _MILLISECOND_TIMEOUT_SYSTEMS else timeout
     return ["ping", "-c", str(count), "-W", str(wait), ip]
@@ -95,6 +116,18 @@ def missing_ping_message() -> str:
     return f"{base} Install your distribution's iputils package."
 
 
+def _replies_before_deadline(output) -> Optional[float]:
+    """Average latency of the replies a ping printed before it was stopped.
+
+    ``ping6`` on macOS waits about ten seconds for a missing reply, so a probe
+    can reach the deadline after hearing back; its reply lines still count.
+    """
+    if isinstance(output, bytes):
+        output = output.decode("utf-8", errors="replace")
+    times = [float(value) for value in _REPLY_TIME.findall(output or "")]
+    return sum(times) / len(times) if times else None
+
+
 def ping_ip(ip: str, timeout: int, count: int) -> Tuple[str, Optional[float]]:
     if not validate_ip(ip):
         return "Invalid IP", None
@@ -124,7 +157,10 @@ def ping_ip(ip: str, timeout: int, count: int) -> Tuple[str, Optional[float]]:
 
         return "Inactive", None
 
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as exc:
+        latency = _replies_before_deadline(exc.stdout)
+        if latency is not None:
+            return "Active", latency
         return "Timeout", None
     except FileNotFoundError as exc:
         raise PingError(missing_ping_message()) from exc

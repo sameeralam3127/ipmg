@@ -12,7 +12,7 @@ from typing import List, Optional, Tuple
 import pandas as pd
 
 from ipmg.core.diff import DiffOptions
-from ipmg.core.discovery import discover_local_subnet
+from ipmg.core.discovery import discover_targets
 from ipmg.core.engine import HostResult, ScanConfig, execute_scan
 from ipmg.core.health import HealthPolicy, HostsDownError, check_health
 from ipmg.core.portscan import DEFAULT_PORTS
@@ -318,8 +318,11 @@ def _run_single_pass(
     output = resume.base if resume else args.output
     started_at = time.perf_counter()
 
-    sources = ["auto-discovery"] if args.discover else list(args.input)
-    ip_list = discover_local_subnet() if args.discover else load_all_targets(sources)
+    if args.discover:
+        ip_list, sources = discover_targets(args.discover)
+    else:
+        sources = list(args.input)
+        ip_list = load_all_targets(sources)
     source = describe_sources(sources)
 
     # Hosts the earlier run finished are kept only if they are still targets,

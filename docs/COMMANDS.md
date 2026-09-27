@@ -100,7 +100,16 @@ ipmg --input 192.168.1.0/24             # a CIDR block (network and broadcast ad
 ipmg --input 192.168.1.1-192.168.1.50   # an inclusive range
 ipmg --input targets.txt                # a file (see below)
 ipmg --discover                         # the /24 around the interface your machine routes through
+ipmg --input 2001:db8::/120             # IPv6 works too, mixed with IPv4 if you like
+ipmg --discover ipv6                    # IPv6 hosts on the local links (neighbour discovery)
+ipmg --discover all                     # both of the above
 ```
+
+IPv6 probing uses `ping` on Linux and Windows and `ping6` on macOS and the
+BSDs. `--discover ipv6` pings the all-nodes group (`ff02::1`) on every
+interface and scans the neighbours that answer; link-local addresses keep their
+interface, as in `fe80::1%eth0`. Its scans are stored in history as
+`auto-discovery-ipv6`, separately from the IPv4 `auto-discovery` scans.
 
 To scan several unrelated targets, put them in a file — `--input` does not
 accept a comma-separated list.
