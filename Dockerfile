@@ -16,7 +16,8 @@ FROM python:${PYTHON_VERSION}-slim AS build
 WORKDIR /src
 COPY pyproject.toml README.md LICENSE ./
 COPY src ./src
-RUN pip wheel --no-cache-dir --wheel-dir /wheels .
+# With the web extra, so the image runs IPMG Web as well as the CLI.
+RUN pip wheel --no-cache-dir --wheel-dir /wheels ".[web]"
 
 # ---------------------------------------------------------------- runtime
 FROM python:${PYTHON_VERSION}-slim
@@ -36,7 +37,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /wheels /wheels
-RUN pip install --no-cache-dir /wheels/*.whl && rm -rf /wheels
+RUN pip install --no-cache-dir --no-index --find-links /wheels "ipmg[web]" && rm -rf /wheels
 
 # A fixed, unprivileged user. HOME=/data puts the history database at
 # /data/.ipmg/dashboard.db, next to the reports, so one volume keeps both.
