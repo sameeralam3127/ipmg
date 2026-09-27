@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 
 from ipmg import __version__
+from ipmg.cli.config import add_config_arguments, config_help
 from ipmg.core.portscan import DEFAULT_PORTS, parse_port_list
 from ipmg.infrastructure.file_io import DEFAULT_INPUT_FILE
 from ipmg.infrastructure.incremental import (
@@ -91,7 +92,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = ScanParser(
         prog="ipmg",
         description=PROG,
-        epilog=COMMANDS_HINT,
+        epilog=f"{COMMANDS_HINT}\n\n{config_help()}",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
         "--version",
@@ -305,6 +307,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_database_argument(history)
     _add_diff_export_arguments(history)
     _add_diff_threshold_arguments(parser)
+    add_config_arguments(parser)
     parser.set_defaults(history=True)
     return parser
 

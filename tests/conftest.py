@@ -12,3 +12,15 @@ def ui_on_stdout():
     """
     yield
     ui.use_stderr(False)
+
+
+@pytest.fixture(autouse=True)
+def isolate_user_config(tmp_path, monkeypatch):
+    """Keep a developer's own config file out of the tests.
+
+    Every scan reads the user's config directory, so without this the suite
+    would pass or fail depending on whose machine it ran on. The project's
+    ``./ipmg.toml`` is left alone: that one is visible in the checkout, and a
+    test that cares about it writes its own.
+    """
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
