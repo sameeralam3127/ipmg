@@ -64,7 +64,9 @@ CHANGE_LABELS: Dict[ChangeType, str] = {
     ChangeType.IP_CHANGED: "IP address changed",
     ChangeType.HOSTNAME_CHANGED: "Hostname changed",
     ChangeType.LATENCY_CHANGED: "Latency changed",
-    ChangeType.SERVICE_CHANGED: "Service changed",
+    # The key stays "service_changed" for existing JSON consumers; the change
+    # is a move between failure modes (Timeout -> Unreachable), not a service.
+    ChangeType.SERVICE_CHANGED: "Status changed",
 }
 
 

@@ -429,7 +429,7 @@ What counts as a change:
 | New host | warning | An IP that the baseline never saw |
 | Host removed | warning | An IP the current scan no longer covers |
 | IP address changed | warning | A known hostname moved to a different IP |
-| Service changed | warning | Status moved between failure modes (e.g. `Timeout` → `Unreachable`) |
+| Status changed | warning | Status moved between failure modes (e.g. `Timeout` → `Unreachable`) |
 | Host back online | info | Recovered since the baseline |
 | Hostname changed | info | Same IP, different PTR record |
 | Latency changed | info | Latency moved past both thresholds |

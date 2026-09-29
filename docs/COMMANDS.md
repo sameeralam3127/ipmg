@@ -344,7 +344,7 @@ ipmg diff --latency-threshold 10 --latency-pct 50   # defaults: 5 ms and 25%
 | Change | Severity |
 | --- | --- |
 | Host offline | critical |
-| New host, host removed, IP address changed, service changed | warning |
+| New host, host removed, IP address changed, status changed | warning |
 | Host back online, hostname changed, latency changed | info |
 
 ---
