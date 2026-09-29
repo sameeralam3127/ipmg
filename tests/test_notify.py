@@ -223,6 +223,38 @@ def test_incomplete_email_settings_are_errors(overrides, environ, message):
         notify_options(notify_args(**overrides), environ=environ)
 
 
+def test_smtp_user_with_security_none_is_refused_for_non_loopback_hosts():
+    with pytest.raises(NotifyError, match=r"starttls.*ssl"):
+        notify_options(
+            notify_args(
+                notify_email=["ops@example.test"],
+                smtp_host="mail.example.test",
+                smtp_security="none",
+                smtp_user="ipmg@example.test",
+            ),
+            environ={},
+        )
+
+
+@pytest.mark.parametrize("loopback_host", ["localhost", "127.0.0.1", "::1"])
+def test_smtp_user_with_security_none_is_allowed_for_loopback_hosts(loopback_host):
+    settings = notify_options(
+        notify_args(
+            notify_email=["ops@example.test"],
+            smtp_host=loopback_host,
+            smtp_security="none",
+            smtp_user="relay-user",
+        ),
+        environ={"IPMG_SMTP_PASSWORD": "relay-password"},  # pragma: allowlist secret
+    ).email
+
+    assert settings.host == loopback_host
+    assert settings.security == "none"
+    assert settings.username == "relay-user"
+    assert settings.port == 25
+
+
+
 # ---------------------------------------------------------------- messages
 
 
@@ -518,3 +550,21 @@ def test_send_email_follows_the_security_setting(diff, fake_smtp, security, user
 
     assert fake_smtp[0].calls == expected
     assert (fake_smtp[0].context is not None) is (security == "ssl")
+
+
+def test_send_email_refuses_cleartext_auth_on_remote_host(diff, fake_smtp):
+    settings = SmtpSettings("mail.example.test", 25, "none", "ipmg@x.test", ("ops@x.test",), "u", "pw")
+
+    with pytest.raises(NotifyError, match=r"starttls.*ssl"):
+        send_email(settings, email_message(diff, settings))
+
+    assert fake_smtp == []
+
+
+def test_send_email_allows_cleartext_auth_on_loopback_host(diff, fake_smtp):
+    settings = SmtpSettings("127.0.0.1", 25, "none", "ipmg@x.test", ("ops@x.test",), "u", "pw")
+
+    send_email(settings, email_message(diff, settings))
+
+    assert fake_smtp[0].calls == [("login", "u", "pw"), ("send", "ops@x.test"), "quit"]
+

@@ -8,6 +8,7 @@ never fails the scan or costs it its reports.
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import logging
 import os
@@ -92,6 +93,16 @@ def _flag_or_env(value: Optional[str], environ: Mapping[str, str], name: str) ->
     return environ.get(name, "").strip()
 
 
+def _is_loopback(host: str) -> bool:
+    candidate = host.strip().strip("[]")
+    if candidate.lower() == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(candidate).is_loopback
+    except ValueError:
+        return False
+
+
 def _url(value: Optional[str], environ: Mapping[str, str], flag: str, env: str) -> str:
     """The URL for a ``--notify-*`` flag. None means the flag was not given."""
     if value is None:
@@ -140,6 +151,11 @@ def _smtp_settings(args, environ: Mapping[str, str]) -> Optional[SmtpSettings]:
         raise NotifyError(f"SMTP port out of range (1-65535): {port}")
 
     username = _flag_or_env(getattr(args, "smtp_user", None), environ, ENV_SMTP_USER)
+    if username and security == "none" and not _is_loopback(host):
+        raise NotifyError(
+            "--smtp-user cannot be used with --smtp-security none unless the SMTP host is "
+            "loopback; use starttls or ssl instead."
+        )
     sender = _flag_or_env(getattr(args, "smtp_from", None), environ, ENV_SMTP_FROM)
     return SmtpSettings(
         host=host,
@@ -316,6 +332,11 @@ def post_json(url: str, payload: Mapping[str, Any]) -> None:
 
 
 def send_email(settings: SmtpSettings, message: EmailMessage) -> None:
+    if settings.username and settings.security == "none" and not _is_loopback(settings.host):
+        raise NotifyError(
+            "--smtp-user cannot be used with --smtp-security none unless the SMTP host is "
+            "loopback; use starttls or ssl instead."
+        )
     context = ssl.create_default_context()
     if settings.security == "ssl":
         client = smtplib.SMTP_SSL(
