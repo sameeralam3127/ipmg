@@ -37,6 +37,7 @@ ipmg --discover --compare   # later: scan again and see what changed
 **Contents**
 
 [How it compares](#how-it-compares) ·
+[Requirements and platform support](#requirements-and-platform-support) ·
 [Install](#install) ·
 [Your first scan](#your-first-scan) ·
 [Change detection](#change-detection) ·
@@ -76,6 +77,32 @@ yesterday, with a report you can hand to someone.
 <p align="center">
   <img src="https://raw.githubusercontent.com/sameeralam3127/ipmg/main/docs/assets/ipmg-web.png" alt="IPMG Web dashboard: scan totals, a status donut of 16 active, 1 timeout and 1 inactive host, a latency trend chart, and a list of recent scans" width="820">
 </p>
+
+---
+
+## Requirements and platform support
+
+IPMG does not craft packets. It runs your operating system's `ping` command
+once per host, as a direct process call with no shell, and reads its output.
+That means:
+
+- **Python 3.9 or newer**, unless you use the one-line installers, which
+  bring their own.
+- **The system `ping` command.** macOS and Windows include it; minimal Linux
+  and container images may not ([how to install it](#the-one-thing-ipmg-needs-from-your-system)).
+- **No root or administrator rights.** IPMG has exactly the privileges your
+  `ping` has: if `ping 8.8.8.8` works for your user, a scan works too. Port
+  checks (`--scan-ports`) are ordinary TCP connections.
+
+| Platform | What IPMG runs | Status |
+| --- | --- | --- |
+| Linux (iputils or busybox `ping`) | `ping -c COUNT -W SECONDS` | Supported. CI runs the tests and a scan on Ubuntu; see [verified environments](#verified-environments) |
+| macOS | `ping -c COUNT -W MILLISECONDS`; `ping6` for IPv6 | Supported. CI runs the tests and a scan on macOS |
+| Windows | `ping -n COUNT -w MILLISECONDS` | Supported. CI runs the tests and a scan of `127.0.0.1` on `windows-latest`; not yet verified against a real LAN |
+| FreeBSD, OpenBSD, NetBSD | the macOS flags | Untested. The code treats them like macOS, and their `ping` options may differ |
+
+`--discover ipv6` reads the neighbour table with `ip -6 neigh` on Linux (the
+`iproute2` package), `ndp -an` on macOS, and `netsh` on Windows.
 
 ---
 
