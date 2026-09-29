@@ -5,6 +5,15 @@
 ![License](https://img.shields.io/badge/license-MIT-green)
 [![Publish](https://github.com/sameeralam3127/ipmg/actions/workflows/publish.yml/badge.svg)](https://github.com/sameeralam3127/ipmg/actions/workflows/publish.yml)
 
+> [!WARNING]
+> **This is the `v4` development branch. IPMG v4 is under active development
+> and is not ready for production.** Keep production systems on the current
+> stable 3.x release (`pip install ipmg`) until v4.0.0 is published, targeted
+> for the end of October 2026. v4 is an architectural release: a SOLID,
+> plugin-based core, a streaming scan pipeline, strong typing, and contract
+> tests, with 3.x workflows kept compatible. See the
+> [v4 development plan](docs/v4/PLAN.md).
+
 **Find out which hosts on your network are up — and what changed since last time.**
 
 IPMG pings hosts in parallel, resolves their names, and hands you a report you
