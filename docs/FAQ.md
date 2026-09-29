@@ -15,7 +15,7 @@ system-wide to `/usr/local/bin` on purpose.
 
 No. The one-line installer brings its own Python, which is why it works on
 RHEL 8 (system Python 3.6) and on openSUSE images with no Python at all. If you
-install with pip instead, you need Python 3.9 or newer.
+install with pip instead, you need Python 3.10 or newer.
 
 ### Does it change anything on the hosts it scans?
 

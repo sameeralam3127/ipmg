@@ -37,7 +37,7 @@ Found a security problem? Please report it privately as described in
 
 ## Set up
 
-You need **Git** and **Python 3.9 or newer**. IPMG probes hosts with the
+You need **Git** and **Python 3.10 or newer**. IPMG probes hosts with the
 system `ping` command; macOS and Windows include it, and on minimal Linux
 images you may need to install it (see
 [the README](../README.md#the-one-thing-ipmg-needs-from-your-system)).
@@ -110,7 +110,7 @@ running before you open a pull request:
 ipmg --input 127.0.0.1 --no-history --formats csv --output smoke
 ```
 
-CI runs the tests on Python 3.9–3.14 on Ubuntu, plus macOS and Windows, so you
+CI runs the tests on Python 3.10–3.14 on Ubuntu, plus macOS and Windows, so you
 don't need every version locally. If you want to run what CI runs before you
 push, use [tox](https://tox.wiki/). It downloads any Python version you are
 missing:
@@ -118,12 +118,12 @@ missing:
 ```bash
 uv tool install tox --with tox-uv   # once
 tox -e lint,lowest,coverage         # the checks in the Quality workflow
-tox -e py39                         # the tests on one Python version
+tox -e py310                        # the tests on one Python version
 tox -p                              # everything, in parallel
 ```
 
 `lowest` installs the oldest version of every dependency that
-`pyproject.toml` allows, on Python 3.9. If you raise or lower a version
+`pyproject.toml` allows, on Python 3.10. If you raise or lower a version
 floor, run it.
 
 ---

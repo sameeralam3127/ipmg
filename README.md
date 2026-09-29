@@ -1,7 +1,7 @@
 # IPMG — IP Management & Ping Monitoring Tool
 
 [![PyPI](https://img.shields.io/pypi/v/ipmg)](https://pypi.org/project/ipmg/)
-![Python Version](https://img.shields.io/badge/python-3.9%2B-blue)
+![Python Version](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 [![Publish](https://github.com/sameeralam3127/ipmg/actions/workflows/publish.yml/badge.svg)](https://github.com/sameeralam3127/ipmg/actions/workflows/publish.yml)
 
@@ -241,7 +241,7 @@ Windows is not in that list because it cannot be tested in a container: it is
 covered instead by the CI matrix, which runs the full test suite and a live
 scan on `windows-latest` for every change.
 
-Python 3.9 through 3.14 are supported, and CI runs the test suite against every
+Python 3.10 through 3.14 are supported, and CI runs the test suite against every
 one of them.
 
 <details>
