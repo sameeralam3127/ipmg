@@ -146,7 +146,13 @@ def ping_ip(ip: str, timeout: int, count: int) -> Tuple[str, Optional[float]]:
 
         latency = parse_latency(result.stdout)
 
-        if result.returncode == 0:
+        answered = result.returncode == 0
+        if answered and latency is None and platform.system().lower() == "windows":
+            # Windows ping also exits 0 when a router replies "Destination host
+            # unreachable"; only a real echo reply prints round-trip times.
+            answered = False
+
+        if answered:
             return "Active", latency
 
         output = result.stdout.lower()
