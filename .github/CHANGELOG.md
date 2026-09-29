@@ -2,6 +2,40 @@
 
 <!-- version list -->
 
+## v3.1.1 (2026-09-29)
+
+### Bug Fixes
+
+- Windows unreachable hosts, "Status changed" label, and README presentation
+  ([#96](https://github.com/sameeralam3127/ipmg/pull/96),
+  [`cf9a6c5`](https://github.com/sameeralam3127/ipmg/commit/cf9a6c51adf07fb3ad675cddcaa261660d51d6bb))
+
+- **diff**: Label failure-mode moves "Status changed"
+  ([#96](https://github.com/sameeralam3127/ipmg/pull/96),
+  [`cf9a6c5`](https://github.com/sameeralam3127/ipmg/commit/cf9a6c51adf07fb3ad675cddcaa261660d51d6bb))
+
+- **ping**: Stop reporting Windows "Destination host unreachable" as Active
+  ([#96](https://github.com/sameeralam3127/ipmg/pull/96),
+  [`cf9a6c5`](https://github.com/sameeralam3127/ipmg/commit/cf9a6c51adf07fb3ad675cddcaa261660d51d6bb))
+
+- **web**: Give the IPMG Web demo the real change types
+  ([#96](https://github.com/sameeralam3127/ipmg/pull/96),
+  [`cf9a6c5`](https://github.com/sameeralam3127/ipmg/commit/cf9a6c51adf07fb3ad675cddcaa261660d51d6bb))
+
+### Documentation
+
+- Show change detection in the README visuals
+  ([#96](https://github.com/sameeralam3127/ipmg/pull/96),
+  [`cf9a6c5`](https://github.com/sameeralam3127/ipmg/commit/cf9a6c51adf07fb3ad675cddcaa261660d51d6bb))
+
+- **readme**: Add requirements and platform support
+  ([#96](https://github.com/sameeralam3127/ipmg/pull/96),
+  [`cf9a6c5`](https://github.com/sameeralam3127/ipmg/commit/cf9a6c51adf07fb3ad675cddcaa261660d51d6bb))
+
+- **readme**: Lead with change detection ([#96](https://github.com/sameeralam3127/ipmg/pull/96),
+  [`cf9a6c5`](https://github.com/sameeralam3127/ipmg/commit/cf9a6c51adf07fb3ad675cddcaa261660d51d6bb))
+
+
 ## v3.1.0 (2026-09-27)
 
 ### Features
