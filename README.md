@@ -16,7 +16,7 @@ CIDR blocks, and ranges (IPv4 and IPv6), IPMG Web, a local dashboard that
 works offline, and reports in Excel, CSV, JSON, and Markdown.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/sameeralam3127/ipmg/main/docs/assets/ipmg-demo.gif" alt="ipmg scanning 13 hosts in parallel: live results with reverse DNS names and latency, then a summary of 10 active and 3 timed out" width="820">
+  <img src="https://raw.githubusercontent.com/sameeralam3127/ipmg/main/docs/assets/ipmg-compare.gif" alt="ipmg scans 13 hosts, a new address is added to the target file, and a second scan with --compare reports a new host (warning) and a latency change (info) against the first" width="820">
 </p>
 
 [How it compares](#how-it-compares) to `nmap -sn`, `fping`, and Angry IP Scanner.
@@ -375,6 +375,13 @@ ipmg diff --fail-on-change            # exit 2 when anything changed (CI)
 ipmg history --limit 10               # list stored scans
 ```
 
+The same comparison is the **Changes** view in [IPMG Web](#ipmg-web), with
+the summary exportable as Markdown, JSON, or CSV:
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/sameeralam3127/ipmg/main/docs/assets/ipmg-changes.png" alt="IPMG Web Changes view comparing scan 23 with scan 24: 4 changes, 1 critical. A host back online, a latency change of +6.2 ms, a host offline, and a status change from Timeout to Inactive" width="820">
+</p>
+
 To hear about changes without watching the terminal, send them to Slack,
 Microsoft Teams, any JSON webhook, or email. Any `--notify-*` flag turns on
 `--compare`, and with `--interval` every pass that changes something alerts:
@@ -474,6 +481,10 @@ a running count of the hosts that answered:
 ```bash
 ipmg --input 192.168.1.0/24 --stream
 ```
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/sameeralam3127/ipmg/main/docs/assets/ipmg-demo.gif" alt="ipmg scanning 13 hosts in parallel: live results with reverse DNS names and latency, then a summary of 10 active and 3 timed out" width="820">
+</p>
 
 ```text
   Live
