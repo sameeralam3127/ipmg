@@ -274,3 +274,7 @@ cp -R src/ipmg/web/static/. _site/demo/
 python3 -m http.server 4173 -d _site
 # site: http://127.0.0.1:4173/   demo: http://127.0.0.1:4173/demo/?demo=1
 ```
+
+The screenshots and terminal GIFs in the README are generated;
+[docs/record-demo.md](../docs/record-demo.md) has the commands to recreate
+them after a UI change.
