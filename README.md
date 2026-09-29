@@ -5,22 +5,21 @@
 ![License](https://img.shields.io/badge/license-MIT-green)
 [![Publish](https://github.com/sameeralam3127/ipmg/actions/workflows/publish.yml/badge.svg)](https://github.com/sameeralam3127/ipmg/actions/workflows/publish.yml)
 
-**Find out which hosts on your network are up — and what changed since last time.**
+**Know what changed on your network since the last scan.**
 
-IPMG pings hosts in parallel, resolves their names, and hands you a report you
-can send to someone: Excel, CSV, JSON, or Markdown. It works from the command
-line or from IPMG Web, a local browser UI, and it remembers every scan so it can tell
-you what moved.
+IPMG keeps a history of every scan and tells you what moved between two of
+them: hosts that went offline or appeared, IP addresses and hostnames that
+moved, latency that shifted. Every change carries a severity, so you can send
+only the ones that matter to Slack, Teams, a webhook, or email, or fail a cron
+job or CI step with an exit code. Around that: parallel ping scanning of IPs,
+CIDR blocks, and ranges (IPv4 and IPv6), IPMG Web, a local dashboard that
+works offline, and reports in Excel, CSV, JSON, and Markdown.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/sameeralam3127/ipmg/main/docs/assets/ipmg-demo.gif" alt="ipmg scanning 13 hosts in parallel: live results with reverse DNS names and latency, then a summary of 10 active and 3 timed out" width="820">
 </p>
 
-**Why not `nmap -sn`, `fping`, or Angry IP Scanner?** They tell you what is up
-right now. IPMG also remembers every scan and tells you what changed since the
-last one: the host that dropped off, the device that appeared, the latency that
-doubled. It writes the report you would otherwise build by hand.
-[How it compares](#how-it-compares)
+[How it compares](#how-it-compares) to `nmap -sn`, `fping`, and Angry IP Scanner.
 
 **Website:** [sameeralam3127.github.io/ipmg](https://sameeralam3127.github.io/ipmg/) ·
 **Live demo:** [IPMG Web with sample data](https://sameeralam3127.github.io/ipmg/demo/) ·
@@ -28,7 +27,8 @@ doubled. It writes the report you would otherwise build by hand.
 
 ```bash
 pip install ipmg
-ipmg --discover        # scan the network you are on, right now
+ipmg --discover             # scan the network you are on, right now
+ipmg --discover --compare   # later: scan again and see what changed
 ```
 
 > **Please read:** only scan networks you are authorized to scan. Unauthorized
@@ -39,9 +39,9 @@ ipmg --discover        # scan the network you are on, right now
 [How it compares](#how-it-compares) ·
 [Install](#install) ·
 [Your first scan](#your-first-scan) ·
+[Change detection](#change-detection) ·
 [Common tasks](#common-tasks) ·
 [Live results](#live-results) ·
-[Change detection](#change-detection) ·
 [IPMG Web](#ipmg-web) ·
 [What you can scan](#what-you-can-scan) ·
 [Reports](#reports) ·
@@ -56,15 +56,22 @@ ipmg --discover        # scan the network you are on, right now
 
 | | IPMG | `nmap -sn` | `fping` | Angry IP Scanner |
 | --- | --- | --- | --- | --- |
-| Parallel ping sweep | Yes | Yes | Yes | Yes |
+| Parallel ping sweep | Yes, one system `ping` per host | Yes | Yes, fastest of the four | Yes |
 | Scan history and "what changed" | Built in | Save XML, compare with `ndiff` | No | No |
+| Change severities and alerts | critical / warning / info; Slack, Teams, webhook, email | No | No | No |
+| Exit codes for cron and CI | `3` with `--fail-on-down`, `2` with `diff --fail-on-change` | No | Non-zero if any host is unreachable | No (GUI first) |
 | Reports | Excel, CSV, JSON, Markdown | XML, grepable text | Plain text | CSV, TXT, XML |
-| Browser UI | IPMG Web, local | No (Zenmap is a desktop app) | No | Desktop app (Java) |
-| Port checks | Common TCP ports | Full port and OS scanner | No | Via fetchers |
+| Browser UI | IPMG Web, local, works offline | No (Zenmap is a desktop app) | No | Desktop app (Java) |
+| Port checks | Common TCP ports (connect only) | Full port, service, and OS scanner | No | Via fetchers |
 
-Reach for nmap when you need a real port or OS scanner. Reach for IPMG when you
-look after a network and need to know what moved since yesterday, with a report
-you can hand to someone.
+Where the others are better: **nmap** is a real port, service, and OS
+scanner, and IPMG does not try to be one. **fping** sends every probe from a
+single process, so on large ranges it is much faster than IPMG, which starts
+one `ping` per host (`--threads` at a time). Angry IP Scanner is a
+point-and-click desktop app with a plugin system.
+
+Reach for IPMG when you look after a network and need to know what moved since
+yesterday, with a report you can hand to someone.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/sameeralam3127/ipmg/main/docs/assets/ipmg-web.png" alt="IPMG Web dashboard: scan totals, a status donut of 16 active, 1 timeout and 1 inactive host, a latency trend chart, and a list of recent scans" width="820">
@@ -325,71 +332,6 @@ exist yet. A file you name with `--input` must already exist.
 
 ---
 
-## Common tasks
-
-Not sure which flags you need? The
-[command builder](https://sameeralam3127.github.io/ipmg/#builder) on the
-website puts the command together as you pick what you want to know, and
-explains every flag it adds.
-
-<p align="center">
-  <a href="https://sameeralam3127.github.io/ipmg/#builder">
-    <img src="https://raw.githubusercontent.com/sameeralam3127/ipmg/main/docs/assets/ipmg-builder.png" alt="IPMG command builder: choose Scan, Compare, History, or Web, enter a target such as 192.168.1.0/24, switch on options like live results or hostnames, and copy the generated ipmg command with each flag explained" width="820">
-  </a>
-</p>
-
-Or pick a ready-made command:
-
-| I want to… | Command |
-| --- | --- |
-| Scan the network I am on | `ipmg --discover` |
-| Scan hosts listed in a file | `ipmg --input targets.txt` |
-| Scan a file plus a few extra hosts | `ipmg --input targets.txt 10.0.0.0/30 10.0.0.5` |
-| Get names, not just IP addresses | `ipmg --input targets.txt --resolve` |
-| Get a report I can send to someone | `ipmg --input targets.txt --formats md csv` |
-| Pipe the results into a script | `ipmg --input targets.txt --json \| jq .` |
-| See hosts appear as they answer | `ipmg --input 192.168.1.0/24 --stream` |
-| See what changed since last time | `ipmg --input targets.txt --compare` |
-| Check which services are listening | `ipmg --input targets.txt --scan-ports` |
-| Keep scanning every 5 minutes | `ipmg --input targets.txt --interval 5` |
-| Look back at earlier scans | `ipmg history` |
-| Compare two specific scans | `ipmg diff 12 14` |
-| Use IPMG Web in your browser instead | `ipmg web` |
-| See every available flag | `ipmg --help` |
-
----
-
-## Live results
-
-By default a scan prints its results once every host has been probed. On a
-large range that is a long wait with nothing to look at, so `--stream` prints
-each host the moment its probe finishes, above a progress bar that also carries
-a running count of the hosts that answered:
-
-```bash
-ipmg --input 192.168.1.0/24 --stream
-```
-
-```text
-  Live
-  Status        Host                Latency
-  ● Active      192.168.1.1          0.9 ms
-  ● Active      192.168.1.24         3.1 ms
-   ⠹ Scanning ━━━━━━━━━━━───────────  48% 122/254 0:00:09 2 up
-```
-
-`--stream` shows only the hosts that answer, which is what makes a sparse range
-readable. Add `--stream-all` to see every result, including timeouts and
-unreachable hosts. The rows gain a `Name` column under `--resolve` and an
-`Open ports` column under `--scan-ports`.
-
-Streaming costs nothing in scan time: rows are printed by the thread that
-collects results, so the workers never wait on the terminal. When output is
-piped or redirected the progress bar is dropped and the rows are written as
-plain lines, which makes `ipmg --stream-all >> scan.log` a usable live log.
-
----
-
 ## Change detection
 
 Every scan is stored in a local SQLite history (`~/.ipmg/dashboard.db`), shared
@@ -458,6 +400,71 @@ source**, so file-based and `--discover` runs do not get mixed up. Pass
 | `--notify-teams` | off | Post changes to a Microsoft Teams Workflows webhook |
 | `--notify-email` | off | Email the Markdown change report (with `--smtp-host`, `--smtp-port`, `--smtp-security`, `--smtp-user`, `--smtp-from`) |
 | `--notify-severity` | `warning` | Only notify for changes at least this severe |
+
+---
+
+## Common tasks
+
+Not sure which flags you need? The
+[command builder](https://sameeralam3127.github.io/ipmg/#builder) on the
+website puts the command together as you pick what you want to know, and
+explains every flag it adds.
+
+<p align="center">
+  <a href="https://sameeralam3127.github.io/ipmg/#builder">
+    <img src="https://raw.githubusercontent.com/sameeralam3127/ipmg/main/docs/assets/ipmg-builder.png" alt="IPMG command builder: choose Scan, Compare, History, or Web, enter a target such as 192.168.1.0/24, switch on options like live results or hostnames, and copy the generated ipmg command with each flag explained" width="820">
+  </a>
+</p>
+
+Or pick a ready-made command:
+
+| I want to… | Command |
+| --- | --- |
+| Scan the network I am on | `ipmg --discover` |
+| Scan hosts listed in a file | `ipmg --input targets.txt` |
+| Scan a file plus a few extra hosts | `ipmg --input targets.txt 10.0.0.0/30 10.0.0.5` |
+| Get names, not just IP addresses | `ipmg --input targets.txt --resolve` |
+| Get a report I can send to someone | `ipmg --input targets.txt --formats md csv` |
+| Pipe the results into a script | `ipmg --input targets.txt --json \| jq .` |
+| See hosts appear as they answer | `ipmg --input 192.168.1.0/24 --stream` |
+| See what changed since last time | `ipmg --input targets.txt --compare` |
+| Check which services are listening | `ipmg --input targets.txt --scan-ports` |
+| Keep scanning every 5 minutes | `ipmg --input targets.txt --interval 5` |
+| Look back at earlier scans | `ipmg history` |
+| Compare two specific scans | `ipmg diff 12 14` |
+| Use IPMG Web in your browser instead | `ipmg web` |
+| See every available flag | `ipmg --help` |
+
+---
+
+## Live results
+
+By default a scan prints its results once every host has been probed. On a
+large range that is a long wait with nothing to look at, so `--stream` prints
+each host the moment its probe finishes, above a progress bar that also carries
+a running count of the hosts that answered:
+
+```bash
+ipmg --input 192.168.1.0/24 --stream
+```
+
+```text
+  Live
+  Status        Host                Latency
+  ● Active      192.168.1.1          0.9 ms
+  ● Active      192.168.1.24         3.1 ms
+   ⠹ Scanning ━━━━━━━━━━━───────────  48% 122/254 0:00:09 2 up
+```
+
+`--stream` shows only the hosts that answer, which is what makes a sparse range
+readable. Add `--stream-all` to see every result, including timeouts and
+unreachable hosts. The rows gain a `Name` column under `--resolve` and an
+`Open ports` column under `--scan-ports`.
+
+Streaming costs nothing in scan time: rows are printed by the thread that
+collects results, so the workers never wait on the terminal. When output is
+piped or redirected the progress bar is dropped and the rows are written as
+plain lines, which makes `ipmg --stream-all >> scan.log` a usable live log.
 
 ---
 
