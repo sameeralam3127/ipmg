@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v3.1.2 (2026-09-30)
+
+### Bug Fixes
+
+- **notify**: Refuse cleartext SMTP auth with --smtp-security none on remote hosts
+  ([#115](https://github.com/sameeralam3127/ipmg/pull/115),
+  [`019a0a9`](https://github.com/sameeralam3127/ipmg/commit/019a0a971b75e025262f348f003018df3cc73486))
+
+
 ## v3.1.1 (2026-09-29)
 
 ### Bug Fixes
