@@ -254,7 +254,6 @@ def test_smtp_user_with_security_none_is_allowed_for_loopback_hosts(loopback_hos
     assert settings.port == 25
 
 
-
 # ---------------------------------------------------------------- messages
 
 
@@ -553,7 +552,9 @@ def test_send_email_follows_the_security_setting(diff, fake_smtp, security, user
 
 
 def test_send_email_refuses_cleartext_auth_on_remote_host(diff, fake_smtp):
-    settings = SmtpSettings("mail.example.test", 25, "none", "ipmg@x.test", ("ops@x.test",), "u", "pw")
+    settings = SmtpSettings(
+        "mail.example.test", 25, "none", "ipmg@x.test", ("ops@x.test",), "u", "pw"
+    )
 
     with pytest.raises(NotifyError, match=r"starttls.*ssl"):
         send_email(settings, email_message(diff, settings))
@@ -567,4 +568,3 @@ def test_send_email_allows_cleartext_auth_on_loopback_host(diff, fake_smtp):
     send_email(settings, email_message(diff, settings))
 
     assert fake_smtp[0].calls == [("login", "u", "pw"), ("send", "ops@x.test"), "quit"]
-
