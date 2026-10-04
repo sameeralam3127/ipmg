@@ -2,6 +2,41 @@
 
 <!-- version list -->
 
+## v3.1.3 (2026-10-04)
+
+### Bug Fixes
+
+- Removed unnecessary vulnerability ignore flag. Fixes #48
+  ([#117](https://github.com/sameeralam3127/ipmg/pull/117),
+  [`5cb56aa`](https://github.com/sameeralam3127/ipmg/commit/5cb56aaaf05059506c414546e21c2e789827b67a))
+
+### Build System
+
+- **deps**: Update tomli requirement ([#116](https://github.com/sameeralam3127/ipmg/pull/116),
+  [`5b51bd6`](https://github.com/sameeralam3127/ipmg/commit/5b51bd6c32913cbbdac3ed0790f797028fdd21a1))
+
+### Chores
+
+- **release**: Drop the orphaned 3.1.3 changelog entry
+  ([#119](https://github.com/sameeralam3127/ipmg/pull/119),
+  [`e860cee`](https://github.com/sameeralam3127/ipmg/commit/e860cee15b97ce61d34d659ebb76540c7fe6d7e7))
+
+### Code Style
+
+- **tests**: Apply black to test_notify.py ([#118](https://github.com/sameeralam3127/ipmg/pull/118),
+  [`577bd11`](https://github.com/sameeralam3127/ipmg/commit/577bd1142a50de4228f1dc3ebfbb4b79bf2ff8d7))
+
+### Continuous Integration
+
+- Dependabot and Security workflow improvements. Fixes #48.
+  ([#117](https://github.com/sameeralam3127/ipmg/pull/117),
+  [`5cb56aa`](https://github.com/sameeralam3127/ipmg/commit/5cb56aaaf05059506c414546e21c2e789827b67a))
+
+- Revised dependabot and security workflows according to code review. Fixes #48
+  ([#117](https://github.com/sameeralam3127/ipmg/pull/117),
+  [`5cb56aa`](https://github.com/sameeralam3127/ipmg/commit/5cb56aaaf05059506c414546e21c2e789827b67a))
+
+
 ## v3.1.2 (2026-09-30)
 
 ### Bug Fixes
