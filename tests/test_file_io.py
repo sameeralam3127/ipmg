@@ -1,4 +1,6 @@
 import json
+import time
+from datetime import datetime
 
 import openpyxl
 import pytest
@@ -185,6 +187,28 @@ def test_save_results_neutralizes_formulas_in_csv_and_xlsx(tmp_path, monkeypatch
     # JSON is data interchange, not a spreadsheet: it keeps the raw value.
     raw = json.loads((tmp_path / "scan_20260628_120000.json").read_text(encoding="utf-8"))
     assert raw[0]["Hostname"] == HOSTILE_HOSTNAME
+
+
+def test_xlsx_writes_a_large_scan_in_linear_time(tmp_path, monkeypatch):
+    monkeypatch.setattr("ipmg.infrastructure.file_io.timestamp_str", lambda: "20260628_120000")
+    checked = datetime(2026, 6, 28, 12, 0, 0, 123456)
+    table = ReportTable(
+        rows=[
+            {"IP Address": f"10.0.{i // 256}.{i % 256}", "Status": "Up", "Checked At": checked}
+            for i in range(20_000)
+        ],
+        columns=("IP Address", "Status", "Checked At"),
+    )
+
+    started = time.perf_counter()
+    save_results(table, str(tmp_path / "scan"), ["xlsx"])
+    # The old writer rescanned the sheet per row: about a minute for 20k rows (#102).
+    assert time.perf_counter() - started < 5
+
+    sheet = openpyxl.load_workbook(tmp_path / "scan_20260628_120000.xlsx").active
+    assert sheet.max_row == 20_001
+    assert sheet["C2"].value == checked.replace(microsecond=123000)
+    assert sheet["C2"].number_format == "YYYY-MM-DD HH:MM:SS"
 
 
 @pytest.mark.parametrize(
