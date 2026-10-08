@@ -16,9 +16,12 @@ env:
 permissions:
   contents: read
 
+# A new push to a PR supersedes its previous run. Runs on main queue instead:
+# cancelling one mid-release could leave a tag and GitHub release whose
+# version never reached PyPI or GHCR.
 concurrency:
   group: publish-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
