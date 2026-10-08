@@ -30,9 +30,10 @@ env:
 permissions:
   contents: read
 
+# A new push to a PR supersedes its previous build; runs on main always finish.
 concurrency:
   group: docker-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
