@@ -424,16 +424,22 @@ def _xlsx_cell(value: Any) -> Any:
 
 def _render_xlsx(table: ReportTable) -> bytes:
     from openpyxl import Workbook
+    from openpyxl.cell import WriteOnlyCell
 
-    workbook = Workbook()
-    sheet = workbook.active
-    sheet.title = "Sheet1"
+    # Write-only mode streams rows out. A normal sheet rescans every cell for
+    # max_row, which made a /16 take minutes to write (#102).
+    workbook = Workbook(write_only=True)
+    sheet = workbook.create_sheet("Sheet1")
     sheet.append(list(table.columns))
     for row in sanitize_table(table).rows:
-        sheet.append([_xlsx_cell(row.get(column)) for column in table.columns])
-        for cell in sheet[sheet.max_row]:
-            if isinstance(cell.value, datetime):
-                cell.number_format = _XLSX_DATETIME_FORMAT
+        cells = []
+        for column in table.columns:
+            value = _xlsx_cell(row.get(column))
+            if isinstance(value, datetime):
+                value = WriteOnlyCell(sheet, value=value)
+                value.number_format = _XLSX_DATETIME_FORMAT
+            cells.append(value)
+        sheet.append(cells)
     buffer = io.BytesIO()
     workbook.save(buffer)
     return buffer.getvalue()
