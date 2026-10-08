@@ -2,6 +2,21 @@
 
 <!-- version list -->
 
+## v3.1.4 (2026-10-08)
+
+### Bug Fixes
+
+- **report**: Write XLSX in write-only mode so large scans save in linear time
+  ([#120](https://github.com/sameeralam3127/ipmg/pull/120),
+  [`89cffbd`](https://github.com/sameeralam3127/ipmg/commit/89cffbdc86985eb1a924f65e37cbc9cdeeec415a))
+
+### Testing
+
+- Check XLSX write scaling by ratio, not a wall-clock limit
+  ([#120](https://github.com/sameeralam3127/ipmg/pull/120),
+  [`89cffbd`](https://github.com/sameeralam3127/ipmg/commit/89cffbdc86985eb1a924f65e37cbc9cdeeec415a))
+
+
 ## v3.1.3 (2026-10-04)
 
 ### Bug Fixes
