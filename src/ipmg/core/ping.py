@@ -12,7 +12,8 @@ from typing import List, Optional, Tuple
 from ipmg.exceptions import PingError
 
 #: Platforms whose ``ping -W`` expects milliseconds instead of seconds.
-_MILLISECOND_TIMEOUT_SYSTEMS = frozenset({"darwin", "freebsd", "openbsd", "netbsd"})
+#: OpenBSD and NetBSD are not here: their ``ping`` has no ``-W`` at all.
+_MILLISECOND_TIMEOUT_SYSTEMS = frozenset({"darwin", "freebsd"})
 
 _WINDOWS_LATENCY = re.compile(r"Average = (\d+)ms")
 #: Localised Windows builds translate "Average", but every locale keeps the
@@ -70,20 +71,39 @@ def build_ping_command(
 ) -> List[str]:
     """Build the platform-specific ping argv.
 
-    The timeout flag is not portable: Windows ``-w`` and BSD/macOS ``-W`` take
-    milliseconds, while Linux ``-W`` takes seconds. Sending seconds everywhere
-    made macOS wait 2 ms per host and report healthy hosts as timed out.
+    The timeout flag is not portable: Windows ``-w`` and macOS/FreeBSD ``-W``
+    take milliseconds, while Linux ``-W`` takes seconds. Sending seconds
+    everywhere made macOS wait 2 ms per host and report healthy hosts as timed
+    out. OpenBSD and NetBSD have no ``-W``; giving them one made every probe
+    fail with "illegal option", so they get their own ``-w``:
+
+    * OpenBSD ``ping``/``ping6 -w``: seconds to wait after the last request.
+    * NetBSD ``ping -w``: a deadline in seconds for the whole run, so it
+      allows one second per extra probe (the default interval) on top.
+    * NetBSD ``ping6 -x``: milliseconds to wait for each reply.
 
     Linux and Windows ``ping`` pick the address family from the address. macOS
-    and the BSDs need ``ping6`` for IPv6, and it has no reply timeout at all:
-    :func:`ping_ip` ends it at the same deadline it gives every probe.
+    and the BSDs need ``ping6`` for IPv6 (on FreeBSD 13+ it is an alias of
+    ``ping -6``). The macOS and FreeBSD ``ping6`` are given no reply timeout:
+    on the older KAME-derived ``ping6`` that FreeBSD 12 shipped, ``-W`` means
+    something else entirely, so :func:`ping_ip` ends them at the same deadline
+    it gives every probe.
     """
     system = (system or platform.system()).lower()
 
     if system == "windows":
         return ["ping", "-n", str(count), "-w", str(timeout * 1000), ip]
 
-    if system in _PING6_SYSTEMS and is_ipv6(ip):
+    ipv6 = is_ipv6(ip)
+    if system == "openbsd":
+        return ["ping6" if ipv6 else "ping", "-c", str(count), "-w", str(timeout), ip]
+
+    if system == "netbsd":
+        if ipv6:
+            return ["ping6", "-c", str(count), "-x", str(timeout * 1000), ip]
+        return ["ping", "-c", str(count), "-w", str(timeout + count - 1), ip]
+
+    if system in _PING6_SYSTEMS and ipv6:
         return ["ping6", "-c", str(count), ip]
 
     wait = timeout * 1000 if system in _MILLISECOND_TIMEOUT_SYSTEMS else timeout

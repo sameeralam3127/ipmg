@@ -22,8 +22,10 @@ def test_latency_parse():
 POSIX_SUMMARIES = [
     # iputils: Ubuntu, Debian, RHEL, SUSE
     ("rtt min/avg/max/mdev = 19.694/20.100/21.000/0.400 ms", 20.1),
-    # macOS and the BSDs
+    # macOS, FreeBSD, NetBSD
     ("round-trip min/avg/max/stddev = 0.077/0.079/0.081/0.002 ms", 0.079),
+    # OpenBSD
+    ("round-trip min/avg/max/std-dev = 0.069/0.071/0.074/0.002 ms", 0.071),
     # busybox: Alpine, OpenWrt, most slim container images — no mdev field
     ("round-trip min/avg/max = 0.043/0.055/0.070 ms", 0.055),
 ]

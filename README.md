@@ -99,7 +99,9 @@ That means:
 | Linux (iputils or busybox `ping`) | `ping -c COUNT -W SECONDS` | Supported. CI runs the tests and a scan on Ubuntu; see [verified environments](#verified-environments) |
 | macOS | `ping -c COUNT -W MILLISECONDS`; `ping6` for IPv6 | Supported. CI runs the tests and a scan on macOS |
 | Windows | `ping -n COUNT -w MILLISECONDS` | Supported. CI runs the tests and a scan of `127.0.0.1` on `windows-latest`; not yet verified against a real LAN |
-| FreeBSD, OpenBSD, NetBSD | the macOS flags | Untested. The code treats them like macOS, and their `ping` options may differ |
+| FreeBSD | `ping -c COUNT -W MILLISECONDS`; `ping6` for IPv6 | Probed in a FreeBSD VM in CI when the ping code changes |
+| OpenBSD | `ping -c COUNT -w SECONDS`; `ping6` for IPv6 | Probed in an OpenBSD VM in CI when the ping code changes |
+| NetBSD | `ping -c COUNT -w DEADLINE`; `ping6 -x MILLISECONDS` for IPv6 | Probed in a NetBSD VM in CI when the ping code changes |
 
 `--discover ipv6` reads the neighbour table with `ip -6 neigh` on Linux (the
 `iproute2` package), `ndp -an` on macOS, and `netsh` on Windows.
