@@ -386,7 +386,16 @@ def build_markdown_report(table: ReportTable) -> str:
 
     preview_columns = [
         column
-        for column in ["IP Address", "Status", "Latency", "Hostname", "Open Ports"]
+        for column in [
+            "IP Address",
+            "Status",
+            "Latency",
+            "Hostname",
+            "Open Ports",
+            "Probe",
+            "MAC Address",
+            "Vendor",
+        ]
         if column in table.columns
     ]
     if preview_columns:

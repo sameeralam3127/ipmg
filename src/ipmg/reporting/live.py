@@ -34,6 +34,8 @@ LATENCY_WIDTH = 11
 HOSTNAME_WIDTH = 32
 PORTS_WIDTH = 26
 PROBE_WIDTH = 7
+MAC_WIDTH = 19
+VENDOR_WIDTH = 26
 
 #: Blank space kept between columns so truncated cells never touch.
 COLUMN_GAP = 2
@@ -77,6 +79,9 @@ def _columns(config: ScanConfig) -> List[Tuple[str, int, str]]:
         columns.append(("Probe", PROBE_WIDTH, "left"))
     if config.resolve:
         columns.append(("Name", HOSTNAME_WIDTH, "left"))
+    if config.mac_lookup:
+        columns.append(("MAC", MAC_WIDTH, "left"))
+        columns.append(("Vendor", VENDOR_WIDTH, "left"))
     if config.scan_ports:
         columns.append(("Open ports", PORTS_WIDTH, "left"))
     return columns
@@ -106,6 +111,9 @@ def format_result(result: HostResult, config: ScanConfig) -> Text:
         row.append_text(_cell(result.method or dash, PROBE_WIDTH, "muted"))
     if config.resolve:
         row.append_text(_cell(result.hostname or dash, HOSTNAME_WIDTH, "muted"))
+    if config.mac_lookup:
+        row.append_text(_cell(result.mac or dash, MAC_WIDTH, "muted"))
+        row.append_text(_cell(result.vendor or dash, VENDOR_WIDTH, "muted"))
     if config.scan_ports:
         row.append_text(_cell(format_open_ports(result.open_ports) or dash, PORTS_WIDTH, "muted"))
     row.rstrip()

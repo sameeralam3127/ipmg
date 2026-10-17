@@ -254,6 +254,8 @@ def _results_table(scan: Dict[str, Any], rows: List[Dict[str, Any]]) -> ReportTa
             hostname=row["hostname"] or "",
             open_ports=decode_ports(row.get("open_ports") or ""),
             method=row.get("method") or "",
+            mac=row.get("mac") or "",
+            vendor=row.get("vendor") or "",
         )
         for row in rows
     ]
@@ -322,6 +324,7 @@ def _register_scan_routes(api: APIRouter, database: Database, manager: ScanManag
             dns_timeout=request.dns_timeout,
             resolve_active_only=request.resolve_active_only,
             probe=request.probe,
+            mac_lookup=request.mac_lookup,
         ).clamped()
         try:
             scan_id = manager.start_scan(ips, config, source=request.source)

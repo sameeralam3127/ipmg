@@ -297,6 +297,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Look up each host's name with a reverse DNS (PTR) query.",
     )
     parser.add_argument(
+        "--mac",
+        action="store_true",
+        help=(
+            "Add each responding host's MAC address and its vendor, read from this "
+            "machine's ARP/neighbour table (hosts on the local network only)."
+        ),
+    )
+    parser.add_argument(
         "--dns-cache-ttl",
         type=int,
         default=300,

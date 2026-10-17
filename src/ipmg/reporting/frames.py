@@ -19,6 +19,9 @@ RESULT_COLUMNS: List[str] = [
 
 #: Which probe found the host, with ``--probe tcp`` or ``--probe icmp,tcp``.
 PROBE_COLUMN = "Probe"
+#: With ``--mac``: the host's MAC address and the vendor its prefix belongs to.
+MAC_COLUMN = "MAC Address"
+VENDOR_COLUMN = "Vendor"
 
 
 def report_columns(config: Any = None) -> Tuple[str, ...]:
@@ -38,6 +41,8 @@ def report_columns(config: Any = None) -> Tuple[str, ...]:
     extra: List[str] = []
     if setting("probe", "icmp") not in ("icmp", "", None):
         extra.append(PROBE_COLUMN)
+    if setting("mac_lookup", False):
+        extra.extend([MAC_COLUMN, VENDOR_COLUMN])
     at = RESULT_COLUMNS.index("Open Ports") + 1
     return tuple(RESULT_COLUMNS[:at] + extra + RESULT_COLUMNS[at:])
 
@@ -51,6 +56,8 @@ def result_values(result: HostResult) -> Dict[str, Any]:
         "Hostname": result.hostname,
         "Open Ports": format_open_ports(result.open_ports),
         PROBE_COLUMN: result.method,
+        MAC_COLUMN: result.mac,
+        VENDOR_COLUMN: result.vendor,
     }
 
 

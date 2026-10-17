@@ -64,7 +64,9 @@ CREATE TABLE IF NOT EXISTS results (
     hostname TEXT NOT NULL DEFAULT '',
     open_ports TEXT NOT NULL DEFAULT '',
     checked_at TEXT NOT NULL,
-    method TEXT NOT NULL DEFAULT ''
+    method TEXT NOT NULL DEFAULT '',
+    mac TEXT NOT NULL DEFAULT '',
+    vendor TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_results_scan ON results(scan_id);
@@ -105,8 +107,14 @@ class Database:
         columns = {row["name"] for row in conn.execute("PRAGMA table_info(results)")}
         if "open_ports" not in columns:
             conn.execute("ALTER TABLE results ADD COLUMN open_ports TEXT NOT NULL DEFAULT ''")
-        if "method" not in columns:
-            conn.execute("ALTER TABLE results ADD COLUMN method TEXT NOT NULL DEFAULT ''")
+        # One fixed statement per column added after release, in release order.
+        for column, statement in (
+            ("method", "ALTER TABLE results ADD COLUMN method TEXT NOT NULL DEFAULT ''"),
+            ("mac", "ALTER TABLE results ADD COLUMN mac TEXT NOT NULL DEFAULT ''"),
+            ("vendor", "ALTER TABLE results ADD COLUMN vendor TEXT NOT NULL DEFAULT ''"),
+        ):
+            if column not in columns:
+                conn.execute(statement)
 
     @property
     def path(self) -> str:
@@ -157,6 +165,8 @@ class Database:
                 encode_ports(result.open_ports),
                 checked_at,
                 result.method,
+                result.mac,
+                result.vendor,
             )
             for result in results
         ]
@@ -164,8 +174,8 @@ class Database:
             return 0
         conn.executemany(
             "INSERT INTO results "
-            "(scan_id, ip, status, latency, hostname, open_ports, checked_at, method) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "(scan_id, ip, status, latency, hostname, open_ports, checked_at, method, mac, vendor) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             rows,
         )
         conn.execute(
@@ -330,7 +340,7 @@ class Database:
         """Every host recorded by a scan, as comparison-ready snapshots."""
         with self._session() as conn:
             rows = conn.execute(
-                "SELECT ip, status, latency, hostname FROM results "
+                "SELECT ip, status, latency, hostname, mac FROM results "
                 "WHERE scan_id = ? ORDER BY rowid",
                 (scan_id,),
             ).fetchall()
@@ -340,6 +350,7 @@ class Database:
                 status=row["status"],
                 latency=row["latency"],
                 hostname=row["hostname"] or "",
+                mac=row["mac"] or "",
             )
             for row in rows
         ]
@@ -368,7 +379,7 @@ class Database:
         search: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         query = (
-            "SELECT ip, status, latency, hostname, open_ports, checked_at, method "
+            "SELECT ip, status, latency, hostname, open_ports, checked_at, method, mac, vendor "
             "FROM results WHERE scan_id = ?"
         )
         params: List[Any] = [scan_id]
@@ -449,6 +460,12 @@ class Database:
             "   ORDER BY r2.rowid DESC LIMIT 1) AS hostname, "
             "  (SELECT r3.status FROM results r3 "
             "   WHERE r3.ip = r.ip ORDER BY r3.rowid DESC LIMIT 1) AS status, "
+            "  (SELECT r4.mac FROM results r4 "
+            "   WHERE r4.ip = r.ip AND r4.mac != '' "
+            "   ORDER BY r4.rowid DESC LIMIT 1) AS mac, "
+            "  (SELECT r5.vendor FROM results r5 "
+            "   WHERE r5.ip = r.ip AND r5.mac != '' "
+            "   ORDER BY r5.rowid DESC LIMIT 1) AS vendor, "
             "  AVG(CASE WHEN r.status = 'Active' THEN r.latency END) AS avg_latency, "
             "  MAX(CASE WHEN r.status = 'Active' THEN r.checked_at END) AS last_seen, "
             "  MAX(r.checked_at) AS last_checked, "

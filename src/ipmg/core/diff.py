@@ -27,6 +27,9 @@ class ChangeType(str, Enum):
     HOSTNAME_CHANGED = "hostname_changed"
     LATENCY_CHANGED = "latency_changed"
     SERVICE_CHANGED = "service_changed"
+    #: A different MAC answers at the same IP (``--mac``): another device took
+    #: the address, or something is impersonating it.
+    MAC_CHANGED = "mac_changed"
 
 
 class Severity(str, Enum):
@@ -41,6 +44,7 @@ _SEVERITY_BY_TYPE: Dict[ChangeType, Severity] = {
     ChangeType.NEW_HOST: Severity.WARNING,
     ChangeType.HOST_REMOVED: Severity.WARNING,
     ChangeType.SERVICE_CHANGED: Severity.WARNING,
+    ChangeType.MAC_CHANGED: Severity.WARNING,
     ChangeType.HOST_ONLINE: Severity.INFO,
     ChangeType.HOSTNAME_CHANGED: Severity.INFO,
     ChangeType.LATENCY_CHANGED: Severity.INFO,
@@ -67,6 +71,7 @@ CHANGE_LABELS: Dict[ChangeType, str] = {
     # The key stays "service_changed" for existing JSON consumers; the change
     # is a move between failure modes (Timeout -> Unreachable), not a service.
     ChangeType.SERVICE_CHANGED: "Status changed",
+    ChangeType.MAC_CHANGED: "MAC address changed",
 }
 
 
@@ -78,6 +83,8 @@ class HostSnapshot:
     status: str
     latency: Optional[float] = None
     hostname: str = ""
+    #: Known only for scans run with ``--mac``.
+    mac: str = ""
 
     @property
     def reachable(self) -> bool:
@@ -258,6 +265,16 @@ def _index_by_hostname(snapshots: Mapping[str, HostSnapshot]) -> Dict[str, Set[s
     return index
 
 
+def _index_by_mac(snapshots: Mapping[str, HostSnapshot]) -> Dict[str, Set[str]]:
+    """Map MAC -> set of IPs it answered at. A device keeps its MAC when DHCP moves it."""
+    index: Dict[str, Set[str]] = {}
+    for snapshot in snapshots.values():
+        mac = (snapshot.mac or "").strip().upper()
+        if mac:
+            index.setdefault(mac, set()).add(snapshot.ip)
+    return index
+
+
 def ip_sort_key(value: str) -> Tuple[int, int, int, str]:
     """Sort key: IPv4 in numeric order, then IPv6, then anything unparsable.
 
@@ -380,6 +397,19 @@ def _compare_common_host(
             )
         )
 
+    before_mac = (before.mac or "").strip().upper()
+    after_mac = (after.mac or "").strip().upper()
+    if before_mac and after_mac and before_mac != after_mac:
+        changes.append(
+            HostChange(
+                type=ChangeType.MAC_CHANGED,
+                ip=ip,
+                hostname=hostname,
+                previous=before_mac,
+                current=after_mac,
+            )
+        )
+
     before_host = (before.hostname or "").strip()
     after_host = (after.hostname or "").strip()
     hostname_known = bool(before_host) or options.include_unresolved_hostnames
@@ -421,6 +451,14 @@ def compare_snapshots(
         _index_by_hostname(after_by_ip),
         after_by_ip,
     )
+    # The same device, recognised by its MAC rather than its name. A move
+    # both identities saw is reported once.
+    mac_changes, mac_to, mac_from = _detect_ip_moves(
+        _index_by_mac(before_by_ip), _index_by_mac(after_by_ip), after_by_ip
+    )
+    ip_changes += [change for change in mac_changes if change.ip not in moved_to]
+    moved_to |= mac_to
+    moved_from |= mac_from
     changes: List[HostChange] = list(ip_changes)
 
     for ip in after_by_ip.keys() - before_by_ip.keys():

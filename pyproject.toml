@@ -144,6 +144,7 @@ package-dir = { "" = "src" }
 where = ["src"]
 
 [tool.setuptools.package-data]
+"ipmg" = ["data/*.tsv.gz"]
 "ipmg.web" = ["static/*.html", "static/css/*.css", "static/js/*.js"]
 
 

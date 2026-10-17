@@ -66,6 +66,11 @@ class ScanRequest(BaseModel):
     resolve_active_only: bool = Field(
         default=False, description="Only reverse-resolve hosts that answered"
     )
+    mac_lookup: bool = Field(
+        default=False,
+        description="Add each responding host's MAC address and vendor, from the server's "
+        "ARP/neighbour table (hosts on its local network only)",
+    )
     probe: Literal["icmp", "tcp", "icmp,tcp"] = Field(
         default="icmp",
         description="How to tell a host is up: ping, a TCP connection to a common port, "
@@ -124,6 +129,8 @@ class HostResultRow(ApiModel):
         description="Which probe found the host, 'icmp' or 'tcp', when the scan used TCP "
         "probing; empty otherwise",
     )
+    mac: str = Field(default="", description="MAC address, with mac_lookup; empty if unknown")
+    vendor: str = Field(default="", description="Vendor of the MAC address's prefix")
 
 
 # ------------------------------------------------------------------- overview
@@ -151,6 +158,8 @@ class Asset(ApiModel):
     ip: str
     hostname: Optional[str] = Field(description="Most recent non-empty hostname")
     status: str = Field(description="Status in the most recent scan")
+    mac: Optional[str] = Field(default=None, description="Most recent MAC address seen")
+    vendor: Optional[str] = Field(default=None, description="Vendor of that MAC address")
     avg_latency: Optional[float] = Field(description="Mean latency when active, in ms")
     last_seen: Optional[str] = Field(description="Last time the host was active")
     last_checked: str
@@ -194,7 +203,7 @@ class DiffSummary(ApiModel):
 class HostChangeModel(ApiModel):
     type: str = Field(
         description="new_host, host_removed, host_offline, host_online, ip_changed, "
-        "hostname_changed, latency_changed, or service_changed"
+        "hostname_changed, latency_changed, service_changed, or mac_changed"
     )
     label: str
     severity: str = Field(description="'critical', 'warning', or 'info'")
@@ -224,6 +233,8 @@ class HostResultModel(ApiModel):
     hostname: str
     open_ports: List[int] = Field(description="Open TCP ports, when port scanning was on")
     method: str = Field(default="", description="Which probe found the host, as in results")
+    mac: str = Field(default="", description="MAC address, with mac_lookup")
+    vendor: str = Field(default="", description="Vendor of the MAC address's prefix")
 
 
 class ScanStartedEvent(ApiModel):

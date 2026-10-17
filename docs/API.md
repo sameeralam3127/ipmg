@@ -138,6 +138,8 @@ blocks, ranges, and hostnames separated by newlines, commas, or spaces) or
 | `dns_cache_ttl` | `300` | Seconds, clamped to 0-86400 |
 | `dns_timeout` | `2.0` | Seconds a reverse DNS lookup may take before the host is `Unresolvable`, clamped to 0.1-60 |
 | `resolve_active_only` | `false` | Only reverse-resolve hosts that answered |
+| `probe` | `"icmp"` | `icmp`, `tcp`, or `icmp,tcp`: how a host counts as up (TCP connects to the default port list) |
+| `mac_lookup` | `false` | Add each responding host's MAC address and vendor, read from the server's neighbour table |
 
 A scan's `status` is `running`, then `complete`, `cancelled`, or `failed`. A scan
 that IPMG Web could not finish because it was stopped (Ctrl+C, a container

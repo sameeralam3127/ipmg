@@ -178,6 +178,7 @@ def _config_from_args(args) -> ScanConfig:
         dns_timeout=getattr(args, "dns_timeout", DEFAULT_DNS_TIMEOUT_S),
         resolve_active_only=bool(getattr(args, "resolve_active_only", False)),
         probe=getattr(args, "probe", None) or "icmp",
+        mac_lookup=bool(getattr(args, "mac", False)),
     ).clamped()
 
 
@@ -222,6 +223,7 @@ def _print_configuration(sources: List[str], targets: int, config: ScanConfig) -
                 f"{config.threads} threads {ui.glyph('sep')} {config.timeout}s timeout "
                 f"{ui.glyph('sep')} {config.count} {ping_word}"
                 + (f" {ui.glyph('sep')} reverse DNS" if config.resolve else "")
+                + (f" {ui.glyph('sep')} MAC lookup" if config.mac_lookup else "")
                 + (
                     f" {ui.glyph('sep')} {ui.plural(len(config.ports), 'port')} scan"
                     if config.scan_ports

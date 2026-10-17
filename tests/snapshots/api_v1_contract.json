@@ -363,8 +363,10 @@
         "last_checked": "string",
         "last_scan_id": "integer",
         "last_seen": "null | string",
+        "mac": "null | string",
         "scan_count": "integer",
-        "status": "string"
+        "status": "string",
+        "vendor": "null | string"
       },
       "required": [
         "avg_latency",
@@ -457,9 +459,11 @@
         "hostname": "string",
         "ip": "string",
         "latency": "null | number",
+        "mac": "string",
         "method": "string",
         "open_ports": "array[integer]",
-        "status": "string"
+        "status": "string",
+        "vendor": "string"
       },
       "required": [
         "hostname",
@@ -475,9 +479,11 @@
         "hostname": "string",
         "ip": "string",
         "latency": "null | number",
+        "mac": "string",
         "method": "string",
         "open_ports": "string",
-        "status": "string"
+        "status": "string",
+        "vendor": "string"
       },
       "required": [
         "checked_at",
@@ -598,6 +604,7 @@
         "dns_cache_ttl": "integer",
         "dns_timeout": "number",
         "ips": "array[string] | null",
+        "mac_lookup": "boolean",
         "probe": "enum 'icmp', 'tcp', 'icmp,tcp'",
         "resolve": "boolean",
         "resolve_active_only": "boolean",

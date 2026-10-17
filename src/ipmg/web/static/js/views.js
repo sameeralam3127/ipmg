@@ -87,7 +87,14 @@ function resultsTable(rows) {
   if (!rows.length) return h("div", { class: "empty" }, "No results.");
   // Columns for what the scan was asked to find, as in its report.
   const showProbe = rows.some((row) => row.method);
-  const headings = ["IP Address", "Status", "Latency", ...(showProbe ? ["Probe"] : []), "Hostname", "Checked"];
+  const showMac = rows.some((row) => row.mac);
+  const headings = [
+    "IP Address", "Status", "Latency",
+    ...(showProbe ? ["Probe"] : []),
+    "Hostname",
+    ...(showMac ? ["MAC Address", "Vendor"] : []),
+    "Checked",
+  ];
   return h(
     "div",
     { class: "table-wrap" },
@@ -107,6 +114,8 @@ function resultsTable(rows) {
             h("td", {}, fmtLatency(row.latency)),
             showProbe ? h("td", {}, row.method ? row.method.toUpperCase() : "—") : null,
             h("td", {}, row.hostname || "—"),
+            showMac ? h("td", { class: "mono" }, row.mac || "—") : null,
+            showMac ? h("td", {}, row.vendor || "—") : null,
             h("td", {}, row.checked_at || "")
           )
         )
@@ -309,6 +318,7 @@ export async function newScanView(root) {
 
   const resolveCheck = h("label", { class: "check" }, h("input", { type: "checkbox", name: "resolve" }), "Resolve hostnames (reverse DNS)");
   const activeOnlyCheck = h("label", { class: "check" }, h("input", { type: "checkbox", name: "resolve_active_only" }), "Only resolve hosts that answer");
+  const macCheck = h("label", { class: "check" }, h("input", { type: "checkbox", name: "mac_lookup" }), "Look up MAC addresses and vendors (local network only)");
   const submit = h("button", { class: "btn", type: "submit" }, "Start Scan");
 
   form.append(
@@ -317,6 +327,7 @@ export async function newScanView(root) {
     probeField,
     resolveCheck,
     activeOnlyCheck,
+    macCheck,
     submit
   );
 
@@ -337,6 +348,7 @@ export async function newScanView(root) {
         resolve: data.get("resolve") === "on",
         resolve_active_only: data.get("resolve_active_only") === "on",
         probe: data.get("probe") || "icmp",
+        mac_lookup: data.get("mac_lookup") === "on",
       });
       toast(`Scan #${scan.id} created successfully.`);
       location.hash = `#/monitor/${scan.id}`;
@@ -691,7 +703,7 @@ export async function inventoryView(root) {
 
   const assets = await api.assets();
   const toolbar = h("div", { class: "toolbar" });
-  const search = h("input", { type: "text", placeholder: "Filter by IP or hostname…" });
+  const search = h("input", { type: "text", placeholder: "Filter by IP, hostname, MAC, or vendor…" });
   const exportBtn = h("button", { class: "ghost-btn", type: "button" }, "Export CSV");
   toolbar.append(search, h("span", { class: "spacer" }), exportBtn);
 
@@ -700,9 +712,8 @@ export async function inventoryView(root) {
   function matching() {
     const term = search.value.trim().toLowerCase();
     if (!term) return assets;
-    return assets.filter(
-      (asset) =>
-        asset.ip.toLowerCase().includes(term) || (asset.hostname || "").toLowerCase().includes(term)
+    return assets.filter((asset) =>
+      [asset.ip, asset.hostname, asset.mac, asset.vendor].some((value) => (value || "").toLowerCase().includes(term))
     );
   }
 
@@ -725,7 +736,7 @@ export async function inventoryView(root) {
             h(
               "tr",
               {},
-              ...["IP Address", "Hostname", "Last status", "Avg latency", "Last seen active", "Last checked", "Scans"].map((t) => h("th", {}, t))
+              ...["IP Address", "Hostname", "MAC Address", "Vendor", "Last status", "Avg latency", "Last seen active", "Last checked", "Scans"].map((t) => h("th", {}, t))
             )
           ),
           h(
@@ -737,6 +748,8 @@ export async function inventoryView(root) {
                 {},
                 h("td", {}, asset.ip),
                 h("td", {}, asset.hostname || "—"),
+                h("td", { class: "mono" }, asset.mac || "—"),
+                h("td", {}, asset.vendor || "—"),
                 h("td", {}, statusPill(asset.status)),
                 h("td", {}, fmtLatency(asset.avg_latency)),
                 h("td", {}, asset.last_seen || "never"),
@@ -753,11 +766,11 @@ export async function inventoryView(root) {
   search.addEventListener("input", draw);
   exportBtn.addEventListener("click", () => {
     const rows = matching();
-    const header = "IP Address,Hostname,Last Status,Avg Latency,Last Seen Active,Last Checked,Scans";
+    const header = "IP Address,Hostname,MAC Address,Vendor,Last Status,Avg Latency,Last Seen Active,Last Checked,Scans";
     const csv = [
       header,
       ...rows.map((asset) =>
-        [asset.ip, asset.hostname || "", asset.status, asset.avg_latency ?? "", asset.last_seen || "", asset.last_checked || "", asset.scan_count]
+        [asset.ip, asset.hostname || "", asset.mac || "", asset.vendor || "", asset.status, asset.avg_latency ?? "", asset.last_seen || "", asset.last_checked || "", asset.scan_count]
           .map((value) => `"${String(value).replaceAll('"', '""')}"`)
           .join(",")
       ),

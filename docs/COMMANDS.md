@@ -195,6 +195,34 @@ Ports are only probed on hosts that are up. The default list is:
 | 80 | HTTP | 5432 | PostgreSQL |
 | 443 | HTTPS | | |
 
+### MAC addresses and vendors
+
+```bash
+ipmg --discover --mac                          # every host on this network, with its MAC and vendor
+ipmg --input 192.168.1.0/24 --mac --resolve    # names too
+```
+
+On a local network the IP alone rarely identifies a device; its MAC address
+and vendor (Apple, Cisco, Raspberry Pi…) usually do, and they stay put when
+DHCP moves the device. `--mac` reads both from this machine's ARP/neighbour
+table after each host answers (`ip neigh` on Linux, `arp -an` and `ndp -an` on
+macOS and the BSDs, `arp -a` and `netsh` on Windows), so it needs no raw
+sockets or extra privileges. Vendors come from the IEEE's MA-L, MA-M, and MA-S
+assignment lists, bundled with IPMG, so nothing is looked up online.
+
+Only hosts on the same network segment have a MAC to report: traffic to
+anything beyond a router goes to the router's MAC, so those hosts show an
+empty MAC rather than the router's. A MAC with the "locally administered" bit
+set (phones and laptops that randomise their MAC per network, VMs, containers)
+has no registered vendor and is labelled `Locally administered`. In Docker,
+add `--network host` (Linux) so the container sees your LAN's neighbour table.
+
+Reports gain `MAC Address` and `Vendor` columns, and IPMG Web's inventory lists
+the last MAC seen for every host. With MACs in the history, change detection
+also recognises a device that DHCP moved to another IP (one `IP address
+changed`, not a new host plus a removed one) and reports a different device
+answering at an IP as `MAC address changed` (warning).
+
 ### Hosts that block ping
 
 Firewalled servers, cloud instances with default security groups, and Windows
@@ -306,7 +334,8 @@ Each file has one row per host with `IP Address`, `Status`, `Latency`,
 `Hostname` (with `--resolve`), `Open Ports` (with `--scan-ports`),
 `Batch Timestamp`, and `Scan Duration (s)`. A scan that asks for more adds a
 column for it after `Open Ports`: `Probe` with `--probe tcp` or
-`--probe icmp,tcp`. `Status` is one of `Active`,
+`--probe icmp,tcp`, and `MAC Address` and `Vendor` with `--mac`. `Status` is
+one of `Active`,
 `Inactive`, `Timeout`, `Unreachable`, `Invalid IP`, or `Error`. The `md` format
 adds a status summary, ready to paste into a ticket, and `jsonl` writes one
 JSON object per line for `jq` and log pipelines.

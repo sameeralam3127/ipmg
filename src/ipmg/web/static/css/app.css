@@ -348,3 +348,5 @@ tr.click { cursor: pointer; }
   .details-list { grid-template-columns: 1fr; gap: 3px; }
   .details-list dd { margin-bottom: 10px; }
 }
+
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; }

@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import concurrent.futures
+import time
 from dataclasses import dataclass, field
 from typing import Callable, Iterable, List, Optional, Tuple
 
+from ipmg.core.neighbours import NeighbourCache, mac_and_vendor
 from ipmg.core.ping import ping_ip, validate_ip
 from ipmg.core.portscan import DEFAULT_PORTS, scan_ports, tcp_probe
 from ipmg.exceptions import PingError
@@ -40,6 +42,8 @@ class ScanConfig:
     resolve_active_only: bool = False
     #: One of :data:`PROBE_METHODS`; TCP probes connect to ``ports``.
     probe: str = "icmp"
+    #: Read each responding host's MAC from the OS neighbour table.
+    mac_lookup: bool = False
 
     @property
     def uses_tcp_probe(self) -> bool:
@@ -58,6 +62,7 @@ class ScanConfig:
             dns_timeout=max(min(float(self.dns_timeout), 60.0), 0.1),
             resolve_active_only=self.resolve_active_only,
             probe=self.probe if self.probe in PROBE_METHODS else "icmp",
+            mac_lookup=self.mac_lookup,
         )
 
 
@@ -71,6 +76,9 @@ class HostResult:
     #: Which probe found the host ("icmp" or "tcp"); set only when a scan
     #: uses TCP probing, and only for hosts that answered.
     method: str = ""
+    #: ``AA:BB:CC:DD:EE:FF`` with ``--mac``, for responding hosts on a local link.
+    mac: str = ""
+    vendor: str = ""
 
 
 ResultCallback = Callable[[HostResult, int, int], None]
@@ -97,6 +105,7 @@ def execute_scan(
         if config.resolve
         else None
     )
+    neighbours = NeighbourCache() if config.mac_lookup else None
     results: List[HostResult] = []
 
     port_executor: Optional[concurrent.futures.ThreadPoolExecutor] = None
@@ -108,7 +117,9 @@ def execute_scan(
 
     executor = concurrent.futures.ThreadPoolExecutor(max_workers=config.threads)
     try:
-        futures = [executor.submit(_probe_host, ip, config, cache, port_executor) for ip in ips]
+        futures = [
+            executor.submit(_probe_host, ip, config, cache, port_executor, neighbours) for ip in ips
+        ]
 
         for future in concurrent.futures.as_completed(futures):
             if should_stop is not None and should_stop():
@@ -147,14 +158,19 @@ def _probe_host(
     config: ScanConfig,
     cache: Optional[HostnameCache],
     port_executor: Optional[concurrent.futures.Executor],
+    neighbours: Optional[NeighbourCache] = None,
 ) -> HostResult:
-    """Probe one host, then resolve its name and probe its ports.
+    """Probe one host, then resolve its name and MAC, and probe its ports.
 
     Runs on a pool worker, so reverse DNS is spread across ``config.threads``
     workers instead of running one host at a time on the thread that collects
     results. Port probes go to the scan's shared, bounded ``port_executor``.
     """
     status, latency, method = _reachability(ip, config, port_executor)
+    mac = vendor = ""
+    if neighbours is not None and status == "Active":
+        # The probe just made the OS resolve the host's MAC, if it is on a local link.
+        mac, vendor = mac_and_vendor(neighbours, ip, time.monotonic())
 
     resolve = cache is not None and (status == "Active" or not config.resolve_active_only)
     hostname = cache.resolve(ip) if resolve else ""
@@ -171,6 +187,8 @@ def _probe_host(
         hostname=hostname,
         open_ports=open_ports,
         method=method,
+        mac=mac,
+        vendor=vendor,
     )
 
 

@@ -109,9 +109,7 @@ def test_icmp_then_tcp_falls_back_only_for_hosts_that_did_not_answer(scripted):
     scripted["ping"]["10.0.0.3"] = ("Unreachable", None)
 
     results = by_ip(
-        execute_scan(
-            ["10.0.0.1", "10.0.0.2", "10.0.0.3"], ScanConfig(threads=3, probe="icmp,tcp")
-        )
+        execute_scan(["10.0.0.1", "10.0.0.2", "10.0.0.3"], ScanConfig(threads=3, probe="icmp,tcp"))
     )
 
     assert sorted(scripted["connected"]) == ["10.0.0.2", "10.0.0.3"]

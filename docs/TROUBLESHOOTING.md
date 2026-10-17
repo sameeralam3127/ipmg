@@ -95,6 +95,20 @@ That host has no DNS PTR record. Nothing is broken — there is simply no name t
 look up. A lookup that takes longer than `--dns-timeout` (default 2 seconds)
 also shows `Unresolvable`; raise it if your resolver is slow.
 
+### `MAC Address` is empty with `--mac`
+
+A host beyond a router never has one: only hosts on your own network segment
+are in the neighbour table. For a host on the same segment, check that the
+table lists it (`arp -an` on macOS and the BSDs, `ip neigh` on Linux,
+`arp -a` on Windows). Inside Docker, the container has its own network unless
+you run it with `--network host`.
+
+On macOS 15 and later, a program needs **Local Network** permission to see
+devices on your network. Without it the neighbour table reads back empty for
+that program and everything it starts, even though `arp -an` works in your
+terminal. Allow your terminal app (or the Python that runs IPMG) under
+System Settings → Privacy & Security → Local Network.
+
 ---
 
 ## Input files

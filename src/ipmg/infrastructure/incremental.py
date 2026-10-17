@@ -40,7 +40,14 @@ from typing import IO, Dict, List, Optional, Sequence, Set, Tuple
 
 from ipmg.core.engine import HostResult
 from ipmg.exceptions import FileIOError
-from ipmg.reporting.frames import PROBE_COLUMN, RESULT_COLUMNS, ReportTable, result_values
+from ipmg.reporting.frames import (
+    MAC_COLUMN,
+    PROBE_COLUMN,
+    RESULT_COLUMNS,
+    VENDOR_COLUMN,
+    ReportTable,
+    result_values,
+)
 from ipmg.utils.helpers import FORMULA_PREFIXES, spreadsheet_escape
 
 log = logging.getLogger(__name__)
@@ -467,6 +474,8 @@ def _row_result(row: Dict[str, object], unescape: bool) -> Optional[HostResult]:
         hostname=_text(row.get("Hostname"), unescape),
         open_ports=_open_ports(row.get("Open Ports")),
         method=_text(row.get(PROBE_COLUMN)),
+        mac=_text(row.get(MAC_COLUMN)),
+        vendor=_text(row.get(VENDOR_COLUMN), unescape),
     )
 
 
