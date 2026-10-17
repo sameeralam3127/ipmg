@@ -9,6 +9,8 @@ function h(tag, attrs = {}, ...children) {
   const node = document.createElement(tag);
   for (const [key, value] of Object.entries(attrs)) {
     if (key === "class") node.className = value;
+    // Through the CSSOM: the Content-Security-Policy blocks style attributes.
+    else if (key === "style") node.style.cssText = value;
     else if (key.startsWith("on")) node.addEventListener(key.slice(2), value);
     else if (value !== undefined && value !== null) node.setAttribute(key, value);
   }

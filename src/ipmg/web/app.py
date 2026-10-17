@@ -8,6 +8,7 @@ The API contract (models, errors, versioning) is described in docs/API.md.
 from __future__ import annotations
 
 import asyncio
+import re
 import secrets
 import tempfile
 from contextlib import asynccontextmanager
@@ -81,6 +82,45 @@ DIFF_MEDIA_TYPES = {fmt: REPORT_MEDIA_TYPES[fmt] for fmt in DIFF_FORMATS}
 
 #: Hostnames that count as "this machine" when checking WebSocket origins.
 _LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+
+#: The dashboard keeps its token in localStorage, so a page that framed it
+#: could click Delete or Start scan as the user (clickjacking). The frontend
+#: is bundled, with no inline scripts or CDN assets, so 'self' covers it; the
+#: CSP is also a second layer behind textContent rendering of values that
+#: come from the network, such as PTR hostnames.
+_SECURITY_HEADERS = {
+    "X-Frame-Options": "DENY",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+}
+_CSP = (
+    "default-src 'self'; connect-src 'self'{websocket}; img-src 'self' data:; "
+    "frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+)
+#: /docs (Swagger UI) and /redoc load their scripts, styles, and fonts from a
+#: CDN and start with an inline script, so they get a policy of their own.
+_DOCS_CSP = (
+    "default-src 'self'; "
+    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+    "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; "
+    "font-src 'self' https://fonts.gstatic.com; "
+    "img-src 'self' data: https://fastapi.tiangolo.com https://cdn.jsdelivr.net; "
+    "worker-src 'self' blob:; connect-src 'self'; "
+    "frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+)
+_DOCS_PATHS = frozenset({"/docs", "/docs/oauth2-redirect", "/redoc"})
+#: What a Host header may look like before it is repeated in a policy.
+_HOST_HEADER = re.compile(r"[A-Za-z0-9.\-]+(:\d{1,5})?|\[[0-9A-Fa-f:.]+\](:\d{1,5})?")
+
+
+def _content_security_policy(path: str, host: str) -> str:
+    if path in _DOCS_PATHS:
+        return _DOCS_CSP
+    # CSP3 lets 'self' cover ws:// and wss:// to the same host, but older
+    # browsers need the WebSocket origin spelled out.
+    websocket = f" ws://{host} wss://{host}" if _HOST_HEADER.fullmatch(host) else ""
+    return _CSP.format(websocket=websocket)
+
 
 AUTH_ERROR = (
     "Missing or invalid access token. Open IPMG Web with the link that "
@@ -537,6 +577,21 @@ def _register_websocket(app: FastAPI, manager: ScanManager, token: str) -> None:
             manager.unsubscribe(queue)
 
 
+def _install_security_headers(app: FastAPI) -> None:
+    """Send the security headers on every HTTP response: API, pages, and assets."""
+
+    @app.middleware("http")
+    async def security_headers(request: Request, call_next):
+        response = await call_next(request)
+        for name, value in _SECURITY_HEADERS.items():
+            response.headers.setdefault(name, value)
+        response.headers.setdefault(
+            "Content-Security-Policy",
+            _content_security_policy(request.url.path, request.headers.get("host", "")),
+        )
+        return response
+
+
 def _register_error_handlers(app: FastAPI) -> None:
     """Give every error the one :class:`ErrorResponse` shape."""
 
@@ -652,6 +707,7 @@ def create_app(
     if metrics_sources is not None:
         _register_metrics_route(app, database, token, metrics_sources)
     _register_error_handlers(app)
+    _install_security_headers(app)
     _install_openapi(app)
 
     if STATIC_DIR.is_dir():

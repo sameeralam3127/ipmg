@@ -570,3 +570,75 @@ def test_web_command_passes_max_scans(monkeypatch):
     monkeypatch.setattr("ipmg.web.server.run_dashboard", lambda **kwargs: captured.update(kwargs))
     assert commands.run(["web", "--no-browser", "--max-scans", "4"]) == 0
     assert captured["max_scans"] == 4
+
+
+SECURITY_HEADERS = {
+    "x-frame-options": "DENY",
+    "x-content-type-options": "nosniff",
+    "referrer-policy": "no-referrer",
+}
+
+
+@pytest.mark.parametrize("path", ["/", "/index.html", "/js/app.js", "/api/v1/stats"])
+def test_every_response_carries_the_security_headers(client, path):
+    response = client.get(path)
+
+    for name, value in SECURITY_HEADERS.items():
+        assert response.headers[name] == value
+    policy = response.headers["content-security-policy"]
+    # Nothing may frame the dashboard: it is logged in through localStorage.
+    assert "frame-ancestors 'none'" in policy
+    assert "default-src 'self'" in policy
+    assert "base-uri 'none'" in policy
+    assert "unsafe-inline" not in policy
+
+
+def test_error_responses_carry_the_security_headers(anonymous):
+    response = anonymous.get("/api/v1/stats")
+
+    assert response.status_code == 401
+    assert response.headers["x-frame-options"] == "DENY"
+
+
+def test_csp_allows_the_dashboard_websocket(client):
+    policy = client.get("/", headers={"Host": "127.0.0.1:8080"}).headers["content-security-policy"]
+
+    assert "connect-src 'self' ws://127.0.0.1:8080 wss://127.0.0.1:8080;" in policy
+
+
+def test_csp_never_repeats_a_malformed_host_header(client):
+    policy = client.get("/", headers={"Host": "evil; script-src *"}).headers[
+        "content-security-policy"
+    ]
+
+    assert "evil" not in policy
+    assert "connect-src 'self';" in policy
+
+
+@pytest.mark.parametrize("path", ["/docs", "/redoc"])
+def test_api_docs_get_their_own_policy_for_the_cdn(client, path):
+    response = client.get(path)
+
+    assert response.status_code == 200
+    policy = response.headers["content-security-policy"]
+    assert "https://cdn.jsdelivr.net" in policy
+    assert "frame-ancestors 'none'" in policy
+    assert response.headers["x-frame-options"] == "DENY"
+
+
+def test_frontend_has_no_inline_scripts_or_styles():
+    # The strict policy blocks both; a change that adds one would break the
+    # dashboard in every browser.
+    import re
+
+    from ipmg.web.app import STATIC_DIR
+
+    html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    assert not re.search(r"<script(?![^>]*\bsrc=)[^>]*>", html)
+    assert "<style" not in html
+    assert not re.search(r"\sstyle=", html)
+    assert not re.search(r"\son[a-z]+=", html)
+    for script in (STATIC_DIR / "js").glob("*.js"):
+        source = script.read_text(encoding="utf-8")
+        assert 'setAttribute("style"' not in source, script.name
+        assert "eval(" not in source and "new Function" not in source, script.name
