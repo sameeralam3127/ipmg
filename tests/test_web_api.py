@@ -476,3 +476,37 @@ def test_record_scan_is_one_transaction(tmp_path, monkeypatch):
         db.record_scan("manual", [HostResult("10.0.0.1", "Active", 1.0)], {}, 1.0)
 
     assert db.list_scans() == []
+
+
+def test_deleting_a_running_scan_is_refused_until_it_stops(tmp_path, monkeypatch):
+    import threading
+
+    release = threading.Event()
+    monkeypatch.setattr(
+        "ipmg.core.engine.ping_ip", lambda *_a: (release.wait(5), ("Active", 1.0))[1]
+    )
+    app = create_app(Database(tmp_path / "delete.db"), token="test-token")
+    with TestClient(app, headers={"Authorization": "Bearer test-token"}) as client:
+        scan_id = client.post("/api/v1/scans", json={"targets": "10.0.0.1", "threads": 1}).json()[
+            "id"
+        ]
+
+        refused = client.delete(f"/api/v1/scans/{scan_id}")
+        assert refused.status_code == 409
+        assert "Cancel it first" in refused.json()["detail"]
+        # Still there, and its worker is still running.
+        assert client.get(f"/api/v1/scans/{scan_id}").status_code == 200
+        assert client.post(f"/api/v1/scans/{scan_id}/cancel").status_code == 200
+
+        release.set()
+        wait_for_completion(client, scan_id)
+        assert client.delete(f"/api/v1/scans/{scan_id}").status_code == 204
+        assert client.get(f"/api/v1/scans/{scan_id}").status_code == 404
+
+
+def test_deleting_a_finished_scan_works(client):
+    scan_id = client.post("/api/v1/scans", json={"targets": "10.0.0.1"}).json()["id"]
+    wait_for_completion(client, scan_id)
+
+    assert client.delete(f"/api/v1/scans/{scan_id}").status_code == 204
+    assert client.delete(f"/api/v1/scans/{scan_id}").status_code == 404

@@ -16,6 +16,9 @@
         "404": {
           "application/json": "ErrorResponse"
         },
+        "409": {
+          "application/json": "ErrorResponse"
+        },
         "422": {
           "application/json": "ErrorResponse"
         }

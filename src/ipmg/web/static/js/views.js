@@ -615,10 +615,31 @@ export async function scanDetailView(root, scanId) {
   const deleteBtn = h("button", { class: "btn danger", type: "button" }, "Delete");
   deleteBtn.addEventListener("click", async () => {
     if (!confirm(`Delete scan #${scan.id} and its results?`)) return;
-    await api.deleteScan(scan.id);
+    try {
+      await api.deleteScan(scan.id);
+    } catch (err) {
+      toast(`Could not delete scan #${scan.id}: ${err.message}`, "error");
+      return;
+    }
     toast(`Scan #${scan.id} deleted.`);
     location.hash = "#/history";
   });
+  if (scan.status === "running") {
+    // The server refuses to delete a running scan: offer Cancel first.
+    deleteBtn.disabled = true;
+    deleteBtn.title = "Cancel the scan before deleting it";
+    const cancelBtn = h("button", { class: "btn danger", type: "button" }, "Cancel scan");
+    cancelBtn.addEventListener("click", async () => {
+      try {
+        await api.cancelScan(scan.id);
+        toast(`Scan #${scan.id} is stopping.`);
+        cancelBtn.disabled = true;
+      } catch (err) {
+        toast(`Could not cancel scan #${scan.id}: ${err.message}`, "error");
+      }
+    });
+    toolbar.append(cancelBtn);
+  }
   toolbar.append(deleteBtn);
 
   const donutCard = h("div", { class: "card" }, h("h3", {}, "Status distribution"), statusDonut(scan.status_counts || {}));

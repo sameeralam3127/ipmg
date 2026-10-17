@@ -168,14 +168,23 @@ _COMMON_ERRORS: Dict[Union[int, str], Dict[str, Any]] = {
 }
 
 
-def _errors(*codes: int) -> Dict[Union[int, str], Dict[str, Any]]:
-    descriptions = {
-        400: "Invalid request",
-        404: "Scan not found",
-        409: "Scan is not running",
-        413: "Upload too large",
-    }
+_ERROR_DESCRIPTIONS = {
+    400: "Invalid request",
+    404: "Scan not found",
+    409: "Scan is not running",
+    413: "Upload too large",
+}
+
+
+def _errors(*codes: int, **described: str) -> Dict[Union[int, str], Dict[str, Any]]:
+    """OpenAPI error responses; ``e409="..."`` overrides one code's description."""
+    descriptions = {**_ERROR_DESCRIPTIONS}
+    descriptions.update({int(key[1:]): text for key, text in described.items()})
     return {code: {"model": ErrorResponse, "description": descriptions[code]} for code in codes}
+
+
+#: Deleting a scan while its worker is still writing would race those writes.
+DELETE_RUNNING_ERROR = "Scan is still running. Cancel it first, then delete it."
 
 
 def _file_response(media_types: Mapping[str, str], description: str) -> Dict[int, Dict[str, Any]]:
@@ -296,6 +305,8 @@ def _register_scan_routes(api: APIRouter, database: Database, manager: ScanManag
             raise HTTPException(status_code=404, detail="Scan not found")
         return database.get_results(scan_id, status=status, search=search)
 
+
+def _register_scan_control_routes(api: APIRouter, database: Database, manager: ScanManager) -> None:
     @api.post(
         "/scans/{scan_id}/cancel",
         response_model=ScanCancelled,
@@ -311,10 +322,12 @@ def _register_scan_routes(api: APIRouter, database: Database, manager: ScanManag
         "/scans/{scan_id}",
         status_code=204,
         response_class=Response,
-        responses=_errors(404),
+        responses=_errors(404, 409, e409="Scan is still running"),
         summary="Delete a scan and its results",
     )
     def delete_scan(scan_id: int) -> Response:
+        if manager.is_running(scan_id):
+            raise HTTPException(status_code=409, detail=DELETE_RUNNING_ERROR)
         if not database.delete_scan(scan_id):
             raise HTTPException(status_code=404, detail="Scan not found")
         return Response(status_code=204)
@@ -623,6 +636,7 @@ def create_app(
     )
     _register_overview_routes(api, database)
     _register_scan_routes(api, database, manager)
+    _register_scan_control_routes(api, database, manager)
     _register_report_routes(api, database)
     _register_diff_routes(api, history)
     _register_upload_route(api)
