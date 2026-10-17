@@ -93,12 +93,20 @@ class ResultWriter:
         self.flush()
 
 
+#: Recorded on a scan that IPMG Web could not finish because it was stopped.
+INTERRUPTED_ERROR = "IPMG Web stopped during the scan"
+
+#: Seconds shutdown waits for running scans to stop before marking them.
+SHUTDOWN_WAIT_S = 5.0
+
+
 class ScanManager:
     def __init__(self, db: Database) -> None:
         self._db = db
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._subscribers: Set[asyncio.Queue] = set()
         self._stops: Dict[int, threading.Event] = {}
+        self._threads: Dict[int, threading.Thread] = {}
         self._lock = threading.Lock()
 
     # ------------------------------------------------------ subscriptions
@@ -144,17 +152,52 @@ class ScanManager:
     def start_scan(self, ips: List[str], config: ScanConfig, source: str) -> int:
         scan_id = self._db.create_scan(source, len(ips), asdict(config))
         stop = threading.Event()
-        with self._lock:
-            self._stops[scan_id] = stop
-
         thread = threading.Thread(
             target=self._run,
             args=(scan_id, ips, config, stop),
             name=f"ipmg-scan-{scan_id}",
             daemon=True,
         )
+        with self._lock:
+            self._stops[scan_id] = stop
+            self._threads[scan_id] = thread
         thread.start()
         return scan_id
+
+    def is_running(self, scan_id: int) -> bool:
+        """Whether this process has a live worker for ``scan_id``."""
+        with self._lock:
+            return scan_id in self._stops
+
+    def running_count(self) -> int:
+        with self._lock:
+            return len(self._stops)
+
+    def recover(self) -> int:
+        """Mark scans another run of IPMG Web left ``running`` as interrupted.
+
+        Called at startup, before this process starts any scan of its own, so
+        every ``running`` row belongs to a process that stopped (a Ctrl+C, a
+        container restart, a crash) and no worker will ever finish it.
+        """
+        return self._db.interrupt_scans(INTERRUPTED_ERROR)
+
+    def shutdown(self, wait_s: float = SHUTDOWN_WAIT_S) -> None:
+        """Stop every running scan, and record any that do not stop in time."""
+        with self._lock:
+            stops = dict(self._stops)
+            threads = dict(self._threads)
+        for stop in stops.values():
+            stop.set()
+
+        # A stopped worker records its scan as cancelled on its way out; it
+        # only has the probes already in flight to wait for.
+        deadline = time.monotonic() + wait_s
+        for thread in threads.values():
+            thread.join(max(deadline - time.monotonic(), 0))
+        stuck = [scan_id for scan_id, thread in threads.items() if thread.is_alive()]
+        if stuck:
+            self._db.interrupt_scans(INTERRUPTED_ERROR, stuck)
 
     def cancel(self, scan_id: int) -> bool:
         with self._lock:
@@ -203,6 +246,7 @@ class ScanManager:
         finally:
             with self._lock:
                 self._stops.pop(scan_id, None)
+                self._threads.pop(scan_id, None)
 
         finished = ScanFinishedEvent(
             scan_id=scan_id,

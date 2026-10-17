@@ -88,9 +88,14 @@ class ScanRecord(ApiModel):
     source: str = Field(description="Where the targets came from, e.g. 'manual' or a filename")
     total: int = Field(description="Number of targets")
     completed: int = Field(description="Targets checked so far")
-    status: str = Field(description="'running', 'complete', 'cancelled', or 'failed'")
+    status: str = Field(
+        description="'running', 'complete', 'cancelled', 'failed', or 'interrupted' "
+        "(IPMG Web stopped before the scan finished)"
+    )
     config: Dict[str, Any] = Field(description="Scan settings used (timeout, count, threads, ...)")
-    error: Optional[str] = Field(description="Failure reason when status is 'failed'")
+    error: Optional[str] = Field(
+        description="Failure reason when status is 'failed' or 'interrupted'"
+    )
 
 
 class ScanSummary(ScanRecord):

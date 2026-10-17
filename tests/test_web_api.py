@@ -399,3 +399,80 @@ def test_websocket_events_match_their_models(client):
         while not types or types[-1] != "scan_finished":
             types.append(adapter.validate_python(websocket.receive_json()).type)
     assert types == ["scan_started", "result", "scan_finished"]
+
+
+def test_scans_left_running_by_a_stopped_process_are_interrupted_on_startup(tmp_path):
+    db = Database(tmp_path / "stale.db")
+    # What a killed IPMG Web leaves behind: a scan that will never finish.
+    stale = db.create_scan("manual", 3, {})
+    finished = db.record_scan("manual", [], {}, 1.0)
+
+    app = create_app(db, token="test-token")
+    with TestClient(app, headers={"Authorization": "Bearer test-token"}) as client:
+        stats = client.get("/api/v1/stats").json()
+        scan = client.get(f"/api/v1/scans/{stale}").json()
+        cancel = client.post(f"/api/v1/scans/{stale}/cancel")
+
+    assert stats["running_scans"] == []
+    assert scan["status"] == "interrupted"
+    assert scan["error"] == "IPMG Web stopped during the scan"
+    assert scan["finished_at"]
+    assert cancel.status_code == 409
+    assert db.get_scan(finished)["status"] == "complete"
+
+
+def test_shutdown_stops_running_scans_and_records_them(tmp_path, monkeypatch):
+    import threading
+
+    release = threading.Event()
+
+    def slow_ping(_ip, _timeout, _count):
+        release.wait(0.2)
+        return ("Active", 1.0)
+
+    monkeypatch.setattr("ipmg.core.engine.ping_ip", slow_ping)
+    db = Database(tmp_path / "shutdown.db")
+    app = create_app(db, token="test-token")
+    with TestClient(app, headers={"Authorization": "Bearer test-token"}) as client:
+        targets = "\n".join(f"10.0.0.{n}" for n in range(1, 101))
+        scan_id = client.post("/api/v1/scans", json={"targets": targets, "threads": 1}).json()["id"]
+    # Leaving the block runs the app's shutdown.
+
+    scan = db.get_scan(scan_id)
+    assert scan["status"] == "cancelled"
+    assert scan["completed"] < 100
+
+
+def test_shutdown_marks_a_scan_that_will_not_stop_as_interrupted(tmp_path):
+    import threading
+
+    from ipmg.web.manager import ScanManager
+
+    db = Database(tmp_path / "stuck.db")
+    manager = ScanManager(db)
+    scan_id = db.create_scan("manual", 1, {})
+    stuck = threading.Thread(target=threading.Event().wait, args=(5,), daemon=True)
+    stuck.start()
+    manager._stops[scan_id] = threading.Event()
+    manager._threads[scan_id] = stuck
+
+    manager.shutdown(wait_s=0.1)
+
+    assert db.get_scan(scan_id)["status"] == "interrupted"
+
+
+def test_record_scan_is_one_transaction(tmp_path, monkeypatch):
+    # A CLI killed while recording must not leave a scan stuck at "running".
+    from ipmg.core.engine import HostResult
+    from ipmg.infrastructure import database as database_module
+
+    db = Database(tmp_path / "atomic.db")
+
+    def die(*_args, **_kwargs):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(database_module.Database, "_insert_results", staticmethod(die))
+    with pytest.raises(KeyboardInterrupt):
+        db.record_scan("manual", [HostResult("10.0.0.1", "Active", 1.0)], {}, 1.0)
+
+    assert db.list_scans() == []

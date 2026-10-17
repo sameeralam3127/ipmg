@@ -53,6 +53,8 @@ const SCAN_STATE_COLORS = {
   running: "var(--st-timeout)",
   complete: "var(--st-active)",
   failed: "var(--st-inactive)",
+  // IPMG Web stopped mid-scan: shown like a failure.
+  interrupted: "var(--st-inactive)",
   cancelled: "var(--muted)",
 };
 

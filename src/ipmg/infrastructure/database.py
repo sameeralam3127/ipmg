@@ -33,6 +33,10 @@ BUSY_TIMEOUT_S = 30.0
 #: Scan states whose results are complete enough to be used as a baseline.
 COMPARABLE_STATUSES = ("complete", "cancelled")
 
+#: A scan whose process stopped before it finished: IPMG Web was stopped or
+#: crashed mid-scan, or a scan row was otherwise left "running".
+INTERRUPTED_STATUS = "interrupted"
+
 # Written out rather than interpolated so no SQL is ever built from variables.
 # The two ``?`` placeholders bind COMPARABLE_STATUSES, in order.
 _PREVIOUS_SCAN_SQL = "SELECT id FROM scans WHERE id < ? AND status IN (?, ?)"
@@ -132,6 +136,13 @@ class Database:
 
     def add_results(self, scan_id: int, results: Iterable[HostResult]) -> int:
         """Insert many results in one transaction; returns the number stored."""
+        with self._session() as conn:
+            return self._insert_results(conn, scan_id, results)
+
+    @staticmethod
+    def _insert_results(
+        conn: sqlite3.Connection, scan_id: int, results: Iterable[HostResult]
+    ) -> int:
         checked_at = _now()
         rows = [
             (
@@ -147,18 +158,16 @@ class Database:
         ]
         if not rows:
             return 0
-
-        with self._session() as conn:
-            conn.executemany(
-                "INSERT INTO results "
-                "(scan_id, ip, status, latency, hostname, open_ports, checked_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                rows,
-            )
-            conn.execute(
-                "UPDATE scans SET completed = completed + ? WHERE id = ?",
-                (len(rows), scan_id),
-            )
+        conn.executemany(
+            "INSERT INTO results "
+            "(scan_id, ip, status, latency, hostname, open_ports, checked_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            rows,
+        )
+        conn.execute(
+            "UPDATE scans SET completed = completed + ? WHERE id = ?",
+            (len(rows), scan_id),
+        )
         return len(rows)
 
     def finish_scan(self, scan_id: int, status: str, duration_s: float) -> None:
@@ -183,11 +192,38 @@ class Database:
         duration_s: float,
         status: str = "complete",
     ) -> int:
-        """Persist an already-finished scan (used by the CLI) in one go."""
-        scan_id = self.create_scan(source, len(results), config)
-        self.add_results(scan_id, results)
-        self.finish_scan(scan_id, status, duration_s)
+        """Persist an already-finished scan (used by the CLI) in one go.
+
+        One transaction: a CLI killed halfway leaves no scan behind, rather
+        than one stuck at "running" that nothing would ever finish.
+        """
+        now = _now()
+        with self._session() as conn:
+            cursor = conn.execute(
+                "INSERT INTO scans "
+                "(started_at, finished_at, duration_s, source, total, status, config) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (now, now, round(duration_s, 3), source, len(results), status, json.dumps(config)),
+            )
+            scan_id = int(cursor.lastrowid)
+            self._insert_results(conn, scan_id, results)
         return scan_id
+
+    def interrupt_scans(self, error: str, scan_ids: Optional[Sequence[int]] = None) -> int:
+        """Mark ``running`` scans as interrupted; all of them unless ``scan_ids`` is given.
+
+        Returns how many were marked. Only rows still ``running`` change, so a
+        scan that finished in the meantime keeps its real outcome.
+        """
+        update = "UPDATE scans SET status = ?, finished_at = ?, error = ? WHERE status = 'running'"
+        params = (INTERRUPTED_STATUS, _now(), error)
+        with self._session() as conn:
+            if scan_ids is None:
+                return conn.execute(update, params).rowcount
+            return sum(
+                conn.execute(update + " AND id = ?", (*params, scan_id)).rowcount
+                for scan_id in scan_ids
+            )
 
     def get_scan(self, scan_id: int) -> Optional[Dict[str, Any]]:
         with self._session() as conn:

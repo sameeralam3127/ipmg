@@ -603,7 +603,10 @@ def create_app(
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
         manager.attach_loop(asyncio.get_running_loop())
+        manager.recover()
         yield
+        # Off the event loop: waiting for the workers blocks.
+        await asyncio.get_running_loop().run_in_executor(None, manager.shutdown)
 
     app = FastAPI(
         title="IPMG Web", version=__version__, description=API_DESCRIPTION, lifespan=lifespan

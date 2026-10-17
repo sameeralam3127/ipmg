@@ -138,7 +138,11 @@ blocks, ranges, and hostnames separated by newlines, commas, or spaces) or
 | `dns_timeout` | `2.0` | Seconds a reverse DNS lookup may take before the host is `Unresolvable`, clamped to 0.1-60 |
 | `resolve_active_only` | `false` | Only reverse-resolve hosts that answered |
 
-A scan's `status` is `running`, then `complete`, `cancelled`, or `failed`.
+A scan's `status` is `running`, then `complete`, `cancelled`, or `failed`. A scan
+that IPMG Web could not finish because it was stopped (Ctrl+C, a container
+restart, a crash) is `interrupted`, with the reason in `error`: running scans
+are stopped and recorded on shutdown, and any left `running` by a process
+that died are marked when IPMG Web next starts.
 
 ## Examples
 
