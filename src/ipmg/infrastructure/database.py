@@ -3,6 +3,10 @@
 One row per scan in ``scans`` plus one row per probed host in ``results``.
 Every public method is thread-safe: a lock guards a short-lived connection so
 background scan threads and the web request loop can write concurrently.
+
+The CLI and IPMG Web open the same file from separate processes, so the
+database runs in WAL mode, where readers never block the writer, and every
+connection waits up to :data:`BUSY_TIMEOUT_S` for a lock instead of failing.
 """
 
 from __future__ import annotations
@@ -20,6 +24,11 @@ from ipmg.core.engine import HostResult
 from ipmg.core.portscan import encode_ports
 
 DEFAULT_DB_PATH = Path.home() / ".ipmg" / "dashboard.db"
+
+#: Seconds a connection waits for another process's lock before giving up.
+#: SQLite's default of 5 made a CLI scan that finished during a long web read
+#: lose its history with "database is locked".
+BUSY_TIMEOUT_S = 30.0
 
 #: Scan states whose results are complete enough to be used as a baseline.
 COMPARABLE_STATUSES = ("complete", "cancelled")
@@ -78,6 +87,10 @@ class Database:
         self._lock = threading.Lock()
         Path(self._path).parent.mkdir(parents=True, exist_ok=True)
         with self._session() as conn:
+            # Persistent, so this only does work the first time. Filesystems
+            # without shared memory (some network shares) keep the old
+            # journal, which is slower but still correct.
+            conn.execute("PRAGMA journal_mode=WAL")
             conn.executescript(_SCHEMA)
             self._migrate(conn)
 
@@ -95,7 +108,7 @@ class Database:
     @contextmanager
     def _session(self):
         with self._lock:
-            conn = sqlite3.connect(self._path)
+            conn = sqlite3.connect(self._path, timeout=BUSY_TIMEOUT_S)
             conn.row_factory = sqlite3.Row
             conn.execute("PRAGMA foreign_keys = ON")
             try:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import threading
 import time
 from dataclasses import asdict
@@ -24,6 +25,72 @@ SUBSCRIBER_QUEUE_LIMIT = 1000
 
 #: Queued in place of an event to tell the WebSocket handler to close.
 OVERFLOW = None
+
+#: A running scan stores its results this many hosts at a time, or whatever
+#: has arrived every RESULT_FLUSH_S seconds, whichever comes first. One
+#: transaction per host was ~100x slower and held the database lock, which
+#: every API request also takes, for the whole of a large scan.
+RESULT_BATCH_SIZE = 200
+RESULT_FLUSH_S = 0.25
+
+log = logging.getLogger(__name__)
+
+
+class ResultWriter:
+    """Batch one scan's results into the database as they arrive.
+
+    :meth:`add` is called for every host. Results are written when a batch
+    fills, and a background thread writes whatever is waiting every
+    :data:`RESULT_FLUSH_S` seconds, so a slow scan's results still reach the
+    REST API promptly. :meth:`close` writes the rest.
+    """
+
+    def __init__(self, db: Database, scan_id: int) -> None:
+        self._db = db
+        self._scan_id = scan_id
+        self._pending: List[HostResult] = []
+        self._lock = threading.Lock()
+        # Held across each write, so batches are stored in arrival order.
+        self._write_lock = threading.Lock()
+        self._stop = threading.Event()
+        self._flusher = threading.Thread(
+            target=self._flush_periodically, name=f"ipmg-results-{scan_id}", daemon=True
+        )
+        self._flusher.start()
+
+    def add(self, result: HostResult) -> None:
+        with self._lock:
+            self._pending.append(result)
+            full = len(self._pending) >= RESULT_BATCH_SIZE
+        if full:
+            self.flush()
+
+    def flush(self) -> None:
+        with self._write_lock:
+            with self._lock:
+                batch, self._pending = self._pending, []
+            if not batch:
+                return
+            try:
+                self._db.add_results(self._scan_id, batch)
+            except BaseException:
+                # Put them back for the next attempt; close() raises if that
+                # one fails too, which fails the scan.
+                with self._lock:
+                    self._pending[:0] = batch
+                raise
+
+    def _flush_periodically(self) -> None:
+        while not self._stop.wait(RESULT_FLUSH_S):
+            try:
+                self.flush()
+            except Exception:
+                log.debug("periodic result flush failed", exc_info=True)
+
+    def close(self) -> None:
+        self._stop.set()
+        self._flusher.join()
+        self.flush()
 
 
 class ScanManager:
@@ -108,9 +175,12 @@ class ScanManager:
     ) -> None:
         started_at = time.perf_counter()
         self._broadcast(ScanStartedEvent(scan_id=scan_id, total=len(ips)).model_dump())
+        writer = ResultWriter(self._db, scan_id)
 
         def on_result(result: HostResult, completed: int, total: int) -> None:
-            self._db.add_result(scan_id, result)
+            writer.add(result)
+            # Events still go out per host: the live view should not wait
+            # for the database batch.
             event = ResultEvent(
                 scan_id=scan_id,
                 completed=completed,
@@ -120,7 +190,10 @@ class ScanManager:
             self._broadcast(event.model_dump())
 
         try:
-            execute_scan(ips, config, on_result=on_result, should_stop=stop.is_set)
+            try:
+                execute_scan(ips, config, on_result=on_result, should_stop=stop.is_set)
+            finally:
+                writer.close()
         except Exception as exc:
             self._db.fail_scan(scan_id, str(exc))
             final_status = "failed"

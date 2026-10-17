@@ -101,3 +101,26 @@ def test_result_search_treats_wildcards_literally(tmp_path):
     # A bare wildcard matches the literal '%' only, not every row.
     assert [row["ip"] for row in db.get_results(scan_id, search="%")] == ["10.0.0.1"]
     assert db.get_results(scan_id, search="_") == []
+
+
+def test_database_uses_wal_and_a_long_busy_timeout(tmp_path, monkeypatch):
+    import sqlite3
+
+    from ipmg.infrastructure import database as database_module
+
+    timeouts = []
+    real_connect = sqlite3.connect
+
+    def spy(*args, **kwargs):
+        timeouts.append(kwargs.get("timeout"))
+        return real_connect(*args, **kwargs)
+
+    monkeypatch.setattr(database_module.sqlite3, "connect", spy)
+    db = database_module.Database(tmp_path / "wal.db")
+    db.list_scans()
+
+    # Readers in one process (IPMG Web) never block a writer in another (a CLI scan).
+    with real_connect(str(tmp_path / "wal.db")) as conn:
+        assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+    assert timeouts and set(timeouts) == {database_module.BUSY_TIMEOUT_S}
+    assert database_module.BUSY_TIMEOUT_S >= 30
