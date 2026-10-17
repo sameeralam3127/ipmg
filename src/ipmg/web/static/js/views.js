@@ -286,16 +286,19 @@ export async function newScanView(root) {
     numField("Ping count", "count", "1", { min: 1, max: 10 }),
     numField("Timeout (s)", "timeout", "2", { min: 1, max: 60 }),
     numField("Threads", "threads", "50", { min: 1, max: 500 }),
-    numField("DNS cache TTL (s)", "dns_cache_ttl", "300", { min: 0, max: 86400 })
+    numField("DNS cache TTL (s)", "dns_cache_ttl", "300", { min: 0, max: 86400 }),
+    numField("DNS timeout (s)", "dns_timeout", "2", { min: 0.1, max: 60, step: 0.1 })
   );
 
   const resolveCheck = h("label", { class: "check" }, h("input", { type: "checkbox", name: "resolve" }), "Resolve hostnames (reverse DNS)");
+  const activeOnlyCheck = h("label", { class: "check" }, h("input", { type: "checkbox", name: "resolve_active_only" }), "Only resolve hosts that answer");
   const submit = h("button", { class: "btn", type: "submit" }, "Start Scan");
 
   form.append(
     h("label", { class: "field" }, h("span", {}, "Targets"), targetsInput),
     configGrid,
     resolveCheck,
+    activeOnlyCheck,
     submit
   );
 
@@ -312,7 +315,9 @@ export async function newScanView(root) {
         timeout: Number(data.get("timeout")),
         threads: Number(data.get("threads")),
         dns_cache_ttl: Number(data.get("dns_cache_ttl")),
+        dns_timeout: Number(data.get("dns_timeout")),
         resolve: data.get("resolve") === "on",
+        resolve_active_only: data.get("resolve_active_only") === "on",
       });
       toast(`Scan #${scan.id} created successfully.`);
       location.hash = `#/monitor/${scan.id}`;

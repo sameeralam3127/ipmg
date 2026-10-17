@@ -58,6 +58,14 @@ class ScanRequest(BaseModel):
     dns_cache_ttl: int = Field(
         default=300, description="Seconds to cache DNS lookups (clamped to 0-86400)"
     )
+    dns_timeout: float = Field(
+        default=2.0,
+        description="Seconds a reverse DNS lookup may take before the host is recorded "
+        "as Unresolvable (clamped to 0.1-60)",
+    )
+    resolve_active_only: bool = Field(
+        default=False, description="Only reverse-resolve hosts that answered"
+    )
 
 
 class ScanCreated(ApiModel):

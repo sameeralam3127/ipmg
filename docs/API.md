@@ -135,6 +135,8 @@ blocks, ranges, and hostnames separated by newlines, commas, or spaces) or
 | `threads` | `50` | Concurrent workers, clamped to 1-500 |
 | `resolve` | `false` | Reverse-resolve hostnames |
 | `dns_cache_ttl` | `300` | Seconds, clamped to 0-86400 |
+| `dns_timeout` | `2.0` | Seconds a reverse DNS lookup may take before the host is `Unresolvable`, clamped to 0.1-60 |
+| `resolve_active_only` | `false` | Only reverse-resolve hosts that answered |
 
 A scan's `status` is `running`, then `complete`, `cancelled`, or `failed`.
 

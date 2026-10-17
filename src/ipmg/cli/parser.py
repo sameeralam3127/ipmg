@@ -7,6 +7,7 @@ import argparse
 from ipmg import __version__
 from ipmg.cli.config import add_config_arguments, config_help
 from ipmg.core.discovery import DISCOVERY_FAMILIES
+from ipmg.core.engine import DEFAULT_DNS_TIMEOUT_S
 from ipmg.core.portscan import DEFAULT_PORTS, parse_port_list
 from ipmg.infrastructure.file_io import DEFAULT_INPUT_FILE
 from ipmg.infrastructure.incremental import (
@@ -283,6 +284,21 @@ def build_parser() -> argparse.ArgumentParser:
         default=300,
         metavar="SECONDS",
         help="Cache reverse DNS results for this many seconds (default: 300).",
+    )
+    parser.add_argument(
+        "--dns-timeout",
+        type=float,
+        default=DEFAULT_DNS_TIMEOUT_S,
+        metavar="SECONDS",
+        help=(
+            "Record a host as Unresolvable when its reverse DNS lookup takes longer "
+            f"(default: {DEFAULT_DNS_TIMEOUT_S:g}, range 0.1-60)."
+        ),
+    )
+    parser.add_argument(
+        "--resolve-active-only",
+        action="store_true",
+        help="With --resolve, only look up hosts that answered the probe.",
     )
     parser.add_argument(
         "--interval",

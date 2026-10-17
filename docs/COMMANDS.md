@@ -166,9 +166,16 @@ hostname) are skipped.
 ```bash
 ipmg --input targets.txt --resolve                       # reverse DNS (PTR) name for each host
 ipmg --input targets.txt --resolve --dns-cache-ttl 0     # don't cache names (default: 300 seconds)
+ipmg --input 10.0.0.0/16 --resolve --resolve-active-only # only look up hosts that answered
+ipmg --input targets.txt --resolve --dns-timeout 5       # wait longer for a slow resolver
 ```
 
-Hosts without a PTR record show `Unresolvable` — that is normal.
+Hosts without a PTR record show `Unresolvable` — that is normal. So do hosts
+whose lookup takes longer than `--dns-timeout` (default 2 seconds, range
+0.1–60): a resolver that has stopped answering costs each host that long, not
+the system resolver's own retry period of up to 30 seconds, and Ctrl+C never
+waits on it. On a large, sparse range, `--resolve-active-only` skips the PTR
+query for every address that did not answer, which is usually most of them.
 
 ```bash
 ipmg --input targets.txt --scan-ports                                   # default port list

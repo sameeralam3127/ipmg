@@ -11,7 +11,7 @@ from typing import List, Optional, Tuple
 
 from ipmg.core.diff import DiffOptions
 from ipmg.core.discovery import discover_targets
-from ipmg.core.engine import HostResult, ScanConfig, execute_scan
+from ipmg.core.engine import DEFAULT_DNS_TIMEOUT_S, HostResult, ScanConfig, execute_scan
 from ipmg.core.health import HealthPolicy, HostsDownError, check_health
 from ipmg.core.portscan import DEFAULT_PORTS
 from ipmg.exceptions import FileIOError, HistoryError
@@ -162,6 +162,8 @@ def _config_from_args(args) -> ScanConfig:
         scan_ports=getattr(args, "scan_ports", False),
         ports=tuple(getattr(args, "ports", None) or DEFAULT_PORTS),
         port_timeout=getattr(args, "port_timeout", 1.0),
+        dns_timeout=getattr(args, "dns_timeout", DEFAULT_DNS_TIMEOUT_S),
+        resolve_active_only=bool(getattr(args, "resolve_active_only", False)),
     ).clamped()
 
 

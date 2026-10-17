@@ -266,6 +266,8 @@ def _register_scan_routes(api: APIRouter, database: Database, manager: ScanManag
             threads=request.threads,
             resolve=request.resolve,
             dns_cache_ttl=request.dns_cache_ttl,
+            dns_timeout=request.dns_timeout,
+            resolve_active_only=request.resolve_active_only,
         ).clamped()
         scan_id = manager.start_scan(ips, config, source=request.source)
         return {"id": scan_id, "total": len(ips)}

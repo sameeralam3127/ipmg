@@ -588,8 +588,10 @@
       "properties": {
         "count": "integer",
         "dns_cache_ttl": "integer",
+        "dns_timeout": "number",
         "ips": "array[string] | null",
         "resolve": "boolean",
+        "resolve_active_only": "boolean",
         "source": "string",
         "targets": "null | string",
         "threads": "integer",

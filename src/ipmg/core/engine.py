@@ -16,6 +16,10 @@ from ipmg.utils.helpers import HostnameCache, clamp_int
 #: threads x ports probe threads.
 MAX_PORT_PROBE_WORKERS = 128
 
+#: Seconds a reverse DNS lookup may take before the host is recorded as
+#: Unresolvable. The system resolver's own retries can take 30 s.
+DEFAULT_DNS_TIMEOUT_S = 2.0
+
 
 @dataclass(frozen=True)
 class ScanConfig:
@@ -27,6 +31,9 @@ class ScanConfig:
     scan_ports: bool = False
     ports: Tuple[int, ...] = DEFAULT_PORTS
     port_timeout: float = 1.0
+    dns_timeout: float = DEFAULT_DNS_TIMEOUT_S
+    #: Skip the PTR lookup for hosts that did not answer.
+    resolve_active_only: bool = False
 
     def clamped(self) -> "ScanConfig":
         return ScanConfig(
@@ -38,6 +45,8 @@ class ScanConfig:
             scan_ports=self.scan_ports,
             ports=tuple(self.ports),
             port_timeout=max(min(self.port_timeout, 30.0), 0.1),
+            dns_timeout=max(min(float(self.dns_timeout), 60.0), 0.1),
+            resolve_active_only=self.resolve_active_only,
         )
 
 
@@ -67,7 +76,13 @@ def execute_scan(
     """
     config = config.clamped()
     ips = list(ip_list)
-    cache = HostnameCache(config.dns_cache_ttl) if config.resolve else None
+    cache = (
+        HostnameCache(
+            config.dns_cache_ttl, timeout_s=config.dns_timeout, max_workers=config.threads
+        )
+        if config.resolve
+        else None
+    )
     results: List[HostResult] = []
 
     port_executor: Optional[concurrent.futures.ThreadPoolExecutor] = None
@@ -102,9 +117,13 @@ def execute_scan(
         executor.shutdown(wait=False, cancel_futures=True)
         raise
     finally:
+        # Each in-flight probe waits at most dns_timeout for its name, so
+        # this returns promptly even when the resolver has stopped answering.
         executor.shutdown(wait=True)
         if port_executor is not None:
             port_executor.shutdown(wait=True)
+        if cache is not None:
+            cache.close()
 
     return results
 
@@ -128,7 +147,8 @@ def _probe_host(
     except Exception:
         status, latency = "Error", None
 
-    hostname = cache.resolve(ip) if cache else ""
+    resolve = cache is not None and (status == "Active" or not config.resolve_active_only)
+    hostname = cache.resolve(ip) if resolve else ""
     open_ports: Tuple[int, ...] = ()
     if config.scan_ports and status == "Active":
         open_ports = tuple(
