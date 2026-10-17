@@ -1,0 +1,33 @@
+# IPMG Web, bound to 127.0.0.1 only: reach it through an SSH tunnel or a
+# reverse proxy with TLS. See docs/SERVICES.md.
+
+[Unit]
+Description=IPMG Web (local browser UI and REST API)
+Documentation=https://github.com/sameeralam3127/ipmg/blob/main/docs/SERVICES.md
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=ipmg
+Group=ipmg
+StateDirectory=ipmg
+WorkingDirectory=/var/lib/ipmg
+# IPMG_WEB_TOKEN=<at least 16 characters>, so the link survives a restart:
+#   python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+EnvironmentFile=-/etc/ipmg/web.env
+# CHANGE: the ipmg executable. Keep --host 127.0.0.1.
+ExecStart=/usr/local/bin/ipmg web --host 127.0.0.1 --port 8080 --no-browser \
+    --db /var/lib/ipmg/history.db
+Restart=on-failure
+RestartSec=10
+
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+
+[Install]
+WantedBy=multi-user.target

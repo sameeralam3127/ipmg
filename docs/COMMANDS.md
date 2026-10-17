@@ -370,8 +370,8 @@ ipmg --input targets.txt --formats xlsx csv json jsonl md --output audit
 
 Files are always named `<prefix>_<YYYYMMDD>_<HHMMSS>.<format>`, so repeated
 scans never overwrite each other. The prefix can include a folder
-(`--output reports/audit`), but the folder must already exist — otherwise the
-scan runs and then fails when it tries to save. The last command above writes, for example:
+(`--output reports/audit`), which is created before the scan starts if it does
+not exist. The last command above writes, for example:
 
 ```text
 audit_20260911_232230.xlsx
@@ -608,12 +608,13 @@ The reports and the history entry are written before the scan exits, so a
 failed check still leaves the evidence behind. With `--interval` the checks
 print a warning after every pass that fails them, and the scan keeps running.
 
-A scan-then-check job for cron or a systemd timer:
+Ready-made systemd units (a monitor, a check timer, IPMG Web) and a macOS
+launchd agent are in [`contrib/`](../contrib), with a guide in
+[SERVICES.md](SERVICES.md). A scan-then-check job for cron:
 
 ```bash
 #!/usr/bin/env bash
 cd /opt/ipmg-audit || exit 1
-mkdir -p reports    # --output needs the folder to exist
 ipmg --input targets.txt --formats csv --output reports/scan --fail-on-down
 scan_status=$?
 if [ "$scan_status" -eq 3 ]; then

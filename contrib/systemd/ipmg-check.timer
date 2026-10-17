@@ -1,0 +1,15 @@
+# Runs ipmg-check.service every 15 minutes. See docs/SERVICES.md.
+
+[Unit]
+Description=Run the IPMG check every 15 minutes
+Documentation=https://github.com/sameeralam3127/ipmg/blob/main/docs/SERVICES.md
+
+[Timer]
+# CHANGE: how often to check. OnCalendar=hourly or OnCalendar=*-*-* 07:00 work too.
+OnCalendar=*:0/15
+# Catch up once after the machine was off when a run was due.
+Persistent=true
+RandomizedDelaySec=30
+
+[Install]
+WantedBy=timers.target

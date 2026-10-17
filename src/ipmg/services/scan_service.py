@@ -8,6 +8,7 @@ import os
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
 from typing import List, Optional, Sequence, Tuple
 
 from ipmg.core.diff import DiffOptions
@@ -223,6 +224,21 @@ def _health_policy(args) -> HealthPolicy:
         fail_on_down=bool(getattr(args, "fail_on_down", False)),
         min_active_pct=getattr(args, "min_active", None),
     )
+
+
+def _ensure_output_folder(args) -> None:
+    """Create the folder ``--output`` names, before the scan rather than after it.
+
+    A missing folder used to fail the save only once the whole scan had run,
+    which for a service meant every pass was lost.
+    """
+    folder = Path(args.output).parent
+    if not args.formats or folder == Path("."):
+        return
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise FileIOError(f"Cannot create the report folder {folder}: {exc}") from exc
 
 
 def _ensure_input_file(args) -> None:
@@ -611,6 +627,7 @@ def run_scan(args) -> None:
     stream = _stream_options(args)
     incremental = _incremental_options(args)
     _ensure_input_file(args)
+    _ensure_output_folder(args)
     resume = _load_resume(args)
 
     period_s = (args.interval or 0) * 60

@@ -67,6 +67,29 @@ jobs:
             echo "::error::a shell was missing, so its completion was not tested"; exit 1
           fi
 
+  services:
+    # The contrib/ service templates, checked by systemd itself. The units
+    # name /usr/local/bin/ipmg and the ipmg user, so both are put in place.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install IPMG where the templates expect it
+        run: |
+          python -m venv "$RUNNER_TEMP/ipmg"
+          "$RUNNER_TEMP/ipmg/bin/pip" install ".[web]"
+          sudo ln -s "$RUNNER_TEMP/ipmg/bin/ipmg" /usr/local/bin/ipmg
+          sudo useradd --system --home-dir /var/lib/ipmg --shell /usr/sbin/nologin ipmg
+
+      - name: systemd-analyze verify
+        run: systemd-analyze verify contrib/systemd/*.service contrib/systemd/*.timer
+
   lowest-deps:
     # The oldest Python and the oldest version of every dependency that
     # pyproject.toml allows, so a floor like pandas>=2.2.2 is known to work.

@@ -490,3 +490,35 @@ def test_next_pass_delay_skips_a_slot_a_pass_overran():
     # A 7-minute pass in a 5-minute cadence waits for the 10-minute slot.
     assert next_pass_delay(0.0, 300.0, 420.0) == 180.0
     assert next_pass_delay(0.0, 300.0, 300.0) == 300.0
+
+
+def test_a_missing_report_folder_is_created_before_the_scan(tmp_path, stub_scan, monkeypatch):
+    from ipmg.infrastructure import file_io
+
+    monkeypatch.setattr("ipmg.services.scan_service.save_results", file_io.save_results)
+    stub_scan["statuses"] = {"10.0.0.1": ("Active", 1.0)}
+
+    run_scan(
+        scan_args(
+            tmp_path, history=False, formats=["csv"], output=str(tmp_path / "a" / "b" / "scan")
+        )
+    )
+
+    assert list((tmp_path / "a" / "b").glob("scan_*.csv"))
+
+
+def test_a_report_folder_that_cannot_be_created_fails_before_scanning(
+    tmp_path, stub_scan, monkeypatch
+):
+    from ipmg.exceptions import FileIOError
+
+    (tmp_path / "file").write_text("not a folder")
+    monkeypatch.setattr(
+        "ipmg.core.engine.ping_ip", lambda *_a: pytest.fail("scanned before checking the folder")
+    )
+    stub_scan["statuses"] = {"10.0.0.1": ("Active", 1.0)}
+
+    with pytest.raises(FileIOError, match="Cannot create the report folder"):
+        run_scan(
+            scan_args(tmp_path, history=False, formats=["csv"], output=str(tmp_path / "file" / "x"))
+        )

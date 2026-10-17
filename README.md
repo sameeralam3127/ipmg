@@ -482,6 +482,7 @@ Or pick a ready-made command:
 | See what changed since last time | `ipmg --input targets.txt --compare` |
 | Check which services are listening | `ipmg --input targets.txt --scan-ports` |
 | Keep scanning every 5 minutes | `ipmg --input targets.txt --interval 5` |
+| Keep it running after logout and reboots | the systemd and launchd templates in [docs/SERVICES.md](https://github.com/sameeralam3127/ipmg/blob/main/docs/SERVICES.md) |
 | Look back at earlier scans | `ipmg history` |
 | Compare two specific scans | `ipmg diff 12 14` |
 | Use IPMG Web in your browser instead | `ipmg web` |
