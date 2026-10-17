@@ -133,6 +133,23 @@ class HostResultRow(ApiModel):
     vendor: str = Field(default="", description="Vendor of the MAC address's prefix")
 
 
+class HttpCheckRow(ApiModel):
+    """One ``--http-check`` URL as a scan checked it."""
+
+    url: str
+    ok: bool = Field(description="Whether the status was one the check expected")
+    status_code: Optional[int] = Field(description="Final HTTP status; null if none came back")
+    response_ms: Optional[float] = Field(description="Time to the final response, in ms")
+    final_url: str = Field(description="Where redirects ended; the URL itself without any")
+    failure: str = Field(
+        description="Why it failed: dns, connect, tls, timeout, status, protocol, redirects, "
+        "or invalid; empty when it passed"
+    )
+    error: str = Field(description="Human-readable failure reason")
+    cert_expires: str = Field(description="Certificate expiry date (UTC) for verified HTTPS")
+    checked_at: str
+
+
 # ------------------------------------------------------------------- overview
 
 
@@ -221,11 +238,12 @@ class DiffSummary(ApiModel):
 class HostChangeModel(ApiModel):
     type: str = Field(
         description="new_host, host_removed, host_offline, host_online, ip_changed, "
-        "hostname_changed, latency_changed, service_changed, or mac_changed"
+        "hostname_changed, latency_changed, service_changed, mac_changed, http_failing, "
+        "http_recovered, or http_status_changed"
     )
     label: str
     severity: str = Field(description="'critical', 'warning', or 'info'")
-    ip: str
+    ip: str = Field(description="The host's IP; for http_* changes, the checked URL")
     hostname: str
     previous: Optional[str]
     current: Optional[str]

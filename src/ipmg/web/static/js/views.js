@@ -691,6 +691,46 @@ export async function scanDetailView(root, scanId) {
 
   root.append(toolbar, h("div", { class: "grid two-col" }, donutCard), tableHost);
   await refreshTable();
+
+  const checks = await api.httpChecks(scan.id).catch(() => []);
+  if (checks.length) root.append(httpChecksCard(checks));
+}
+
+function httpChecksCard(checks) {
+  const failed = checks.filter((check) => !check.ok).length;
+  return h(
+    "div",
+    { class: "card", style: "margin-top:14px" },
+    h("h3", {}, `HTTP checks (${checks.length}, ${failed} failed)`),
+    h(
+      "div",
+      { class: "table-wrap" },
+      h(
+        "table",
+        {},
+        h("thead", {}, h("tr", {}, ...["Result", "URL", "Status", "Time", "Detail", "Certificate"].map((t) => h("th", {}, t)))),
+        h(
+          "tbody",
+          {},
+          checks.map((check) => {
+            const pill = h("span", { class: "pill" }, check.ok ? "OK" : "Failed");
+            pill.style.setProperty("--pill-color", check.ok ? "var(--st-active)" : "var(--st-inactive)");
+            const detail = check.error || (check.final_url && check.final_url !== check.url ? `→ ${check.final_url}` : "");
+            return h(
+              "tr",
+              {},
+              h("td", {}, pill),
+              h("td", {}, check.url),
+              h("td", {}, check.status_code == null ? check.failure || "—" : String(check.status_code)),
+              h("td", {}, fmtLatency(check.response_ms)),
+              h("td", {}, detail || "—"),
+              h("td", {}, check.cert_expires || "—")
+            );
+          })
+        )
+      )
+    )
+  );
 }
 
 // ------------------------------------------------------------ inventory

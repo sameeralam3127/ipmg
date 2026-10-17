@@ -30,6 +30,16 @@ class ChangeType(str, Enum):
     #: A different MAC answers at the same IP (``--mac``): another device took
     #: the address, or something is impersonating it.
     MAC_CHANGED = "mac_changed"
+    #: ``--http-check`` changes. The change's ``ip`` holds the checked URL.
+    HTTP_FAILING = "http_failing"
+    HTTP_RECOVERED = "http_recovered"
+    HTTP_STATUS_CHANGED = "http_status_changed"
+
+
+#: Changes about a checked URL rather than a host.
+HTTP_CHANGE_TYPES = frozenset(
+    {ChangeType.HTTP_FAILING, ChangeType.HTTP_RECOVERED, ChangeType.HTTP_STATUS_CHANGED}
+)
 
 
 class Severity(str, Enum):
@@ -45,6 +55,9 @@ _SEVERITY_BY_TYPE: Dict[ChangeType, Severity] = {
     ChangeType.HOST_REMOVED: Severity.WARNING,
     ChangeType.SERVICE_CHANGED: Severity.WARNING,
     ChangeType.MAC_CHANGED: Severity.WARNING,
+    ChangeType.HTTP_FAILING: Severity.CRITICAL,
+    ChangeType.HTTP_STATUS_CHANGED: Severity.WARNING,
+    ChangeType.HTTP_RECOVERED: Severity.INFO,
     ChangeType.HOST_ONLINE: Severity.INFO,
     ChangeType.HOSTNAME_CHANGED: Severity.INFO,
     ChangeType.LATENCY_CHANGED: Severity.INFO,
@@ -72,6 +85,9 @@ CHANGE_LABELS: Dict[ChangeType, str] = {
     # is a move between failure modes (Timeout -> Unreachable), not a service.
     ChangeType.SERVICE_CHANGED: "Status changed",
     ChangeType.MAC_CHANGED: "MAC address changed",
+    ChangeType.HTTP_FAILING: "HTTP check failing",
+    ChangeType.HTTP_RECOVERED: "HTTP check recovered",
+    ChangeType.HTTP_STATUS_CHANGED: "HTTP status changed",
 }
 
 
@@ -89,6 +105,23 @@ class HostSnapshot:
     @property
     def reachable(self) -> bool:
         return self.status in REACHABLE_STATUSES
+
+
+@dataclass(frozen=True)
+class HttpSnapshot:
+    """One URL as checked by a single scan."""
+
+    url: str
+    ok: bool
+    status_code: Optional[int] = None
+    failure: str = ""
+
+    @property
+    def label(self) -> str:
+        """``200``, ``502``, ``timeout``: the check's result in one word."""
+        if self.status_code is not None and self.failure in ("", "status"):
+            return str(self.status_code)
+        return self.failure or "unknown"
 
 
 @dataclass(frozen=True)
@@ -213,7 +246,7 @@ class ScanDiff:
 
     @property
     def changed_hosts(self) -> int:
-        return len({change.ip for change in self.changes})
+        return len({change.ip for change in self.changes if change.type not in HTTP_CHANGE_TYPES})
 
     @property
     def unchanged_hosts(self) -> int:
@@ -221,6 +254,7 @@ class ScanDiff:
             change.ip
             for change in self.changes
             if change.type not in {ChangeType.NEW_HOST, ChangeType.HOST_REMOVED}
+            and change.type not in HTTP_CHANGE_TYPES
         }
         return max(self.compared_hosts - len(changed_in_both), 0)
 
@@ -431,6 +465,31 @@ def _compare_common_host(
     return changes
 
 
+def _compare_http(
+    baseline: Iterable[HttpSnapshot], current: Iterable[HttpSnapshot]
+) -> List[HostChange]:
+    """Changes in URLs both scans checked. A URL only one of them checked says
+    nothing about the service, so it is not reported."""
+    before = {check.url: check for check in baseline}
+    changes: List[HostChange] = []
+    for after in current:
+        previous = before.get(after.url)
+        if previous is None:
+            continue
+        if previous.ok and not after.ok:
+            change_type = ChangeType.HTTP_FAILING
+        elif after.ok and not previous.ok:
+            change_type = ChangeType.HTTP_RECOVERED
+        elif previous.label != after.label:
+            change_type = ChangeType.HTTP_STATUS_CHANGED
+        else:
+            continue
+        changes.append(
+            HostChange(type=change_type, ip=after.url, previous=previous.label, current=after.label)
+        )
+    return changes
+
+
 # ---------------------------------------------------------------- public API
 
 
@@ -440,8 +499,10 @@ def compare_snapshots(
     options: Optional[DiffOptions] = None,
     baseline_ref: Optional[ScanRef] = None,
     current_ref: Optional[ScanRef] = None,
+    baseline_http: Iterable[HttpSnapshot] = (),
+    current_http: Iterable[HttpSnapshot] = (),
 ) -> ScanDiff:
-    """Compare two sets of host snapshots and return every detected change."""
+    """Compare two sets of host snapshots (and HTTP checks) and return every change."""
     options = options or DiffOptions()
     before_by_ip = _index_by_ip(baseline)
     after_by_ip = _index_by_ip(current)
@@ -490,6 +551,7 @@ def compare_snapshots(
     common = before_by_ip.keys() & after_by_ip.keys()
     for ip in common:
         changes.extend(_compare_common_host(ip, before_by_ip[ip], after_by_ip[ip], options))
+    changes.extend(_compare_http(baseline_http, current_http))
 
     return ScanDiff(
         baseline=baseline_ref or ScanRef(label="baseline"),

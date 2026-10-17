@@ -516,6 +516,94 @@ def write_report(table: ReportTable, path: str, fmt: str) -> None:
     atomic_write_bytes(path, render_report(table, fmt))
 
 
+#: Columns of an HTTP check report, one row per URL.
+HTTP_COLUMNS = (
+    "URL",
+    "Result",
+    "Status Code",
+    "Response Time (ms)",
+    "Final URL",
+    "Failure",
+    "Error",
+    "Certificate Expires",
+    "Batch Timestamp",
+)
+
+
+def http_results_table(results, batch_timestamp: Any) -> ReportTable:
+    """``--http-check`` results as a report table."""
+    return ReportTable(
+        [
+            {
+                "URL": check.url,
+                "Result": check.outcome,
+                "Status Code": check.status_code,
+                "Response Time (ms)": check.response_ms,
+                "Final URL": check.final_url,
+                "Failure": check.failure,
+                "Error": check.error,
+                "Certificate Expires": check.cert_expires,
+                "Batch Timestamp": batch_timestamp,
+            }
+            for check in results
+        ],
+        columns=HTTP_COLUMNS,
+    )
+
+
+def _http_markdown(table: ReportTable) -> str:
+    failed = sum(1 for row in table.rows if row.get("Result") != "OK")
+    lines = [
+        "# IPMG HTTP Check Report",
+        "",
+        f"- Batch timestamp: {table.rows[0].get('Batch Timestamp') if table.rows else 'Unknown'}",
+        f"- URLs checked: {len(table)}",
+        f"- Failed: {failed}",
+        "",
+        "| Result | URL | Status | Time (ms) | Detail |",
+        "| --- | --- | ---: | ---: | --- |",
+    ]
+    for row in table.rows:
+        detail = row.get("Error") or (
+            row["Final URL"] if row.get("Final URL") != row.get("URL") else ""
+        )
+        lines.append(
+            "| "
+            + " | ".join(
+                _format_markdown_value(row.get(column))
+                for column in ("Result", "URL", "Status Code", "Response Time (ms)")
+            )
+            + f" | {_format_markdown_value(detail)} |"
+        )
+    lines.append("")
+    return "\n".join(lines)
+
+
+def save_http_results(
+    results,
+    base: str,
+    formats: list[str],
+    batch_timestamp: Any,
+    timestamp: str | None = None,
+) -> list[str]:
+    """Write ``--http-check`` results in every report format, beside the host reports."""
+    table = http_results_table(results, batch_timestamp)
+    ts = timestamp or timestamp_str()
+    saved: list[str] = []
+    for fmt in formats:
+        path = f"{base}_{ts}.{fmt}"
+        content = _http_markdown(table).encode("utf-8") if fmt == "md" else None
+        try:
+            atomic_write_bytes(path, content if content is not None else render_report(table, fmt))
+        except ValueError:
+            continue
+        saved.append(path)
+    if saved:
+        ui.blank()
+        ui.field_list("Saved", saved)
+    return saved
+
+
 def save_results(
     table: ReportTable, base: str, formats: list[str], timestamp: str | None = None
 ) -> list[str]:

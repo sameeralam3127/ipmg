@@ -250,6 +250,54 @@ connection pool `--scan-ports` uses.
 
 ---
 
+## HTTP checks
+
+A host can answer ping while the service on it is broken: a web server
+returning 502s, an expired certificate, a login page that times out.
+`--http-check` requests URLs and records what came back:
+
+```bash
+ipmg --http-check https://intranet.example.com/ https://grafana.example.com/login
+ipmg --input servers.txt --http-check https://app.example.com/health    # hosts and URLs together
+ipmg --http-check https://api.example.com/ --http-expect 200-299,401    # what counts as a pass
+ipmg --http-check https://lab.local/ --http-insecure                    # self-signed certificate
+ipmg --http-check https://app.example.com/ --interval 5 --compare --notify-slack
+```
+
+| Flag | Default | Meaning |
+| --- | --- | --- |
+| `--http-check URL ...` | none | URLs to check; repeat the flag or list several |
+| `--http-timeout SECONDS` | `5` | Time allowed per check, redirects included |
+| `--http-expect CODES` | `200-399` | Status codes that pass: ranges and single codes, comma-separated |
+| `--http-method GET\|HEAD` | `GET` | Request method; the body is never downloaded either way |
+| `--http-no-redirects` | follow | Check the redirect's own status instead of where it leads |
+| `--http-insecure` | verify | Skip TLS certificate verification |
+
+Each check records the status code, the time to the response, the URL that
+redirects ended on, the expiry date of the server's certificate (verified
+HTTPS only), and, if it failed, why: `dns`, `connect`, `tls`, `timeout`,
+`status` (an unexpected code), `protocol`, `redirects` (more than 10), or
+`invalid`. A failure is a result, never a failed scan. Checks run
+concurrently, at most `--threads` at a time.
+
+Without `--input` or `--discover`, only the URLs are checked, and history
+records the run under the source `http-checks`. Results print as their own
+table and are saved beside the host reports as
+`<prefix>_http_<timestamp>.<format>` in every `--formats` format (they are not
+part of `--json` or `--jsonl` on stdout). They are stored in the history, shown
+on the scan's page in IPMG Web, and compared like hosts:
+
+| Change | Severity | When |
+| --- | --- | --- |
+| `http_failing` | critical | a check that passed now fails |
+| `http_status_changed` | warning | the status or failure reason changed, but not pass/fail |
+| `http_recovered` | info | a failing check passes again |
+
+The change's `ip` field holds the URL. `--fail-on-down` also fails the run
+(exit status `3`) when any HTTP check failed.
+
+---
+
 ## Live output and logs
 
 ```bash

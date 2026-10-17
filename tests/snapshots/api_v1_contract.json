@@ -185,6 +185,32 @@
         "HTTPBearer"
       ]
     },
+    "GET /api/v1/scans/{scan_id}/http": {
+      "parameters": {
+        "scan_id": {
+          "in": "path",
+          "required": true,
+          "type": "integer"
+        }
+      },
+      "responses": {
+        "200": {
+          "application/json": "array[HttpCheckRow]"
+        },
+        "401": {
+          "application/json": "ErrorResponse"
+        },
+        "404": {
+          "application/json": "ErrorResponse"
+        },
+        "422": {
+          "application/json": "ErrorResponse"
+        }
+      },
+      "security": [
+        "HTTPBearer"
+      ]
+    },
     "GET /api/v1/scans/{scan_id}/report": {
       "parameters": {
         "fmt": {
@@ -515,6 +541,30 @@
         "latency",
         "open_ports",
         "status"
+      ]
+    },
+    "HttpCheckRow": {
+      "properties": {
+        "cert_expires": "string",
+        "checked_at": "string",
+        "error": "string",
+        "failure": "string",
+        "final_url": "string",
+        "ok": "boolean",
+        "response_ms": "null | number",
+        "status_code": "integer | null",
+        "url": "string"
+      },
+      "required": [
+        "cert_expires",
+        "checked_at",
+        "error",
+        "failure",
+        "final_url",
+        "ok",
+        "response_ms",
+        "status_code",
+        "url"
       ]
     },
     "ResultEvent": {

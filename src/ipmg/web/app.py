@@ -56,6 +56,7 @@ from ipmg.web.schemas import (
     Asset,
     ErrorResponse,
     HostResultRow,
+    HttpCheckRow,
     ScanCancelled,
     ScanCreated,
     ScanDiffModel,
@@ -358,6 +359,17 @@ def _register_scan_routes(api: APIRouter, database: Database, manager: ScanManag
         if database.get_scan(scan_id) is None:
             raise HTTPException(status_code=404, detail="Scan not found")
         return database.get_results(scan_id, status=status, search=search)
+
+    @api.get(
+        "/scans/{scan_id}/http",
+        response_model=List[HttpCheckRow],
+        responses=_errors(404),
+        summary="HTTP checks a scan made (ipmg --http-check)",
+    )
+    def get_http_checks(scan_id: int) -> List[Dict[str, Any]]:
+        if database.get_scan(scan_id) is None:
+            raise HTTPException(status_code=404, detail="Scan not found")
+        return database.get_http_checks(scan_id)
 
 
 def _register_scan_control_routes(api: APIRouter, database: Database, manager: ScanManager) -> None:

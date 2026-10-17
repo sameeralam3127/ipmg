@@ -8,12 +8,21 @@ import os
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List, Optional, Tuple
+from typing import List, Optional, Sequence, Tuple
 
 from ipmg.core.diff import DiffOptions
 from ipmg.core.discovery import discover_targets
 from ipmg.core.engine import DEFAULT_DNS_TIMEOUT_S, HostResult, ScanConfig, execute_scan
 from ipmg.core.health import HealthPolicy, HostsDownError, check_health
+from ipmg.core.httpcheck import (
+    DEFAULT_EXPECT,
+    DEFAULT_HTTP_TIMEOUT_S,
+    HttpCheckOptions,
+    HttpCheckResult,
+    format_expect,
+    parse_expect,
+    run_http_checks,
+)
 from ipmg.core.portscan import DEFAULT_PORTS
 from ipmg.exceptions import FileIOError, HistoryError, IPMGError
 from ipmg.infrastructure.file_io import (
@@ -21,6 +30,7 @@ from ipmg.infrastructure.file_io import (
     create_sample_file,
     describe_sources,
     load_all_targets,
+    save_http_results,
     save_results,
 )
 from ipmg.infrastructure.incremental import (
@@ -43,7 +53,7 @@ from ipmg.reporting.diff_report import export_diff, print_diff
 from ipmg.reporting.frames import ReportTable, report_columns, results_table
 from ipmg.reporting.live import DEFAULT_REFRESH_S, StreamOptions, scan_display
 from ipmg.reporting.machine import MachineOutput, MachineStream, write_array
-from ipmg.reporting.summary import print_summary
+from ipmg.reporting.summary import print_http_checks, print_summary
 from ipmg.services.history_service import HistoryService
 from ipmg.utils.helpers import current_timestamp, timestamp_str
 
@@ -54,6 +64,9 @@ DEFAULT_FORMATS = ("xlsx",)
 
 #: How the Config line names each --probe method.
 PROBE_LABELS = {"icmp": "ICMP", "tcp": "TCP", "icmp,tcp": "ICMP, then TCP"}
+
+#: The history source of a run that only made HTTP checks (no --input).
+HTTP_ONLY_SOURCE = "http-checks"
 
 
 @dataclass(frozen=True)
@@ -69,6 +82,10 @@ class ScanOutcome:
     timestamp: str
     #: Report file name prefix; a resumed scan keeps the one it started with.
     output: str
+    #: ``--http-check`` results, in the order the URLs were given.
+    http_results: List[HttpCheckResult] = field(default_factory=list)
+    #: Whether this pass probed hosts at all; a run of only HTTP checks does not.
+    scanned_hosts: bool = True
 
 
 @dataclass(frozen=True)
@@ -182,6 +199,24 @@ def _config_from_args(args) -> ScanConfig:
     ).clamped()
 
 
+def http_check_urls(args) -> List[str]:
+    return [url for url in (getattr(args, "http_check", None) or []) if url.strip()]
+
+
+def _http_options(args) -> HttpCheckOptions:
+    try:
+        expect = parse_expect(getattr(args, "http_expect", None) or DEFAULT_EXPECT)
+    except ValueError as exc:
+        raise FileIOError(f"--http-expect: {exc}") from exc
+    return HttpCheckOptions(
+        timeout_s=float(getattr(args, "http_timeout", DEFAULT_HTTP_TIMEOUT_S)),
+        method=getattr(args, "http_method", None) or "GET",
+        expect=expect,
+        follow_redirects=not bool(getattr(args, "http_no_redirects", False)),
+        verify_tls=not bool(getattr(args, "http_insecure", False)),
+    ).clamped()
+
+
 def _health_policy(args) -> HealthPolicy:
     """Read the --fail-on-down and --min-active checks off the parsed arguments."""
     return HealthPolicy(
@@ -197,7 +232,7 @@ def _ensure_input_file(args) -> None:
     creating it would silently scan the sample addresses instead of the hosts
     the user meant, so ``load_targets`` reports it as missing.
     """
-    if args.discover or args.input:
+    if args.discover or args.input or http_check_urls(args):
         return
     args.input = [DEFAULT_INPUT_FILE]
     if not os.path.exists(DEFAULT_INPUT_FILE):
@@ -209,9 +244,24 @@ def _ensure_input_file(args) -> None:
         )
 
 
-def _print_configuration(sources: List[str], targets: int, config: ScanConfig) -> None:
+def _print_configuration(
+    sources: List[str],
+    targets: int,
+    config: ScanConfig,
+    urls: Sequence[str] = (),
+    http: Optional[HttpCheckOptions] = None,
+) -> None:
     ping_word = "ping" if config.count == 1 else "pings"
     ui.blank()
+    if urls and http is not None:
+        ui.field(
+            "HTTP",
+            f"{ui.plural(len(urls), 'URL')} {ui.glyph('sep')} {http.method} {ui.glyph('sep')} "
+            f"{http.timeout_s:g}s timeout {ui.glyph('sep')} expect {format_expect(http.expect)}"
+            + ("" if http.verify_tls else f" {ui.glyph('sep')} TLS not verified"),
+        )
+        if not targets:
+            return
     # One source per line: a scan that merges a file with a few extra hosts
     # should show which hosts those were, not one run-together line.
     ui.field_list("Source", sources)
@@ -341,12 +391,18 @@ def _run_single_pass(
     output = resume.base if resume else args.output
     started_at = time.perf_counter()
 
+    urls = http_check_urls(args)
+    http = _http_options(args) if urls else None
     if args.discover:
         ip_list, sources = discover_targets(args.discover)
-    else:
+    elif args.input:
         sources = list(args.input)
         ip_list = load_all_targets(sources)
+    else:
+        # --http-check on its own: there are no hosts to probe.
+        ip_list, sources = [], [HTTP_ONLY_SOURCE]
     source = describe_sources(sources)
+    scanned_hosts = bool(args.discover or args.input)
 
     # Hosts the earlier run finished are kept only if they are still targets,
     # so resuming against an edited list never reports hosts it no longer has.
@@ -356,7 +412,7 @@ def _run_single_pass(
     scanned = {result.ip for result in previous}
     remaining = [ip for ip in ip_list if ip not in scanned]
 
-    _print_configuration(sources, len(ip_list), config)
+    _print_configuration(sources, len(ip_list) if scanned_hosts else 0, config, urls, http)
     if resume:
         _announce_resume(resume, len(previous), len(ip_list))
     columns = report_columns(config)
@@ -368,7 +424,14 @@ def _run_single_pass(
         if machine.stream
         else None
     )
-    results = previous + _run_pass(remaining, config, stream, report, machine_stream)
+    results = previous
+    if scanned_hosts:
+        results = previous + _run_pass(remaining, config, stream, report, machine_stream)
+    http_results: List[HttpCheckResult] = []
+    if urls:
+        # Within --threads, like the host probes, and after them, so the two
+        # never compete for the same budget.
+        http_results = run_http_checks(urls, http, max_workers=config.threads)
     duration = previous_elapsed_s + time.perf_counter() - started_at
 
     return ScanOutcome(
@@ -379,6 +442,8 @@ def _run_single_pass(
         source=source,
         timestamp=timestamp,
         output=output,
+        http_results=http_results,
+        scanned_hosts=scanned_hosts,
     )
 
 
@@ -425,6 +490,7 @@ def _store_and_compare(
             results=outcome.results,
             config=config,
             duration_s=outcome.duration_s,
+            http_checks=outcome.http_results,
         )
     except HistoryError as exc:
         ui.blank()
@@ -457,7 +523,9 @@ def _prune_reports(args, outcome: "ScanOutcome") -> None:
     keep = getattr(args, "keep_reports", None)
     if not keep:
         return
-    removed = prune_reports([outcome.output], keep, protect=outcome.timestamp)
+    removed = prune_reports(
+        [outcome.output, http_report_base(outcome.output)], keep, protect=outcome.timestamp
+    )
     if removed:
         ui.blank()
         ui.note(f"Removed {ui.plural(len(removed), 'older report')} (--keep-reports {keep}).")
@@ -476,15 +544,32 @@ def _scan_pass(
     """Scan once, write the reports and history, and say why it failed --fail-on-down."""
     outcome = _run_single_pass(args, config, stream, incremental, machine, resume)
 
-    print_summary(outcome.frame, outcome.batch_timestamp, outcome.duration_s)
+    if outcome.scanned_hosts:
+        print_summary(outcome.frame, outcome.batch_timestamp, outcome.duration_s)
+    if outcome.http_results:
+        print_http_checks(outcome.http_results)
     if machine.array:
         write_array(outcome.frame)
-    # Overwrites whatever the incremental writer left on those same paths,
-    # so a finished scan produces exactly the report it always did.
-    save_results(outcome.frame, outcome.output, args.formats, timestamp=outcome.timestamp)
+    if outcome.scanned_hosts:
+        # Overwrites whatever the incremental writer left on those same paths,
+        # so a finished scan produces exactly the report it always did.
+        save_results(outcome.frame, outcome.output, args.formats, timestamp=outcome.timestamp)
+    if outcome.http_results:
+        save_http_results(
+            outcome.http_results,
+            http_report_base(outcome.output),
+            args.formats,
+            batch_timestamp=outcome.batch_timestamp,
+            timestamp=outcome.timestamp,
+        )
     _prune_reports(args, outcome)
     _store_and_compare(history_options, config, outcome)
-    return check_health(outcome.results, health)
+    return check_health(outcome.results, health, outcome.http_results)
+
+
+def http_report_base(output: str) -> str:
+    """HTTP check reports sit beside the host reports: ``results_http_<timestamp>.csv``."""
+    return f"{output}_http"
 
 
 def next_pass_delay(cadence_start: float, period_s: float, now: float) -> float:

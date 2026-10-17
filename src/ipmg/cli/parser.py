@@ -8,6 +8,7 @@ from ipmg import __version__
 from ipmg.cli.config import add_config_arguments, config_help
 from ipmg.core.discovery import DISCOVERY_FAMILIES
 from ipmg.core.engine import DEFAULT_DNS_TIMEOUT_S, PROBE_METHODS
+from ipmg.core.httpcheck import DEFAULT_EXPECT, DEFAULT_HTTP_TIMEOUT_S, HTTP_METHODS, parse_expect
 from ipmg.core.portscan import DEFAULT_PORTS, parse_port_list
 from ipmg.core.wake import DEFAULT_BROADCAST, DEFAULT_PORT as DEFAULT_WAKE_PORT
 from ipmg.infrastructure.file_io import DEFAULT_INPUT_FILE
@@ -75,6 +76,14 @@ def _age(value: str):
         return parse_age(value)
     except ValueError as exc:
         raise argparse.ArgumentTypeError(str(exc)) from exc
+
+
+def _status_ranges(value: str) -> str:
+    try:
+        parse_expect(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+    return value
 
 
 def _percent(value: str) -> float:
@@ -390,6 +399,50 @@ def build_parser() -> argparse.ArgumentParser:
         default=1.0,
         metavar="SECONDS",
         help="Connect timeout per port, for --scan-ports and --probe tcp (default: 1).",
+    )
+
+    http = parser.add_argument_group(
+        "HTTP checks",
+        "Check that a service works, not only that its host answers. Without --input or "
+        "--discover, only the URLs are checked.",
+    )
+    http.add_argument(
+        "--http-check",
+        action="extend",
+        nargs="+",
+        default=None,
+        metavar="URL",
+        help="Request each URL and record its status, response time, and why it failed.",
+    )
+    http.add_argument(
+        "--http-timeout",
+        type=float,
+        default=DEFAULT_HTTP_TIMEOUT_S,
+        metavar="SECONDS",
+        help=f"Seconds per check, redirects included (default: {DEFAULT_HTTP_TIMEOUT_S:g}).",
+    )
+    http.add_argument(
+        "--http-expect",
+        type=_status_ranges,
+        default=DEFAULT_EXPECT,
+        metavar="CODES",
+        help=f"Status codes that pass, such as 200-299,401 (default: {DEFAULT_EXPECT}).",
+    )
+    http.add_argument(
+        "--http-method",
+        choices=HTTP_METHODS,
+        default="GET",
+        help="Request method (default: GET).",
+    )
+    http.add_argument(
+        "--http-no-redirects",
+        action="store_true",
+        help="Do not follow redirects; the redirect's own status is checked.",
+    )
+    http.add_argument(
+        "--http-insecure",
+        action="store_true",
+        help="Do not verify TLS certificates (for self-signed lab hosts; not recommended).",
     )
 
     reports = parser.add_argument_group("report writing")

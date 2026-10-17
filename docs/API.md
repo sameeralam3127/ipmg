@@ -111,6 +111,7 @@ list each problem in `errors`:
 | `GET` | `/scans/{id}/results?status=&search=` | Per-host results, optionally filtered by status (`Active`, `Inactive`, `Timeout`, `Error`) or IP/hostname substring |
 | `POST` | `/scans/{id}/cancel` | Stop a running scan |
 | `DELETE` | `/scans/{id}` | Delete a scan and its results; returns `204`, or `409` while the scan is still running (cancel it first) |
+| `GET` | `/scans/{id}/http` | The HTTP checks the scan made (`ipmg --http-check`): status, time, final URL, failure |
 | `GET` | `/scans/{id}/report?fmt=csv` | Download results as `xlsx`, `csv`, `json`, or `md` |
 | `GET` | `/scans/{id}/diff?baseline=` | Changes since `baseline` (default: the previous scan) |
 | `GET` | `/scans/{id}/diff/report?fmt=md` | Download the changes as `md`, `json`, or `csv` |

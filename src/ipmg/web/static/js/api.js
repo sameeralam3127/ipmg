@@ -63,6 +63,7 @@ export const api = {
     const suffix = params.toString() ? `?${params}` : "";
     return useDemo ? Promise.resolve(demo.results(id, { status, search })) : request(`/scans/${id}/results${suffix}`);
   },
+  httpChecks: (id) => useDemo ? Promise.resolve([]) : request(`/scans/${id}/http`),
   startScan: (payload) =>
     useDemo ? Promise.resolve(demo.startScan(payload)) : request("/scans", {
       method: "POST",

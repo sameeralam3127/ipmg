@@ -19,7 +19,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-from ipmg.core.diff import HostSnapshot, ScanRef, ip_sort_key
+from ipmg.core.diff import HostSnapshot, HttpSnapshot, ScanRef, ip_sort_key
 from ipmg.core.engine import HostResult
 from ipmg.core.portscan import encode_ports
 
@@ -71,6 +71,21 @@ CREATE TABLE IF NOT EXISTS results (
 
 CREATE INDEX IF NOT EXISTS idx_results_scan ON results(scan_id);
 CREATE INDEX IF NOT EXISTS idx_results_ip ON results(ip);
+
+CREATE TABLE IF NOT EXISTS http_checks (
+    scan_id INTEGER NOT NULL REFERENCES scans(id) ON DELETE CASCADE,
+    url TEXT NOT NULL,
+    ok INTEGER NOT NULL,
+    status_code INTEGER,
+    response_ms REAL,
+    final_url TEXT NOT NULL DEFAULT '',
+    failure TEXT NOT NULL DEFAULT '',
+    error TEXT NOT NULL DEFAULT '',
+    cert_expires TEXT NOT NULL DEFAULT '',
+    checked_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_http_checks_scan ON http_checks(scan_id);
 """
 
 #: ``ESCAPE`` character used to neutralise user-supplied LIKE wildcards.
@@ -205,6 +220,7 @@ class Database:
         config: Dict[str, Any],
         duration_s: float,
         status: str = "complete",
+        http_checks: Sequence[Any] = (),
     ) -> int:
         """Persist an already-finished scan (used by the CLI) in one go.
 
@@ -221,7 +237,48 @@ class Database:
             )
             scan_id = int(cursor.lastrowid)
             self._insert_results(conn, scan_id, results)
+            conn.executemany(
+                "INSERT INTO http_checks (scan_id, url, ok, status_code, response_ms, "
+                "final_url, failure, error, cert_expires, checked_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                [
+                    (
+                        scan_id,
+                        check.url,
+                        int(check.ok),
+                        check.status_code,
+                        check.response_ms,
+                        check.final_url,
+                        check.failure,
+                        check.error,
+                        check.cert_expires,
+                        now,
+                    )
+                    for check in http_checks
+                ],
+            )
         return scan_id
+
+    def get_http_checks(self, scan_id: int) -> List[Dict[str, Any]]:
+        """A scan's ``--http-check`` results, in the order they were checked."""
+        with self._session() as conn:
+            rows = conn.execute(
+                "SELECT url, ok, status_code, response_ms, final_url, failure, error, "
+                "cert_expires, checked_at FROM http_checks WHERE scan_id = ? ORDER BY rowid",
+                (scan_id,),
+            ).fetchall()
+        return [{**dict(row), "ok": bool(row["ok"])} for row in rows]
+
+    def http_snapshot(self, scan_id: int) -> List[HttpSnapshot]:
+        return [
+            HttpSnapshot(
+                url=row["url"],
+                ok=row["ok"],
+                status_code=row["status_code"],
+                failure=row["failure"],
+            )
+            for row in self.get_http_checks(scan_id)
+        ]
 
     def interrupt_scans(self, error: str, scan_ids: Optional[Sequence[int]] = None) -> int:
         """Mark ``running`` scans as interrupted; all of them unless ``scan_ids`` is given.

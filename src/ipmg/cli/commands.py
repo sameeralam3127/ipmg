@@ -68,11 +68,15 @@ def _scan_command(argv: List[str]) -> int:
 def _probe_kinds(args) -> List[str]:
     """What a scan will send, for the authorization notice."""
     kinds = []
+    if getattr(args, "http_check", None) and not (args.input or args.discover):
+        return ["HTTP"]
     probe = (getattr(args, "probe", None) or "icmp").split(",")
     if "icmp" in probe:
         kinds.append("ICMP")
     if "tcp" in probe or getattr(args, "scan_ports", False):
         kinds.append("TCP connect")
+    if getattr(args, "http_check", None):
+        kinds.append("HTTP")
     return kinds
 
 
