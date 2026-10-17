@@ -83,7 +83,11 @@ dev = [
     "ruff>=0.4",
     "pre-commit>=3.5.0",
     "python-semantic-release>=10.5.3",
+    # The TestClient's HTTP client. Starlette 1.x wants httpx2 and warns
+    # about httpx; the Starlette releases Python 3.9 and the lowest-deps job
+    # resolve to predate httpx2 and need httpx.
     "httpx>=0.27",
+    "httpx2>=2.0; python_version >= '3.10'",
 ]
 
 [project.scripts]
@@ -102,7 +106,11 @@ dev = [
     "ruff>=0.4",
     "pre-commit>=3.5.0",
     "python-semantic-release>=10.5.3",
+    # The TestClient's HTTP client. Starlette 1.x wants httpx2 and warns
+    # about httpx; the Starlette releases Python 3.9 and the lowest-deps job
+    # resolve to predate httpx2 and need httpx.
     "httpx>=0.27",
+    "httpx2>=2.0; python_version >= '3.10'",
 ]
 
 
@@ -146,6 +154,13 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+# A deprecated call in IPMG's own code or tests fails the run, so the next
+# one is fixed when it appears instead of scrolling past in the output.
+filterwarnings = [
+    "error::DeprecationWarning:ipmg",
+    "error::DeprecationWarning:test_",
+    "error::PendingDeprecationWarning:ipmg",
+]
 
 [tool.coverage.run]
 source = ["ipmg"]
