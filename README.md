@@ -277,13 +277,17 @@ IPMG runs the same `ping` you would run by hand.
 
 ### Verified environments
 
-Each of these was installed from scratch and run against a live target:
+The installer is tested in each of these whenever `install.sh` changes, and
+weekly: a fresh install as root with `--with-deps`, then a scan
+([workflow](https://github.com/sameeralam3127/ipmg/actions/workflows/install-sh.yml)).
+macOS and Ubuntu are also tested as a normal user, as are a pinned
+`--version` and an upgrade over an existing install.
 
 | Environment | Notes |
 | --- | --- |
 | Ubuntu 22.04 / 24.04 | 24.04 blocks `pip install`; the installer is unaffected |
 | Debian 12 | same PEP 668 situation as Ubuntu |
-| RHEL 8 / RHEL 9 (UBI), Rocky 9 | RHEL 8's system Python is 3.6 — uv supplies its own |
+| RHEL 8 / RHEL 9 (UBI), Rocky 9 | RHEL 8's system Python is 3.6; uv supplies its own |
 | Fedora 41 | |
 | openSUSE Leap 15.6 | image has no Python at all; installer supplies everything |
 | Alpine 3.20 | run the installer with `bash`, not `sh` |
