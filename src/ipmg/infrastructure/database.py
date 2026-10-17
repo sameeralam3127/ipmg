@@ -259,6 +259,41 @@ class Database:
             cursor = conn.execute("DELETE FROM scans WHERE id = ?", (scan_id,))
             return cursor.rowcount > 0
 
+    def scan_rows(self, source: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Every stored scan's own row (no aggregates), newest first."""
+        query = "SELECT id, started_at, source, status, completed FROM scans"
+        params: List[Any] = []
+        if source:
+            query += " WHERE source = ?"
+            params.append(source)
+        query += " ORDER BY id DESC"
+        with self._session() as conn:
+            return [dict(row) for row in conn.execute(query, params).fetchall()]
+
+    def delete_scans(self, scan_ids: Iterable[int]) -> int:
+        """Delete many scans, and their results, in one transaction."""
+        ids = [(int(scan_id),) for scan_id in scan_ids]
+        if not ids:
+            return 0
+        with self._session() as conn:
+            # Running scans are skipped here too, not only by the caller's plan.
+            return conn.executemany(
+                "DELETE FROM scans WHERE id = ? AND status != 'running'", ids
+            ).rowcount
+
+    def vacuum(self) -> None:
+        """Give the space freed by deleted scans back to the filesystem."""
+        with self._session() as conn:
+            conn.execute("VACUUM")
+
+    def size_bytes(self) -> int:
+        """The database file plus its write-ahead log."""
+        return sum(
+            Path(self._path + suffix).stat().st_size
+            for suffix in ("", "-wal")
+            if Path(self._path + suffix).exists()
+        )
+
     # ----------------------------------------------------------- history
 
     def previous_scan_id(self, scan_id: int, source: Optional[str] = None) -> Optional[int]:

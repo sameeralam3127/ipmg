@@ -8,6 +8,7 @@ share one implementation of "what changed since the last scan?".
 from __future__ import annotations
 
 from dataclasses import asdict
+from datetime import timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
@@ -15,6 +16,7 @@ from ipmg.core.diff import DiffOptions, ScanDiff, ScanRef, compare_snapshots
 from ipmg.core.engine import HostResult, ScanConfig
 from ipmg.exceptions import HistoryError
 from ipmg.infrastructure.database import DEFAULT_DB_PATH, Database
+from ipmg.infrastructure.retention import PrunePlan, plan_prune
 
 
 class HistoryService:
@@ -55,6 +57,21 @@ class HistoryService:
 
     def list_scans(self, limit: int = 20, source: Optional[str] = None) -> List[Dict[str, Any]]:
         return self._db.list_scans(limit=max(1, limit), source=source)
+
+    # ----------------------------------------------------------- retention
+
+    def plan_prune(
+        self,
+        keep: Optional[int] = None,
+        older_than: Optional[timedelta] = None,
+        source: Optional[str] = None,
+    ) -> PrunePlan:
+        """The scans a retention policy would delete, without deleting anything."""
+        return plan_prune(self._db.scan_rows(source), keep=keep, older_than=older_than)
+
+    def prune(self, plan: PrunePlan) -> int:
+        """Delete the scans in ``plan``; returns how many were deleted."""
+        return self._db.delete_scans(plan.scan_ids)
 
     # --------------------------------------------------------- comparison
 

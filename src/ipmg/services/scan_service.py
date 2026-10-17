@@ -37,6 +37,7 @@ from ipmg.infrastructure.notify import (
     send_alert,
     send_notifications,
 )
+from ipmg.infrastructure.retention import prune_reports
 from ipmg.reporting import ui
 from ipmg.reporting.diff_report import export_diff, print_diff
 from ipmg.reporting.frames import ReportTable, results_table
@@ -79,6 +80,8 @@ class HistoryOptions:
     export_base: str = "changes"
     diff: DiffOptions = field(default_factory=DiffOptions)
     notify: NotifyOptions = field(default_factory=NotifyOptions)
+    #: After storing a scan, keep only this many of its source's scans.
+    keep_scans: Optional[int] = None
 
 
 def _history_options(args) -> HistoryOptions:
@@ -97,6 +100,7 @@ def _history_options(args) -> HistoryOptions:
             latency_pct=max(float(getattr(args, "latency_pct", 25.0)), 0.0),
         ),
         notify=notify,
+        keep_scans=getattr(args, "keep_scans", None),
     )
 
 
@@ -414,7 +418,33 @@ def _store_and_compare(
 
     if options.compare:
         _report_changes(history, options, scan_id, outcome.source)
+    if options.keep_scans:
+        # After the comparison, which needs the previous scan.
+        _prune_history(history, options.keep_scans, outcome.source)
     return scan_id
+
+
+def _prune_history(history: HistoryService, keep: int, source: str) -> None:
+    try:
+        plan = history.plan_prune(keep=keep, source=source)
+        deleted = history.prune(plan)
+    except HistoryError as exc:
+        ui.blank()
+        ui.warn(f"Old scans not pruned: {exc}")
+        return
+    if deleted:
+        ui.blank()
+        ui.note(f"Removed {ui.plural(deleted, 'older scan')} of {source} (--keep-scans {keep}).")
+
+
+def _prune_reports(args, outcome: "ScanOutcome") -> None:
+    keep = getattr(args, "keep_reports", None)
+    if not keep:
+        return
+    removed = prune_reports([outcome.output], keep, protect=outcome.timestamp)
+    if removed:
+        ui.blank()
+        ui.note(f"Removed {ui.plural(len(removed), 'older report')} (--keep-reports {keep}).")
 
 
 def _scan_pass(
@@ -436,6 +466,7 @@ def _scan_pass(
     # Overwrites whatever the incremental writer left on those same paths,
     # so a finished scan produces exactly the report it always did.
     save_results(outcome.frame, outcome.output, args.formats, timestamp=outcome.timestamp)
+    _prune_reports(args, outcome)
     _store_and_compare(history_options, config, outcome)
     return check_health(outcome.results, health)
 

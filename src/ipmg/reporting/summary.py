@@ -23,6 +23,7 @@ SCAN_STATE_STYLES = {
     "running": "warning",
     "cancelled": "muted",
     "failed": "danger",
+    "interrupted": "danger",
 }
 
 

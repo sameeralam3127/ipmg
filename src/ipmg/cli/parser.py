@@ -26,6 +26,7 @@ from ipmg.infrastructure.notify import (
     NOTIFY_SEVERITIES,
     SMTP_SECURITY,
 )
+from ipmg.infrastructure.retention import parse_age
 from ipmg.reporting.diff_report import DIFF_FORMATS
 from ipmg.reporting.live import DEFAULT_REFRESH_S, MAX_REFRESH_S, MIN_REFRESH_S
 from ipmg.reporting.metrics import DEFAULT_MAX_SOURCES
@@ -36,8 +37,8 @@ PROG = "IPMG - IP Management & Ping Monitoring Tool"
 #: prints the epilog on --help but never on an error, which is exactly when
 #: someone who typed an unknown flag needs to see them.
 COMMANDS_HINT = (
-    "Commands: 'ipmg web' (IPMG Web, the browser UI), 'ipmg history' (stored scans), "
-    "'ipmg diff' (compare two scans)."
+    "Commands: 'ipmg web' (IPMG Web, the browser UI), 'ipmg history' (stored scans; "
+    "'ipmg history prune' deletes old ones), 'ipmg diff' (compare two scans)."
 )
 
 
@@ -53,6 +54,23 @@ class ScanParser(argparse.ArgumentParser):
 def _port_list(value: str) -> tuple:
     try:
         return parse_port_list(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+
+
+def _positive_int(value: str) -> int:
+    try:
+        number = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid whole number: {value!r}") from None
+    if number < 1:
+        raise argparse.ArgumentTypeError(f"must be at least 1: {value}")
+    return number
+
+
+def _age(value: str):
+    try:
+        return parse_age(value)
     except ValueError as exc:
         raise argparse.ArgumentTypeError(str(exc)) from exc
 
@@ -372,6 +390,16 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     reports.add_argument(
+        "--keep-reports",
+        type=_positive_int,
+        default=None,
+        metavar="N",
+        help=(
+            "After writing this scan's reports, delete all but the N newest report "
+            "files of each format named after --output (off by default)."
+        ),
+    )
+    reports.add_argument(
         "--resume",
         nargs="?",
         const="",
@@ -445,6 +473,16 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Compare against the previous scan even if it used a different target source.",
     )
+    history.add_argument(
+        "--keep-scans",
+        type=_positive_int,
+        default=None,
+        metavar="N",
+        help=(
+            "After storing this scan, delete all but the N newest stored scans of its "
+            "source (off by default)."
+        ),
+    )
     _add_database_argument(history)
     _add_diff_export_arguments(history)
     _add_diff_threshold_arguments(parser)
@@ -511,7 +549,10 @@ def build_web_parser() -> argparse.ArgumentParser:
 def build_history_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         "ipmg history",
-        description="List scans stored in the local history database.",
+        description=(
+            "List scans stored in the local history database. "
+            "'ipmg history prune' deletes old ones."
+        ),
     )
     parser.add_argument(
         "--limit",
@@ -523,6 +564,50 @@ def build_history_parser() -> argparse.ArgumentParser:
         "--source",
         default=None,
         help="Only list scans from this target source (input file or 'auto-discovery').",
+    )
+    _add_database_argument(parser)
+    parser.add_argument("--verbose", action="store_true")
+    return parser
+
+
+def build_prune_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        "ipmg history prune",
+        description=(
+            "Delete old scans from the history database. Each source keeps its own "
+            "history: a scan is kept when it is one of the --keep newest of its source, "
+            "or newer than --older-than. With both, only scans neither rule keeps are "
+            "deleted. Running scans are never deleted."
+        ),
+    )
+    parser.add_argument(
+        "--keep",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Keep the N newest scans of each source.",
+    )
+    parser.add_argument(
+        "--older-than",
+        type=_age,
+        default=None,
+        metavar="AGE",
+        help="Delete scans older than AGE: a number with s, m, h, d, or w, such as 30d.",
+    )
+    parser.add_argument(
+        "--source",
+        default=None,
+        help="Only prune scans from this target source.",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what would be deleted, and delete nothing.",
+    )
+    parser.add_argument(
+        "--vacuum",
+        action="store_true",
+        help="Afterwards, compact the database file to give the freed space back.",
     )
     _add_database_argument(parser)
     parser.add_argument("--verbose", action="store_true")

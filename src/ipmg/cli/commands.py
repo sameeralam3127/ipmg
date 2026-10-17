@@ -11,6 +11,7 @@ from ipmg.cli.parser import (
     build_diff_parser,
     build_history_parser,
     build_parser,
+    build_prune_parser,
     build_web_parser,
 )
 from ipmg.core.diff import DiffOptions
@@ -88,7 +89,62 @@ def _web_command(argv: List[str]) -> int:
     return EXIT_OK
 
 
+def _format_bytes(size: int) -> str:
+    value = float(size)
+    for unit in ("B", "KB", "MB", "GB"):
+        if value < 1024 or unit == "GB":
+            return f"{value:.0f} {unit}" if unit == "B" else f"{value:.1f} {unit}"
+        value /= 1024
+    return f"{value:.1f} GB"  # pragma: no cover - the loop always returns
+
+
+def _prune_command(argv: List[str]) -> int:
+    parser = build_prune_parser()
+    args = parser.parse_args(argv)
+    if args.keep is None and args.older_than is None:
+        parser.error("give --keep N, --older-than AGE, or both")
+    if args.keep is not None and args.keep < 0:
+        parser.error("--keep cannot be negative")
+    configure_logging(args.verbose)
+    ui.header("history prune")
+
+    history = HistoryService.open(args.db)
+    plan = history.plan_prune(keep=args.keep, older_than=args.older_than, source=args.source)
+
+    ui.blank()
+    if not plan.scans:
+        ui.note("Nothing to prune: the policy keeps every stored scan.")
+        return EXIT_OK
+
+    summary = (
+        f"{ui.plural(len(plan.scans), 'scan')} {ui.glyph('sep')} "
+        f"{ui.plural(plan.result_count, 'result')}"
+    )
+    sources = [f"{source} ({count})" for source, count in sorted(plan.by_source().items())]
+    if args.dry_run:
+        ui.field("Prunable", summary)
+        ui.field_list("From", sources)
+        ui.blank()
+        ui.note("Dry run: nothing was deleted. Run it again without --dry-run to delete.")
+        return EXIT_OK
+
+    size_before = history.database.size_bytes()
+    history.prune(plan)
+    ui.field("Deleted", summary)
+    ui.field_list("From", sources)
+    if args.vacuum:
+        history.database.vacuum()
+        ui.field(
+            "Database",
+            f"{_format_bytes(size_before)} {ui.glyph('arrow')} "
+            f"{_format_bytes(history.database.size_bytes())}",
+        )
+    return EXIT_OK
+
+
 def _history_command(argv: List[str]) -> int:
+    if argv and argv[0] == "prune":
+        return _prune_command(argv[1:])
     args = build_history_parser().parse_args(argv)
     configure_logging(args.verbose)
     ui.header("history")

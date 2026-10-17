@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 import openpyxl
 import pytest
+from scan_helpers import scan_args
 
 from ipmg.core.health import HostsDownError
 from ipmg.infrastructure.database import Database
@@ -96,47 +97,6 @@ def test_run_scan_clamps_resource_limits(tmp_path, monkeypatch):
     run_scan(args)
 
     assert captured["limits"] == (60, 10)
-
-
-def scan_args(tmp_path, **overrides):
-    args = dict(
-        input=["targets.csv"],
-        output=str(tmp_path / "results"),
-        timeout=1,
-        count=1,
-        threads=2,
-        formats=[],
-        discover=False,
-        resolve=False,
-        interval=None,
-        history=True,
-        compare=False,
-        compare_any_source=False,
-        db=str(tmp_path / "history.db"),
-        diff_formats=[],
-        diff_output=str(tmp_path / "changes"),
-        latency_threshold=5.0,
-        latency_pct=25.0,
-    )
-    args.update(overrides)
-    return SimpleNamespace(**args)
-
-
-@pytest.fixture()
-def stub_scan(monkeypatch):
-    """Run scans against a scripted set of ping results."""
-    state = {"statuses": {}}
-    # Kept on the state so a test can wrap the loader instead of replacing it.
-    state["load"] = lambda _sources: list(state["statuses"])
-
-    monkeypatch.setattr("ipmg.services.scan_service.load_all_targets", state["load"])
-    monkeypatch.setattr("ipmg.services.scan_service.save_results", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("ipmg.services.scan_service.print_summary", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(
-        "ipmg.core.engine.ping_ip",
-        lambda ip, _timeout, _count: state["statuses"][ip],
-    )
-    return state
 
 
 def test_run_scan_records_history(tmp_path, stub_scan):

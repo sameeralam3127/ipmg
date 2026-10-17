@@ -37,6 +37,7 @@ website. `ipmg --help` (and `ipmg web --help`, `ipmg history --help`,
 | `ipmg [options]` | Scan targets and save a report (the default command) |
 | `ipmg web [options]` | Start IPMG Web, the local browser UI (`ipmg --web` also works) |
 | `ipmg history [options]` | List scans stored in the local history database |
+| `ipmg history prune [options]` | Delete old scans from the history ([retention](#keeping-history-and-reports-bounded)) |
 | `ipmg diff [SCAN_ID ...] [options]` | Compare two stored scans |
 | `ipmg --version` | Print the installed version |
 | `python -m ipmg ...` | Same as `ipmg ...`, useful when the script is not on your `PATH` |
@@ -325,6 +326,37 @@ ipmg history --db ./project.db
 
 `--db` works the same way on `ipmg`, `ipmg history`, `ipmg diff`, and
 `ipmg web`.
+
+### Keeping history and reports bounded
+
+Nothing is deleted unless you ask. Every scan adds a full set of rows to the
+database and every pass writes a new report file per format, so an
+`--interval 5` monitor writes 288 of each a day until the disk fills. Prune
+the history by hand, or let each scan do it:
+
+```bash
+ipmg history prune --keep 100                   # the 100 newest scans of each source
+ipmg history prune --older-than 30d             # scans older than 30 days (s, m, h, d, w)
+ipmg history prune --keep 10 --older-than 30d   # only scans neither rule keeps
+ipmg history prune --keep 100 --dry-run         # list what would go, delete nothing
+ipmg history prune --keep 100 --vacuum          # then give the space back to the disk
+ipmg history prune --keep 1 --source targets.txt
+
+ipmg --input targets.txt --interval 5 --compare --keep-scans 2000 --keep-reports 24
+```
+
+Each source keeps its own history, and a scan is kept when any rule covers
+it: one of the `--keep` newest of its source, or newer than `--older-than`.
+Running scans are never deleted. `--keep-scans N` prunes the scan's own
+source to N after storing and comparing it, and `--keep-reports N` deletes all
+but the N newest report files of each format named after `--output` (only
+files named exactly like an IPMG report). Both can live in `ipmg.toml`, so a
+long-running monitor is bounded by default:
+
+```toml
+keep-scans = 2000
+keep-reports = 24
+```
 
 ---
 
