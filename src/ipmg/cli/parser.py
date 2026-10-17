@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 
 from ipmg import __version__
+from ipmg.cli.completion import SHELLS
 from ipmg.cli.config import add_config_arguments, config_help
 from ipmg.core.discovery import DISCOVERY_FAMILIES
 from ipmg.core.engine import DEFAULT_DNS_TIMEOUT_S, PROBE_METHODS
@@ -41,7 +42,7 @@ PROG = "IPMG - IP Management & Ping Monitoring Tool"
 COMMANDS_HINT = (
     "Commands: 'ipmg web' (IPMG Web, the browser UI), 'ipmg history' (stored scans; "
     "'ipmg history prune' deletes old ones), 'ipmg diff' (compare two scans), "
-    "'ipmg wake' (Wake-on-LAN)."
+    "'ipmg wake' (Wake-on-LAN), 'ipmg completion' (shell tab completion)."
 )
 
 
@@ -718,6 +719,24 @@ def build_wake_parser() -> argparse.ArgumentParser:
         help=f"UDP port (default: {DEFAULT_WAKE_PORT}; 7 is the other common choice).",
     )
     parser.add_argument("--verbose", action="store_true")
+    return parser
+
+
+def build_completion_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        "ipmg completion",
+        description=(
+            "Print a tab-completion script for your shell. It completes commands, flags, "
+            "their choices, and file names."
+        ),
+        epilog=(
+            'bash: eval "$(ipmg completion bash)" in ~/.bashrc. '
+            'zsh: eval "$(ipmg completion zsh)" in ~/.zshrc, after compinit. '
+            "fish: ipmg completion fish > ~/.config/fish/completions/ipmg.fish. "
+            "PowerShell: ipmg completion powershell | Out-String | Invoke-Expression in $PROFILE."
+        ),
+    )
+    parser.add_argument("shell", choices=SHELLS, help="The shell to complete for.")
     return parser
 
 

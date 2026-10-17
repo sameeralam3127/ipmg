@@ -38,6 +38,35 @@ jobs:
       - name: Run every hook on every file
         run: pre-commit run --all-files --show-diff-on-failure
 
+  completion:
+    # The shell completion tests skip any shell that is not installed; here
+    # bash, zsh, fish, and PowerShell (preinstalled on the runner) all are,
+    # and a skipped test fails the job.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install zsh and fish
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends zsh fish
+
+      - name: Install IPMG
+        run: pip install -e ".[dev]"
+
+      - name: Test completion in every shell
+        run: |
+          bash --version | head -1; zsh --version; fish --version; pwsh --version
+          pytest -q -rs tests/test_completion.py | tee completion.txt
+          if grep -q SKIPPED completion.txt; then
+            echo "::error::a shell was missing, so its completion was not tested"; exit 1
+          fi
+
   lowest-deps:
     # The oldest Python and the oldest version of every dependency that
     # pyproject.toml allows, so a floor like pandas>=2.2.2 is known to work.

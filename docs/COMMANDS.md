@@ -40,6 +40,7 @@ website. `ipmg --help` (and `ipmg web --help`, `ipmg history --help`,
 | `ipmg history prune [options]` | Delete old scans from the history ([retention](#keeping-history-and-reports-bounded)) |
 | `ipmg diff [SCAN_ID ...] [options]` | Compare two stored scans |
 | `ipmg wake MAC [MAC ...] [options]` | Wake hosts with a Wake-on-LAN magic packet ([details](#wake-on-lan)) |
+| `ipmg completion bash\|zsh\|fish\|powershell` | Print a tab-completion script ([install it](../README.md#tab-completion)) |
 | `ipmg --version` | Print the installed version |
 | `python -m ipmg ...` | Same as `ipmg ...`, useful when the script is not on your `PATH` |
 

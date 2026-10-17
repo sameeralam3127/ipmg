@@ -243,6 +243,19 @@ The one-line installers, Homebrew, and the Docker image install it with the
 `web` extra already. Run `ipmg web` without it and IPMG tells you the command
 that adds it.
 
+### Tab completion
+
+`ipmg completion SHELL` prints a completion script for commands, flags, their
+choices, and file names. It is generated from IPMG's own flag definitions, so
+it never falls behind; run it again after an upgrade.
+
+| Shell | Add this |
+| --- | --- |
+| bash | `eval "$(ipmg completion bash)"` in `~/.bashrc` (bash 3.2 and later; no bash-completion package needed) |
+| zsh | `eval "$(ipmg completion zsh)"` in `~/.zshrc`, after `compinit`; or save it as `_ipmg` in a directory on your `$fpath` |
+| fish | `ipmg completion fish > ~/.config/fish/completions/ipmg.fish` |
+| PowerShell | `ipmg completion powershell \| Out-String \| Invoke-Expression` in your `$PROFILE` |
+
 ### The one thing IPMG needs from your system
 
 IPMG probes hosts with your operating system's `ping` command, and minimal

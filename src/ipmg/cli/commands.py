@@ -6,8 +6,9 @@ import logging
 import sys
 from typing import Callable, Dict, List, Optional
 
-from ipmg.cli import config
+from ipmg.cli import completion, config
 from ipmg.cli.parser import (
+    build_completion_parser,
     build_diff_parser,
     build_history_parser,
     build_parser,
@@ -222,12 +223,20 @@ def _wake_command(argv: List[str]) -> int:
     return EXIT_OK
 
 
+def _completion_command(argv: List[str]) -> int:
+    args = build_completion_parser().parse_args(argv)
+    # Only the script on stdout, no banner: it is eval'd or saved to a file.
+    sys.stdout.write(completion.script(args.shell))
+    return EXIT_OK
+
+
 _COMMANDS: Dict[str, Callable[[List[str]], int]] = {
     "web": _web_command,
     "history": _history_command,
     "diff": _diff_command,
     "compare": _diff_command,
     "wake": _wake_command,
+    "completion": _completion_command,
 }
 
 #: Flag spellings of a command. Reaching for "--web" before "web" is the
