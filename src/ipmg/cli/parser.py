@@ -476,6 +476,16 @@ def build_web_parser() -> argparse.ArgumentParser:
         help="Do not open IPMG Web in a browser automatically.",
     )
     parser.add_argument(
+        "--max-scans",
+        type=int,
+        default=2,
+        metavar="N",
+        help=(
+            "Run at most N scans at once; starting another is refused until one "
+            "finishes (default: 2)."
+        ),
+    )
+    parser.add_argument(
         "--metrics",
         action="store_true",
         help=(

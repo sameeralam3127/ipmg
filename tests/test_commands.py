@@ -215,6 +215,7 @@ def test_both_spellings_of_web_start_it(argv, monkeypatch):
             "open_browser": True,
             "db_path": None,
             "metrics_sources": None,
+            "max_scans": 2,
         }
     ]
 

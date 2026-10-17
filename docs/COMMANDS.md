@@ -507,6 +507,7 @@ ipmg web --no-browser                   # don't open a browser
 ipmg web --port 9000                    # another port
 ipmg web --db ./project.db              # another history database
 ipmg web --metrics --no-browser         # also serve Prometheus metrics at /metrics
+ipmg web --max-scans 4                  # run up to 4 scans at once (default: 2)
 ipmg --web                              # same as ipmg web
 ```
 
@@ -524,6 +525,11 @@ ssh -L 8080:127.0.0.1:8080 user@server
 
 Every API request needs the access token in that link. A new token is made
 each time IPMG Web starts; set `IPMG_WEB_TOKEN` to keep one fixed.
+
+Each scan may use up to 500 threads, each running a `ping` process, so IPMG
+Web runs at most `--max-scans` scans at once (default 2). Starting another,
+from a second tab, a double click, a script, or a schedule, is refused with
+"a scan is already running" (HTTP `429`) until one finishes or is cancelled.
 
 `--metrics` adds `/metrics` for Prometheus, behind the same token, sent as a
 Bearer credential (`authorization.credentials_file` in a scrape config). Pin

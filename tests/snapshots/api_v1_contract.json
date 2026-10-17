@@ -292,6 +292,9 @@
         },
         "422": {
           "application/json": "ErrorResponse"
+        },
+        "429": {
+          "application/json": "ErrorResponse"
         }
       },
       "security": [

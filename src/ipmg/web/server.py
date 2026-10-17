@@ -17,6 +17,7 @@ import uvicorn
 from ipmg.infrastructure.database import DEFAULT_DB_PATH, Database
 from ipmg.reporting import ui
 from ipmg.web.app import create_app
+from ipmg.web.manager import DEFAULT_MAX_SCANS
 
 
 def _display_host(host: str) -> str:
@@ -70,10 +71,11 @@ def run_dashboard(
     open_browser: bool = True,
     db_path: Optional[str] = None,
     metrics_sources: Optional[int] = None,
+    max_scans: int = DEFAULT_MAX_SCANS,
 ) -> None:
     database = Database(Path(db_path) if db_path else DEFAULT_DB_PATH)
     token = _access_token()
-    app = create_app(database, token, metrics_sources=metrics_sources)
+    app = create_app(database, token, metrics_sources=metrics_sources, max_scans=max_scans)
     # The token goes in the fragment, which browsers never send to the server,
     # so it stays out of access logs and proxies.
     url = f"http://{_display_host(host)}:{port}/#token={token}"

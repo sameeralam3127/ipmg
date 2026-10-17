@@ -94,9 +94,10 @@ list each problem in `errors`:
 | `400` | The request is well-formed but can't be used, e.g. no valid targets or an unsupported report format |
 | `401` | Missing or invalid access token |
 | `404` | No scan with that ID, or no earlier scan to compare with |
-| `409` | Cancelling a scan that isn't running |
+| `409` | Cancelling a scan that isn't running, or deleting one that still is |
 | `413` | Upload larger than 5 MB |
 | `422` | A field has the wrong type, e.g. `"threads": "many"` |
+| `429` | Starting a scan while `--max-scans` scans (default 2) are already running |
 
 ## Endpoints
 
@@ -105,7 +106,7 @@ list each problem in `errors`:
 | `GET` | `/stats` | Dashboard overview: counts, latest scan, running scans, trend |
 | `GET` | `/assets` | Every host ever scanned, with its latest status |
 | `GET` | `/scans?limit=50` | Recent scans, newest first (`limit` 1-500) |
-| `POST` | `/scans` | Start a scan; returns `201` with `{"id", "total"}` |
+| `POST` | `/scans` | Start a scan; returns `201` with `{"id", "total"}`, or `429` when `--max-scans` scans are already running |
 | `GET` | `/scans/{id}` | One scan, with status counts and average latency |
 | `GET` | `/scans/{id}/results?status=&search=` | Per-host results, optionally filtered by status (`Active`, `Inactive`, `Timeout`, `Error`) or IP/hostname substring |
 | `POST` | `/scans/{id}/cancel` | Stop a running scan |

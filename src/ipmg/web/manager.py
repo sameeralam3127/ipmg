@@ -96,18 +96,40 @@ class ResultWriter:
 #: Recorded on a scan that IPMG Web could not finish because it was stopped.
 INTERRUPTED_ERROR = "IPMG Web stopped during the scan"
 
+#: Scans IPMG Web runs at once unless ``--max-scans`` says otherwise. Each one
+#: may use up to 500 threads, each running a ``ping`` process.
+DEFAULT_MAX_SCANS = 2
+
+
+class ScanLimitError(Exception):
+    """Raised by :meth:`ScanManager.start_scan` when ``max_scans`` are already running."""
+
+    def __init__(self, running: int, limit: int) -> None:
+        self.running = running
+        self.limit = limit
+        already = "A scan is" if running == 1 else f"{running} scans are"
+        super().__init__(
+            f"{already} already running, the most IPMG Web runs at once "
+            f"(--max-scans {limit}). Wait for one to finish, or cancel it."
+        )
+
+
 #: Seconds shutdown waits for running scans to stop before marking them.
 SHUTDOWN_WAIT_S = 5.0
 
 
 class ScanManager:
-    def __init__(self, db: Database) -> None:
+    def __init__(self, db: Database, max_scans: int = DEFAULT_MAX_SCANS) -> None:
         self._db = db
+        self.max_scans = max(max_scans, 1)
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._subscribers: Set[asyncio.Queue] = set()
         self._stops: Dict[int, threading.Event] = {}
         self._threads: Dict[int, threading.Thread] = {}
         self._lock = threading.Lock()
+        # Held from the limit check until the new scan is registered, so two
+        # requests arriving together cannot both take the last slot.
+        self._start_lock = threading.Lock()
 
     # ------------------------------------------------------ subscriptions
 
@@ -150,17 +172,27 @@ class ScanManager:
     # -------------------------------------------------------------- scans
 
     def start_scan(self, ips: List[str], config: ScanConfig, source: str) -> int:
-        scan_id = self._db.create_scan(source, len(ips), asdict(config))
-        stop = threading.Event()
-        thread = threading.Thread(
-            target=self._run,
-            args=(scan_id, ips, config, stop),
-            name=f"ipmg-scan-{scan_id}",
-            daemon=True,
-        )
-        with self._lock:
-            self._stops[scan_id] = stop
-            self._threads[scan_id] = thread
+        """Start a scan in the background and return its id.
+
+        Raises :class:`ScanLimitError`, before anything is stored, when
+        ``max_scans`` scans are already running.
+        """
+        with self._start_lock:
+            running = self.running_count()
+            if running >= self.max_scans:
+                raise ScanLimitError(running, self.max_scans)
+
+            scan_id = self._db.create_scan(source, len(ips), asdict(config))
+            stop = threading.Event()
+            thread = threading.Thread(
+                target=self._run,
+                args=(scan_id, ips, config, stop),
+                name=f"ipmg-scan-{scan_id}",
+                daemon=True,
+            )
+            with self._lock:
+                self._stops[scan_id] = stop
+                self._threads[scan_id] = thread
         thread.start()
         return scan_id
 

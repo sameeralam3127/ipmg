@@ -510,3 +510,63 @@ def test_deleting_a_finished_scan_works(client):
 
     assert client.delete(f"/api/v1/scans/{scan_id}").status_code == 204
     assert client.delete(f"/api/v1/scans/{scan_id}").status_code == 404
+
+
+def test_scans_beyond_max_scans_are_refused_with_429(tmp_path, monkeypatch):
+    import threading
+
+    release = threading.Event()
+    monkeypatch.setattr(
+        "ipmg.core.engine.ping_ip", lambda *_a: (release.wait(5), ("Active", 1.0))[1]
+    )
+    app = create_app(Database(tmp_path / "limit.db"), token="test-token", max_scans=2)
+    with TestClient(app, headers={"Authorization": "Bearer test-token"}) as client:
+        start = {"targets": "10.0.0.1", "threads": 1}
+        first = client.post("/api/v1/scans", json=start)
+        second = client.post("/api/v1/scans", json=start)
+        refused = [client.post("/api/v1/scans", json=start) for _ in range(3)]
+
+        assert (first.status_code, second.status_code) == (201, 201)
+        assert {response.status_code for response in refused} == {429}
+        assert "2 scans are already running" in refused[0].json()["detail"]
+        # A refused scan stores nothing.
+        assert len(client.get("/api/v1/scans").json()) == 2
+
+        release.set()
+        wait_for_completion(client, first.json()["id"])
+        wait_for_completion(client, second.json()["id"])
+        # A finished scan frees its slot.
+        assert client.post("/api/v1/scans", json=start).status_code == 201
+
+
+def test_concurrent_starts_cannot_overshoot_the_limit(tmp_path):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    from ipmg.core.engine import ScanConfig
+    from ipmg.web.manager import ScanLimitError, ScanManager
+
+    release = threading.Event()
+    manager = ScanManager(Database(tmp_path / "race.db"), max_scans=1)
+    manager._run = lambda *_a: release.wait(5)
+
+    def start(_n):
+        try:
+            return manager.start_scan(["10.0.0.1"], ScanConfig(), "race")
+        except ScanLimitError:
+            return None
+
+    with ThreadPoolExecutor(8) as pool:
+        started = [scan_id for scan_id in pool.map(start, range(16)) if scan_id is not None]
+    release.set()
+
+    assert len(started) == 1
+
+
+def test_web_command_passes_max_scans(monkeypatch):
+    from ipmg.cli import commands
+
+    captured = {}
+    monkeypatch.setattr("ipmg.web.server.run_dashboard", lambda **kwargs: captured.update(kwargs))
+    assert commands.run(["web", "--no-browser", "--max-scans", "4"]) == 0
+    assert captured["max_scans"] == 4

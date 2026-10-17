@@ -49,7 +49,7 @@ from ipmg.infrastructure.file_io import (
 from ipmg.reporting.diff_report import DIFF_FORMATS, render_diff
 from ipmg.reporting.frames import ReportTable, results_table
 from ipmg.services.history_service import HistoryService
-from ipmg.web.manager import OVERFLOW, ScanManager
+from ipmg.web.manager import DEFAULT_MAX_SCANS, OVERFLOW, ScanLimitError, ScanManager
 from ipmg.web.schemas import (
     Asset,
     ErrorResponse,
@@ -173,6 +173,7 @@ _ERROR_DESCRIPTIONS = {
     404: "Scan not found",
     409: "Scan is not running",
     413: "Upload too large",
+    429: "Too many scans running (--max-scans)",
 }
 
 
@@ -264,7 +265,7 @@ def _register_scan_routes(api: APIRouter, database: Database, manager: ScanManag
         "/scans",
         status_code=201,
         response_model=ScanCreated,
-        responses=_errors(400),
+        responses=_errors(400, 429),
         summary="Start a scan",
     )
     def create_scan(request: ScanRequest) -> Dict[str, Any]:
@@ -278,7 +279,10 @@ def _register_scan_routes(api: APIRouter, database: Database, manager: ScanManag
             dns_timeout=request.dns_timeout,
             resolve_active_only=request.resolve_active_only,
         ).clamped()
-        scan_id = manager.start_scan(ips, config, source=request.source)
+        try:
+            scan_id = manager.start_scan(ips, config, source=request.source)
+        except ScanLimitError as exc:
+            raise HTTPException(status_code=429, detail=str(exc)) from exc
         return {"id": scan_id, "total": len(ips)}
 
     @api.get(
@@ -602,15 +606,17 @@ def create_app(
     db: Optional[Database] = None,
     token: Optional[str] = None,
     metrics_sources: Optional[int] = None,
+    max_scans: int = DEFAULT_MAX_SCANS,
 ) -> FastAPI:
     """Build the app. ``token`` guards every API route; a random one is made if omitted.
 
     ``metrics_sources`` turns on ``/metrics`` for that many of the most
     recently scanned sources; left as None, the endpoint does not exist.
+    ``max_scans`` caps how many scans run at once; one more is refused with 429.
     """
     database = db if db is not None else Database(DEFAULT_DB_PATH)
     token = token or secrets.token_urlsafe(32)
-    manager = ScanManager(database)
+    manager = ScanManager(database, max_scans=max_scans)
     history = HistoryService(database)
 
     @asynccontextmanager
