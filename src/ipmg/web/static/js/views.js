@@ -1,7 +1,7 @@
 // Page views for the IPMG dashboard. Each view renders into the <main> node.
 
-import { api, onEvent } from "./api.js?v=20260920.1";
-import { STATUS_COLORS, latencyTrend, statusDonut } from "./charts.js?v=20260920.1";
+import { api, onEvent } from "./api.js?v=20261017.1";
+import { STATUS_COLORS, latencyTrend, statusDonut } from "./charts.js?v=20261017.1";
 
 const REPORT_FORMATS = ["xlsx", "csv", "json", "md"];
 
@@ -539,7 +539,12 @@ export async function changesView(root, targetId, baselineId) {
   // Ignore ids from the URL that are not in the list, so the selects always
   // hold a valid scan.
   target.value = String(known.has(targetId) ? targetId : scans[0].id);
-  const fallback = scans.find((scan) => String(scan.id) !== target.value);
+  // The previous scan of the same source by default (a schedule's last run,
+  // the same input file), else simply the one before.
+  const targetScan = scans.find((scan) => String(scan.id) === target.value);
+  const fallback =
+    scans.find((scan) => scan.id < targetScan.id && scan.source === targetScan.source) ||
+    scans.find((scan) => String(scan.id) !== target.value);
   baseline.value = String(known.has(baselineId) ? baselineId : fallback.id);
 
   const threshold = h("input", { type: "number", min: 0, step: "0.5", value: "5", title: "Latency threshold (ms)" });
@@ -842,4 +847,209 @@ export async function inventoryView(root) {
 
   root.append(toolbar, tableHost);
   draw();
+}
+
+// ------------------------------------------------------------ schedules
+
+function scheduleRuns(schedule) {
+  if (schedule.cron) return h("code", {}, schedule.cron);
+  const minutes = schedule.interval_minutes;
+  if (minutes % 1440 === 0) return `every ${minutes / 1440} day${minutes === 1440 ? "" : "s"}`;
+  if (minutes % 60 === 0) return `every ${minutes / 60} hour${minutes === 60 ? "" : "s"}`;
+  return `every ${minutes} min`;
+}
+
+function scheduleState(schedule) {
+  const pill = h("span", { class: "pill" }, schedule.paused ? "paused" : "active");
+  pill.style.setProperty("--pill-color", schedule.paused ? "var(--muted)" : "var(--st-active)");
+  return pill;
+}
+
+function lastRun(schedule) {
+  const cell = h("div", {});
+  if (schedule.last_scan_id) {
+    cell.append(
+      h("a", { href: `#/scan/${schedule.last_scan_id}` }, `#${schedule.last_scan_id}`),
+      " ",
+      scanStatePill(schedule.last_status || "deleted"),
+      h("div", { class: "muted small" }, schedule.last_run_at || "")
+    );
+  } else {
+    cell.append("never");
+  }
+  if (schedule.last_skip_reason) {
+    cell.append(h("div", { class: "muted small", title: schedule.last_skip_reason }, `Skipped ${schedule.last_skipped_at}: ${schedule.last_skip_reason}`));
+  }
+  return cell;
+}
+
+function schedulesTable(schedules, { onChange }) {
+  if (!schedules.length) return h("div", { class: "empty" }, "No schedules yet — create one below.");
+
+  const act = (label, run, tone = "ghost-btn") => {
+    const button = h("button", { class: tone, type: "button" }, label);
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      try {
+        await run();
+        onChange();
+      } catch (err) {
+        toast(err.message, "error");
+        button.disabled = false;
+      }
+    });
+    return button;
+  };
+
+  return h(
+    "div",
+    { class: "table-wrap" },
+    h(
+      "table",
+      {},
+      h("thead", {}, h("tr", {}, ...["Name", "Targets", "Runs", "Next run", "Last run", "State", ""].map((t) => h("th", {}, t)))),
+      h(
+        "tbody",
+        {},
+        schedules.map((schedule) =>
+          h(
+            "tr",
+            {},
+            h("td", {}, schedule.name, h("div", { class: "muted small" }, schedule.source)),
+            h("td", { class: "truncate", title: schedule.targets }, schedule.targets),
+            h("td", {}, scheduleRuns(schedule)),
+            h("td", {}, schedule.paused ? "—" : schedule.next_run_at || "—"),
+            h("td", {}, lastRun(schedule)),
+            h("td", {}, scheduleState(schedule)),
+            h(
+              "td",
+              { class: "actions" },
+              act("Run now", async () => {
+                const scan = await api.runSchedule(schedule.id);
+                toast(`Scan #${scan.id} started for ${schedule.name}.`);
+              }),
+              act(schedule.paused ? "Resume" : "Pause", async () => {
+                await api.pauseSchedule(schedule.id, !schedule.paused);
+                toast(`${schedule.name} ${schedule.paused ? "resumed" : "paused"}.`);
+              }),
+              act("Delete", async () => {
+                if (!confirm(`Delete the schedule "${schedule.name}"? Its scans stay in the history.`)) throw new Error("Not deleted.");
+                await api.deleteSchedule(schedule.id);
+                toast(`${schedule.name} deleted.`);
+              }, "btn danger")
+            )
+          )
+        )
+      )
+    )
+  );
+}
+
+function scheduleForm({ onCreated }) {
+  const banner = h("div");
+  const form = h("form", {});
+  const field = (label, control) => h("label", { class: "field" }, h("span", {}, label), control);
+  const number = (name, value, attrs) => h("input", { type: "number", name, value, ...attrs });
+
+  const name = h("input", { type: "text", name: "name", required: "", maxlength: 100, placeholder: "office-lan" });
+  const targets = h("textarea", { name: "targets", required: "", placeholder: "192.168.1.0/24\n10.0.0.1-10.0.0.50" });
+  const repeat = h("select", { name: "repeat" }, h("option", { value: "interval" }, "Every N minutes"), h("option", { value: "cron" }, "Cron expression"));
+  const interval = number("interval_minutes", "15", { min: 1, max: 10080 });
+  const cron = h("input", { type: "text", name: "cron", placeholder: "*/15 * * * *", hidden: "" });
+  const intervalField = field("Minutes between runs", interval);
+  const cronField = field("Cron (server's local time)", cron);
+  cronField.hidden = true;
+  repeat.addEventListener("change", () => {
+    const useCron = repeat.value === "cron";
+    intervalField.hidden = useCron;
+    cronField.hidden = !useCron;
+    cron.hidden = !useCron;
+  });
+
+  const probe = h(
+    "select",
+    { name: "probe" },
+    h("option", { value: "icmp" }, "ICMP (ping)"),
+    h("option", { value: "icmp,tcp" }, "ICMP, then TCP"),
+    h("option", { value: "tcp" }, "TCP connect only")
+  );
+  const settings = h("div", { class: "grid", style: "grid-template-columns:repeat(auto-fit,minmax(130px,1fr))" },
+    field("Ping count", number("count", "1", { min: 1, max: 10 })),
+    field("Timeout (s)", number("timeout", "2", { min: 1, max: 60 })),
+    field("Threads", number("threads", "50", { min: 1, max: 500 })),
+    field("Probe", probe)
+  );
+  const check = (key, label) => h("label", { class: "check" }, h("input", { type: "checkbox", name: key }), label);
+  const submit = h("button", { class: "btn", type: "submit" }, "Create schedule");
+
+  form.append(
+    field("Name", name),
+    field("Targets", targets),
+    h("div", { class: "grid", style: "grid-template-columns:repeat(auto-fit,minmax(200px,1fr))" }, field("Repeat", repeat), intervalField, cronField),
+    settings,
+    check("resolve", "Resolve hostnames (reverse DNS)"),
+    check("mac_lookup", "Look up MAC addresses and vendors"),
+    submit
+  );
+
+  form.addEventListener("submit", async (evt) => {
+    evt.preventDefault();
+    banner.replaceChildren();
+    submit.disabled = true;
+    const data = new FormData(form);
+    const payload = {
+      name: name.value.trim(),
+      targets: targets.value,
+      count: Number(data.get("count")),
+      timeout: Number(data.get("timeout")),
+      threads: Number(data.get("threads")),
+      probe: data.get("probe") || "icmp",
+      resolve: data.get("resolve") === "on",
+      mac_lookup: data.get("mac_lookup") === "on",
+    };
+    if (repeat.value === "cron") payload.cron = cron.value.trim();
+    else payload.interval_minutes = Number(interval.value);
+    try {
+      const schedule = await api.createSchedule(payload);
+      toast(`Schedule ${schedule.name} created.`);
+      form.reset();
+      repeat.dispatchEvent(new Event("change"));
+      onCreated();
+    } catch (err) {
+      banner.append(h("div", { class: "banner err" }, `Could not create the schedule: ${err.message}`));
+    } finally {
+      submit.disabled = false;
+    }
+  });
+
+  return h("div", { class: "card", style: "margin-top:14px" }, h("h3", {}, "New schedule"), banner, form);
+}
+
+export async function schedulesView(root) {
+  root.append(
+    h("h1", { class: "page-title" }, "Schedules"),
+    h("p", { class: "page-sub" }, "Scans IPMG Web runs on its own, every N minutes or on a cron schedule. A run is skipped while the previous one is still going.")
+  );
+
+  const listCard = h("div", { class: "card" });
+  async function refresh() {
+    try {
+      listCard.replaceChildren(schedulesTable(await api.schedules(), { onChange: refresh }));
+    } catch (err) {
+      listCard.replaceChildren(h("div", { class: "banner err" }, `Could not load schedules: ${err.message}`));
+    }
+  }
+
+  root.append(listCard, scheduleForm({ onCreated: refresh }));
+  await refresh();
+
+  // A scheduled run starting or finishing changes the list: next run, last run, state.
+  const unsubscribe = onEvent((event) => {
+    if (event.type === "scan_started" || event.type === "scan_finished" || event.type === "reconnected") refresh();
+  });
+  const timer = setInterval(refresh, 30000);
+  root.addEventListener("view:destroy", () => {
+    unsubscribe();
+    clearInterval(timer);
+  }, { once: true });
 }

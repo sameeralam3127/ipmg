@@ -48,7 +48,21 @@ function csv(rows) {
 
 function statusCounts(rows) { return rows.reduce((out, row) => ({ ...out, [row.status]: (out[row.status] || 0) + 1 }), {}); }
 
+// Schedules the demo page can create and pause; they never run.
+let schedules = [
+  { id: 1, name: "branch-office", source: "schedule:branch-office", targets: "10.24.8.0/27", interval_minutes: 15, cron: null, paused: false, created_at: "2026-08-01 09:00", next_run_at: "2026-08-07 09:55", last_run_at: "2026-08-07 09:40", last_scan_id: 24, last_status: "complete", last_skipped_at: null, last_skip_reason: null, config: {} },
+];
+
 export const demo = {
+  schedules: () => schedules,
+  createSchedule: (payload) => {
+    const schedule = { id: Math.max(0, ...schedules.map((s) => s.id)) + 1, source: `schedule:${payload.name}`, paused: false, created_at: "2026-08-07 10:05", next_run_at: payload.cron ? "2026-08-07 11:00" : "2026-08-07 10:05", last_run_at: null, last_scan_id: null, last_status: null, last_skipped_at: null, last_skip_reason: null, config: {}, cron: null, interval_minutes: null, ...payload };
+    schedules = [...schedules, schedule];
+    return schedule;
+  },
+  pauseSchedule: (id, paused) => { schedules = schedules.map((s) => (s.id === id ? { ...s, paused, next_run_at: paused ? null : s.next_run_at || "2026-08-07 10:05" } : s)); return schedules.find((s) => s.id === id); },
+  runSchedule: (id) => ({ id: demo.startScan({ targets: schedules.find((s) => s.id === id)?.targets || "", source: "demo schedule" }).id, total: 0 }),
+  deleteSchedule: (id) => { schedules = schedules.filter((s) => s.id !== id); return null; },
   stats: () => ({ scan_count: scans.length, host_count: hosts.length, latest_scan: scans[0], running_scans: [], trend: [...scans].reverse().map((s) => ({ ...s, active: s.status_counts.Active || 0 })) }),
   assets: () => hosts.map(([ip, hostname, status, latency], index) => ({ ip, hostname, status, avg_latency: latency, last_seen: status === "Active" ? "2026-08-07 09:40" : null, last_checked: "2026-08-07 09:40", scan_count: index < 16 ? 4 : 3 })),
   scans: (limit = 50) => scans.slice(0, limit),

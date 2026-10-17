@@ -689,6 +689,30 @@ ssh -L 8080:127.0.0.1:8080 user@server
 Every API request needs the access token in that link. A new token is made
 each time IPMG Web starts; set `IPMG_WEB_TOKEN` to keep one fixed.
 
+### Scheduled scans
+
+IPMG Web can run scans on its own, so continuous monitoring from the browser no
+longer means leaving a terminal open. On the **Schedules** page, give a
+schedule a name, its targets, and either **every N minutes** or a five-field
+**cron expression** in the server's local time (`*/15 * * * *`,
+`0 7 * * mon-fri`, `@daily`), plus the usual scan settings. Each schedule can
+be paused, resumed, run now, or deleted (its scans stay in the history).
+
+- Schedules are stored in the history database, so they survive a restart; a
+  run that fell due while IPMG Web was stopped happens once, when it starts.
+- Every run is a normal scan under the source `schedule:<name>`, so it appears
+  in History, and the Changes view compares it with that schedule's previous
+  run by default.
+- A run is skipped, not stacked, while the schedule's previous run is still
+  going or `--max-scans` scans are running. The page shows the last skip and
+  why.
+- An every-N-minutes schedule runs once when created or resumed and then keeps
+  a fixed cadence; a cron schedule waits for its next match.
+
+The same is available over the API under `/api/v1/schedules`
+([API reference](API.md)). For scheduled scans without IPMG Web, use `--interval`
+or the [service templates](SERVICES.md).
+
 Each scan may use up to 500 threads, each running a `ping` process, so IPMG
 Web runs at most `--max-scans` scans at once (default 2). Starting another,
 from a second tab, a double click, a script, or a schedule, is refused with

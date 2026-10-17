@@ -86,7 +86,28 @@ CREATE TABLE IF NOT EXISTS http_checks (
 );
 
 CREATE INDEX IF NOT EXISTS idx_http_checks_scan ON http_checks(scan_id);
+
+CREATE TABLE IF NOT EXISTS schedules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    targets TEXT NOT NULL,
+    config TEXT NOT NULL DEFAULT '{}',
+    interval_minutes INTEGER,
+    cron TEXT,
+    paused INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    next_run_at TEXT,
+    last_run_at TEXT,
+    last_scan_id INTEGER,
+    last_skipped_at TEXT,
+    last_skip_reason TEXT
+);
 """
+
+_SCHEDULE_SQL = (
+    "SELECT sc.*, s.status AS last_status FROM schedules sc "
+    "LEFT JOIN scans s ON s.id = sc.last_scan_id"
+)
 
 #: ``ESCAPE`` character used to neutralise user-supplied LIKE wildcards.
 _LIKE_ESCAPE = "\\"
@@ -536,7 +557,99 @@ class Database:
         rows.sort(key=lambda row: ip_sort_key(row["ip"]))
         return rows
 
+    # ---------------------------------------------------------- schedules
+
+    def create_schedule(
+        self,
+        name: str,
+        targets: str,
+        config: Dict[str, Any],
+        interval_minutes: Optional[int],
+        cron: Optional[str],
+        next_run_at: Optional[str],
+        paused: bool = False,
+    ) -> int:
+        with self._session() as conn:
+            cursor = conn.execute(
+                "INSERT INTO schedules (name, targets, config, interval_minutes, cron, paused, "
+                "created_at, next_run_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    name,
+                    targets,
+                    json.dumps(config),
+                    interval_minutes,
+                    cron,
+                    int(paused),
+                    _now(),
+                    next_run_at,
+                ),
+            )
+            return int(cursor.lastrowid)
+
+    def list_schedules(self) -> List[Dict[str, Any]]:
+        with self._session() as conn:
+            rows = conn.execute(_SCHEDULE_SQL + " ORDER BY sc.id").fetchall()
+        return [self._schedule_dict(row) for row in rows]
+
+    def get_schedule(self, schedule_id: int) -> Optional[Dict[str, Any]]:
+        with self._session() as conn:
+            row = conn.execute(_SCHEDULE_SQL + " WHERE sc.id = ?", (schedule_id,)).fetchone()
+        return self._schedule_dict(row) if row is not None else None
+
+    def due_schedules(self, now: str) -> List[Dict[str, Any]]:
+        """Schedules that are not paused and whose next run is at or before ``now``."""
+        with self._session() as conn:
+            rows = conn.execute(
+                _SCHEDULE_SQL + " WHERE sc.paused = 0 AND sc.next_run_at IS NOT NULL "
+                "AND sc.next_run_at <= ? ORDER BY sc.next_run_at, sc.id",
+                (now,),
+            ).fetchall()
+        return [self._schedule_dict(row) for row in rows]
+
+    def set_schedule_paused(
+        self, schedule_id: int, paused: bool, next_run_at: Optional[str]
+    ) -> bool:
+        with self._session() as conn:
+            cursor = conn.execute(
+                "UPDATE schedules SET paused = ?, next_run_at = ? WHERE id = ?",
+                (int(paused), next_run_at, schedule_id),
+            )
+            return cursor.rowcount > 0
+
+    def record_schedule_run(
+        self, schedule_id: int, ran_at: str, scan_id: int, next_run_at: Optional[str]
+    ) -> None:
+        with self._session() as conn:
+            conn.execute(
+                "UPDATE schedules SET last_run_at = ?, last_scan_id = ?, next_run_at = ? "
+                "WHERE id = ?",
+                (ran_at, scan_id, next_run_at, schedule_id),
+            )
+
+    def record_schedule_skip(
+        self, schedule_id: int, skipped_at: str, reason: str, next_run_at: Optional[str]
+    ) -> None:
+        with self._session() as conn:
+            conn.execute(
+                "UPDATE schedules SET last_skipped_at = ?, last_skip_reason = ?, "
+                "next_run_at = ? WHERE id = ?",
+                (skipped_at, reason, next_run_at, schedule_id),
+            )
+
+    def delete_schedule(self, schedule_id: int) -> bool:
+        """Delete a schedule. The scans it ran stay in the history."""
+        with self._session() as conn:
+            cursor = conn.execute("DELETE FROM schedules WHERE id = ?", (schedule_id,))
+            return cursor.rowcount > 0
+
     # ------------------------------------------------------------ helpers
+
+    @staticmethod
+    def _schedule_dict(row: sqlite3.Row) -> Dict[str, Any]:
+        schedule = dict(row)
+        schedule["config"] = json.loads(schedule.get("config") or "{}")
+        schedule["paused"] = bool(schedule["paused"])
+        return schedule
 
     @staticmethod
     def _scan_dict(row: sqlite3.Row) -> Dict[str, Any]:

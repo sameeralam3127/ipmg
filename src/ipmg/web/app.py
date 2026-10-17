@@ -12,6 +12,8 @@ import re
 import secrets
 import tempfile
 from contextlib import asynccontextmanager
+from dataclasses import asdict
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Optional, Union
 from urllib.parse import urlsplit
@@ -52,6 +54,14 @@ from ipmg.reporting.diff_report import DIFF_FORMATS, render_diff
 from ipmg.reporting.frames import ReportTable, report_columns, results_table
 from ipmg.services.history_service import HistoryService
 from ipmg.web.manager import DEFAULT_MAX_SCANS, OVERFLOW, ScanLimitError, ScanManager
+from ipmg.web.scheduler import (
+    TICK_S,
+    ScheduleBusyError,
+    Scheduler,
+    first_run,
+    format_time,
+    schedule_source,
+)
 from ipmg.web.schemas import (
     Asset,
     ErrorResponse,
@@ -62,6 +72,9 @@ from ipmg.web.schemas import (
     ScanDiffModel,
     ScanRequest,
     ScanSummary,
+    Schedule,
+    SchedulePatch,
+    ScheduleRequest,
     Stats,
     UploadResult,
     WakeRequest,
@@ -319,17 +332,7 @@ def _register_scan_routes(api: APIRouter, database: Database, manager: ScanManag
     )
     def create_scan(request: ScanRequest) -> Dict[str, Any]:
         ips = _parse_scan_targets(request)
-        config = ScanConfig(
-            timeout=request.timeout,
-            count=request.count,
-            threads=request.threads,
-            resolve=request.resolve,
-            dns_cache_ttl=request.dns_cache_ttl,
-            dns_timeout=request.dns_timeout,
-            resolve_active_only=request.resolve_active_only,
-            probe=request.probe,
-            mac_lookup=request.mac_lookup,
-        ).clamped()
+        config = ScanConfig(**request.scan_settings()).clamped()
         try:
             scan_id = manager.start_scan(ips, config, source=request.source)
         except ScanLimitError as exc:
@@ -525,6 +528,130 @@ def _register_diff_routes(api: APIRouter, history: HistoryService) -> None:
         )
 
 
+def _schedule_response(schedule: Dict[str, Any]) -> Dict[str, Any]:
+    return {**schedule, "source": schedule_source(schedule["name"])}
+
+
+def _require_schedule(database: Database, schedule_id: int) -> Dict[str, Any]:
+    schedule = database.get_schedule(schedule_id)
+    if schedule is None:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+    return schedule
+
+
+def _create_schedule(database: Database, request: ScheduleRequest) -> int:
+    """Check a new schedule and store it, or raise the HTTP error that says why not."""
+    name = request.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Give the schedule a name.")
+    if (request.interval_minutes is None) == (not request.cron):
+        raise HTTPException(
+            status_code=400, detail="Give either interval_minutes or cron, and not both."
+        )
+    if any(other["name"].lower() == name.lower() for other in database.list_schedules()):
+        raise HTTPException(status_code=409, detail=f"A schedule named {name!r} already exists.")
+    try:
+        parse_manual_targets(request.targets)
+        first = first_run(request.interval_minutes, request.cron, datetime.now())
+    except FileIOError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid cron expression: {exc}") from exc
+
+    return database.create_schedule(
+        name=name,
+        targets=request.targets,
+        config=asdict(ScanConfig(**request.scan_settings()).clamped()),
+        interval_minutes=request.interval_minutes,
+        cron=" ".join(request.cron.split()) if request.cron else None,
+        next_run_at=None if request.paused else format_time(first),
+        paused=request.paused,
+    )
+
+
+def _run_schedule_now(scheduler: Scheduler, schedule_id: int) -> Dict[str, Any]:
+    try:
+        return scheduler.run_now(schedule_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Schedule not found") from None
+    except ScheduleBusyError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ScanLimitError as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+    except FileIOError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def _register_schedule_routes(api: APIRouter, database: Database) -> None:
+    @api.get("/schedules", response_model=List[Schedule], summary="Every scheduled scan")
+    def list_schedules() -> List[Dict[str, Any]]:
+        return [_schedule_response(schedule) for schedule in database.list_schedules()]
+
+    @api.post(
+        "/schedules",
+        status_code=201,
+        response_model=Schedule,
+        responses=_errors(400, 409, e409="A schedule with that name exists"),
+        summary="Create a scheduled scan",
+    )
+    def create_schedule(request: ScheduleRequest) -> Dict[str, Any]:
+        schedule_id = _create_schedule(database, request)
+        return _schedule_response(_require_schedule(database, schedule_id))
+
+    @api.get(
+        "/schedules/{schedule_id}",
+        response_model=Schedule,
+        responses=_errors(404, e404="Schedule not found"),
+        summary="One scheduled scan",
+    )
+    def get_schedule(schedule_id: int) -> Dict[str, Any]:
+        return _schedule_response(_require_schedule(database, schedule_id))
+
+
+def _register_schedule_control_routes(
+    api: APIRouter, database: Database, scheduler: Scheduler
+) -> None:
+    @api.patch(
+        "/schedules/{schedule_id}",
+        response_model=Schedule,
+        responses=_errors(404, e404="Schedule not found"),
+        summary="Pause or resume a scheduled scan",
+    )
+    def update_schedule(schedule_id: int, patch: SchedulePatch) -> Dict[str, Any]:
+        schedule = _require_schedule(database, schedule_id)
+        if patch.paused is not None and patch.paused != schedule["paused"]:
+            upcoming = None
+            if not patch.paused:
+                when = first_run(schedule["interval_minutes"], schedule["cron"], datetime.now())
+                upcoming = format_time(when)
+            database.set_schedule_paused(schedule_id, patch.paused, upcoming)
+        return _schedule_response(_require_schedule(database, schedule_id))
+
+    @api.delete(
+        "/schedules/{schedule_id}",
+        status_code=204,
+        response_class=Response,
+        responses=_errors(404, e404="Schedule not found"),
+        summary="Delete a scheduled scan (its scans stay in the history)",
+    )
+    def delete_schedule(schedule_id: int) -> Response:
+        if not database.delete_schedule(schedule_id):
+            raise HTTPException(status_code=404, detail="Schedule not found")
+        return Response(status_code=204)
+
+    @api.post(
+        "/schedules/{schedule_id}/run",
+        status_code=201,
+        response_model=ScanCreated,
+        responses=_errors(
+            400, 404, 409, 429, e404="Schedule not found", e409="Its previous run is still going"
+        ),
+        summary="Run a scheduled scan now",
+    )
+    def run_schedule(schedule_id: int) -> Dict[str, Any]:
+        return _run_schedule_now(scheduler, schedule_id)
+
+
 def _register_wake_route(api: APIRouter) -> None:
     @api.post(
         "/wake",
@@ -699,6 +826,7 @@ def create_app(
     token: Optional[str] = None,
     metrics_sources: Optional[int] = None,
     max_scans: int = DEFAULT_MAX_SCANS,
+    schedule_tick_s: float = TICK_S,
 ) -> FastAPI:
     """Build the app. ``token`` guards every API route; a random one is made if omitted.
 
@@ -710,14 +838,18 @@ def create_app(
     token = token or secrets.token_urlsafe(32)
     manager = ScanManager(database, max_scans=max_scans)
     history = HistoryService(database)
+    scheduler = Scheduler(database, manager, tick_s=schedule_tick_s)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
         manager.attach_loop(asyncio.get_running_loop())
         manager.recover()
+        scheduler.start()
         yield
-        # Off the event loop: waiting for the workers blocks.
-        await asyncio.get_running_loop().run_in_executor(None, manager.shutdown)
+        # Off the event loop: waiting for the threads blocks.
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, scheduler.stop)
+        await loop.run_in_executor(None, manager.shutdown)
 
     app = FastAPI(
         title="IPMG Web", version=__version__, description=API_DESCRIPTION, lifespan=lifespan
@@ -725,6 +857,7 @@ def create_app(
     app.state.db = database
     app.state.manager = manager
     app.state.history = history
+    app.state.scheduler = scheduler
     app.state.token = token
 
     api = APIRouter(
@@ -735,6 +868,8 @@ def create_app(
     _register_overview_routes(api, database)
     _register_scan_routes(api, database, manager)
     _register_scan_control_routes(api, database, manager)
+    _register_schedule_routes(api, database)
+    _register_schedule_control_routes(api, database, scheduler)
     _register_report_routes(api, database)
     _register_diff_routes(api, history)
     _register_upload_route(api)

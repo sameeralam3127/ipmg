@@ -116,6 +116,12 @@ list each problem in `errors`:
 | `GET` | `/scans/{id}/diff?baseline=` | Changes since `baseline` (default: the previous scan) |
 | `GET` | `/scans/{id}/diff/report?fmt=md` | Download the changes as `md`, `json`, or `csv` |
 | `POST` | `/upload` | Parse targets from an uploaded file (multipart field `file`) |
+| `GET` | `/schedules` | Every scheduled scan, with its next run and how its last run went |
+| `POST` | `/schedules` | Create one: `{"name", "targets", "interval_minutes"}` or `{..., "cron"}`, plus any scan setting; `409` if the name is taken |
+| `GET` | `/schedules/{id}` | One scheduled scan |
+| `PATCH` | `/schedules/{id}` | Pause or resume it: `{"paused": true}` |
+| `DELETE` | `/schedules/{id}` | Delete it; its scans stay in the history. Returns `204` |
+| `POST` | `/schedules/{id}/run` | Run it now; `409` while its previous run is still going, `429` at `--max-scans` |
 | `POST` | `/wake` | Send a Wake-on-LAN packet: `{"mac", "broadcast"?, "port"?}`; `400` for an invalid MAC or address |
 | WebSocket | `/ws` | Live scan events |
 

@@ -27,6 +27,30 @@
         "HTTPBearer"
       ]
     },
+    "DELETE /api/v1/schedules/{schedule_id}": {
+      "parameters": {
+        "schedule_id": {
+          "in": "path",
+          "required": true,
+          "type": "integer"
+        }
+      },
+      "responses": {
+        "204": {},
+        "401": {
+          "application/json": "ErrorResponse"
+        },
+        "404": {
+          "application/json": "ErrorResponse"
+        },
+        "422": {
+          "application/json": "ErrorResponse"
+        }
+      },
+      "security": [
+        "HTTPBearer"
+      ]
+    },
     "GET /api/v1/assets": {
       "parameters": {},
       "responses": {
@@ -284,6 +308,49 @@
         "HTTPBearer"
       ]
     },
+    "GET /api/v1/schedules": {
+      "parameters": {},
+      "responses": {
+        "200": {
+          "application/json": "array[Schedule]"
+        },
+        "401": {
+          "application/json": "ErrorResponse"
+        },
+        "422": {
+          "application/json": "ErrorResponse"
+        }
+      },
+      "security": [
+        "HTTPBearer"
+      ]
+    },
+    "GET /api/v1/schedules/{schedule_id}": {
+      "parameters": {
+        "schedule_id": {
+          "in": "path",
+          "required": true,
+          "type": "integer"
+        }
+      },
+      "responses": {
+        "200": {
+          "application/json": "Schedule"
+        },
+        "401": {
+          "application/json": "ErrorResponse"
+        },
+        "404": {
+          "application/json": "ErrorResponse"
+        },
+        "422": {
+          "application/json": "ErrorResponse"
+        }
+      },
+      "security": [
+        "HTTPBearer"
+      ]
+    },
     "GET /api/v1/stats": {
       "parameters": {},
       "responses": {
@@ -291,6 +358,35 @@
           "application/json": "Stats"
         },
         "401": {
+          "application/json": "ErrorResponse"
+        },
+        "422": {
+          "application/json": "ErrorResponse"
+        }
+      },
+      "security": [
+        "HTTPBearer"
+      ]
+    },
+    "PATCH /api/v1/schedules/{schedule_id}": {
+      "parameters": {
+        "schedule_id": {
+          "in": "path",
+          "required": true,
+          "type": "integer"
+        }
+      },
+      "requestBody": {
+        "application/json": "SchedulePatch"
+      },
+      "responses": {
+        "200": {
+          "application/json": "Schedule"
+        },
+        "401": {
+          "application/json": "ErrorResponse"
+        },
+        "404": {
           "application/json": "ErrorResponse"
         },
         "422": {
@@ -346,6 +442,67 @@
           "application/json": "ErrorResponse"
         },
         "422": {
+          "application/json": "ErrorResponse"
+        }
+      },
+      "security": [
+        "HTTPBearer"
+      ]
+    },
+    "POST /api/v1/schedules": {
+      "parameters": {},
+      "requestBody": {
+        "application/json": "ScheduleRequest"
+      },
+      "responses": {
+        "201": {
+          "application/json": "Schedule"
+        },
+        "400": {
+          "application/json": "ErrorResponse"
+        },
+        "401": {
+          "application/json": "ErrorResponse"
+        },
+        "409": {
+          "application/json": "ErrorResponse"
+        },
+        "422": {
+          "application/json": "ErrorResponse"
+        }
+      },
+      "security": [
+        "HTTPBearer"
+      ]
+    },
+    "POST /api/v1/schedules/{schedule_id}/run": {
+      "parameters": {
+        "schedule_id": {
+          "in": "path",
+          "required": true,
+          "type": "integer"
+        }
+      },
+      "responses": {
+        "201": {
+          "application/json": "ScanCreated"
+        },
+        "400": {
+          "application/json": "ErrorResponse"
+        },
+        "401": {
+          "application/json": "ErrorResponse"
+        },
+        "404": {
+          "application/json": "ErrorResponse"
+        },
+        "409": {
+          "application/json": "ErrorResponse"
+        },
+        "422": {
+          "application/json": "ErrorResponse"
+        },
+        "429": {
           "application/json": "ErrorResponse"
         }
       },
@@ -727,6 +884,70 @@
         "status",
         "status_counts",
         "total"
+      ]
+    },
+    "Schedule": {
+      "properties": {
+        "config": "object",
+        "created_at": "string",
+        "cron": "null | string",
+        "id": "integer",
+        "interval_minutes": "integer | null",
+        "last_run_at": "null | string",
+        "last_scan_id": "integer | null",
+        "last_skip_reason": "null | string",
+        "last_skipped_at": "null | string",
+        "last_status": "null | string",
+        "name": "string",
+        "next_run_at": "null | string",
+        "paused": "boolean",
+        "source": "string",
+        "targets": "string"
+      },
+      "required": [
+        "config",
+        "created_at",
+        "cron",
+        "id",
+        "interval_minutes",
+        "last_run_at",
+        "last_scan_id",
+        "last_skip_reason",
+        "last_skipped_at",
+        "last_status",
+        "name",
+        "next_run_at",
+        "paused",
+        "source",
+        "targets"
+      ]
+    },
+    "SchedulePatch": {
+      "properties": {
+        "paused": "boolean | null"
+      },
+      "required": []
+    },
+    "ScheduleRequest": {
+      "properties": {
+        "count": "integer",
+        "cron": "null | string",
+        "dns_cache_ttl": "integer",
+        "dns_timeout": "number",
+        "interval_minutes": "integer | null",
+        "mac_lookup": "boolean",
+        "name": "string",
+        "paused": "boolean",
+        "probe": "enum 'icmp', 'tcp', 'icmp,tcp'",
+        "resolve": "boolean",
+        "resolve_active_only": "boolean",
+        "targets": "string",
+        "threads": "integer",
+        "timeout": "integer"
+      },
+      "required": [
+        "name",
+        "targets"
       ]
     },
     "Stats": {

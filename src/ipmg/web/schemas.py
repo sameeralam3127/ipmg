@@ -39,18 +39,9 @@ class ErrorResponse(ApiModel):
 # ---------------------------------------------------------------------- scans
 
 
-class ScanRequest(BaseModel):
-    """Start a scan. Provide ``targets`` text or an ``ips`` list."""
+class ScanSettings(BaseModel):
+    """How to scan: the settings a scan and a schedule share."""
 
-    targets: Optional[str] = Field(
-        default=None,
-        description="Free-form target text: IPs, CIDR ranges, and hostnames, "
-        "separated by newlines, commas, or spaces",
-    )
-    ips: Optional[List[str]] = Field(
-        default=None, description="Pre-parsed target list; takes precedence over 'targets'"
-    )
-    source: str = Field(default="manual", description="Label stored with the scan")
     timeout: int = Field(default=2, description="Seconds to wait per ping (clamped to 1-60)")
     count: int = Field(default=1, description="Pings per host (clamped to 1-10)")
     threads: int = Field(default=50, description="Concurrent workers (clamped to 1-500)")
@@ -76,6 +67,24 @@ class ScanRequest(BaseModel):
         description="How to tell a host is up: ping, a TCP connection to a common port, "
         "or TCP only for hosts that did not answer the ping",
     )
+
+    def scan_settings(self) -> Dict[str, Any]:
+        """These settings alone, as a ScanConfig takes them."""
+        return {name: getattr(self, name) for name in ScanSettings.model_fields}
+
+
+class ScanRequest(ScanSettings):
+    """Start a scan. Provide ``targets`` text or an ``ips`` list."""
+
+    targets: Optional[str] = Field(
+        default=None,
+        description="Free-form target text: IPs, CIDR ranges, and hostnames, "
+        "separated by newlines, commas, or spaces",
+    )
+    ips: Optional[List[str]] = Field(
+        default=None, description="Pre-parsed target list; takes precedence over 'targets'"
+    )
+    source: str = Field(default="manual", description="Label stored with the scan")
 
 
 class ScanCreated(ApiModel):
@@ -182,6 +191,55 @@ class Asset(ApiModel):
     last_checked: str
     last_scan_id: int
     scan_count: int
+
+
+# ------------------------------------------------------------------ schedules
+
+
+class ScheduleRequest(ScanSettings):
+    """Create a schedule: scan ``targets`` every ``interval_minutes``, or on ``cron``."""
+
+    name: str = Field(
+        min_length=1,
+        max_length=100,
+        description="Unique name; the scans are stored under the source 'schedule:<name>'",
+    )
+    targets: str = Field(description="Target text, as for a scan; parsed again for every run")
+    interval_minutes: Optional[int] = Field(
+        default=None, ge=1, le=10080, description="Run every N minutes (1 minute to 1 week)"
+    )
+    cron: Optional[str] = Field(
+        default=None,
+        description="Or a five-field cron expression in the server's local time, "
+        "such as '*/15 * * * *' or '@daily'",
+    )
+    paused: bool = Field(default=False, description="Create it paused")
+
+
+class SchedulePatch(BaseModel):
+    paused: Optional[bool] = Field(default=None, description="Pause or resume the schedule")
+
+
+class Schedule(ApiModel):
+    """A stored schedule and how its runs have gone."""
+
+    id: int
+    name: str
+    source: str = Field(description="History source of its scans: 'schedule:<name>'")
+    targets: str
+    interval_minutes: Optional[int]
+    cron: Optional[str]
+    paused: bool
+    config: Dict[str, Any] = Field(description="Scan settings each run uses")
+    created_at: str
+    next_run_at: Optional[str] = Field(description="Local time of the next run; null if paused")
+    last_run_at: Optional[str]
+    last_scan_id: Optional[int]
+    last_status: Optional[str] = Field(description="Status of the last scan it started")
+    last_skipped_at: Optional[str] = Field(description="When a run was last skipped")
+    last_skip_reason: Optional[str] = Field(
+        description="Why: the previous run was still going, --max-scans was reached, ..."
+    )
 
 
 class WakeRequest(BaseModel):
