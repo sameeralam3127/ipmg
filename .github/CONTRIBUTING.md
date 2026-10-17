@@ -121,7 +121,7 @@ missing:
 
 ```bash
 uv tool install tox --with tox-uv   # once
-tox -e lint,lowest,coverage         # the checks in the Quality workflow
+tox -e lint,lowest,coverage         # lint and lowest deps (Quality), coverage (Publish)
 tox -e py39                         # the tests on one Python version
 tox -p                              # everything, in parallel
 ```
