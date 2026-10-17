@@ -144,10 +144,12 @@ irm https://raw.githubusercontent.com/sameeralam3127/ipmg/main/install.ps1 | iex
 
 It works in Windows PowerShell 5.1 and PowerShell 7 and needs no
 administrator rights: it installs uv if it is missing, installs IPMG, adds it
-to your user `PATH`, and checks that `ipmg --version` runs. To pin a release:
+to your user `PATH`, and checks that `ipmg --version` runs. To pin a release,
+replace `X.Y.Z` with any version listed on
+[PyPI](https://pypi.org/project/ipmg/#history):
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/sameeralam3127/ipmg/main/install.ps1))) -Version 2.3.0
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/sameeralam3127/ipmg/main/install.ps1))) -Version X.Y.Z
 ```
 
 **Docker (amd64 and arm64):**
@@ -191,7 +193,7 @@ docker compose run --rm scan --input 10.0.0.0/24          # CLI scans land in th
 
 Publishing the port more widely (`8080:8080`) exposes IPMG Web on your
 network over plain HTTP; put a reverse proxy with TLS in front first. Images
-are tagged with the release version (`2.4.0`), the minor line (`2.4`), and
+are tagged with the release version (`X.Y.Z`), the minor line (`X.Y`), and
 `latest`.
 
 ### Installing with pip
@@ -287,10 +289,11 @@ one of them.
 uv tool install ipmg
 ```
 
-**Pin a specific version:**
+**Pin a specific version** (any release listed on
+[PyPI](https://pypi.org/project/ipmg/#history)):
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/sameeralam3127/ipmg/main/install.sh | bash -s -- --version 1.13.0
+curl -sSL https://raw.githubusercontent.com/sameeralam3127/ipmg/main/install.sh | bash -s -- --version X.Y.Z
 ```
 
 **From source (development):**
@@ -333,7 +336,7 @@ ipmg --input targets.txt              # a file of hosts
 Here is what a finished scan looks like:
 
 ```text
-  ipmg 1.13.0  ·  scan
+  ipmg X.Y.Z  ·  scan
   ICMP probes only — scan only networks you are authorized to scan.
 
   Source   targets.txt

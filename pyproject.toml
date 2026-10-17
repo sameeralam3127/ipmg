@@ -14,7 +14,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "ipmg"
 version = "3.1.4"  # Managed automatically by semantic-release
-description = "IP Management & Ping Monitoring CLI Tool"
+description = "Network discovery and change detection: ping sweeps, scan history, and reports for what changed on your network"
 readme = "README.md"
 requires-python = ">=3.9"
 license = "MIT"
