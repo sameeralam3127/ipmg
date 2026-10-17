@@ -12,11 +12,13 @@ from ipmg.cli.parser import (
     build_history_parser,
     build_parser,
     build_prune_parser,
+    build_wake_parser,
     build_web_parser,
 )
 from ipmg.core.diff import DiffOptions
 from ipmg.core.health import HostsDownError
 from ipmg.core.security import print_disclaimer_once
+from ipmg.core.wake import parse_mac, send_magic_packet
 from ipmg.exceptions import IPMGError
 from ipmg.infrastructure.notify import notify_options, send_notifications
 from ipmg.reporting import ui
@@ -199,11 +201,29 @@ def _diff_command(argv: List[str]) -> int:
     return EXIT_OK
 
 
+def _wake_command(argv: List[str]) -> int:
+    args = build_wake_parser().parse_args(argv)
+    configure_logging(args.verbose)
+    ui.header("wake")
+
+    # Every address is checked before any packet goes out.
+    for mac in args.macs:
+        parse_mac(mac)
+    ui.blank()
+    for mac in args.macs:
+        sent = send_magic_packet(mac, broadcast=args.broadcast, port=args.port)
+        ui.success(f"Magic packet sent to {sent} via {args.broadcast}:{args.port}")
+    ui.blank()
+    ui.note("A host that wakes takes a little while to answer pings.")
+    return EXIT_OK
+
+
 _COMMANDS: Dict[str, Callable[[List[str]], int]] = {
     "web": _web_command,
     "history": _history_command,
     "diff": _diff_command,
     "compare": _diff_command,
+    "wake": _wake_command,
 }
 
 #: Flag spellings of a command. Reaching for "--web" before "web" is the

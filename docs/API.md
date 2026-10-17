@@ -115,6 +115,7 @@ list each problem in `errors`:
 | `GET` | `/scans/{id}/diff?baseline=` | Changes since `baseline` (default: the previous scan) |
 | `GET` | `/scans/{id}/diff/report?fmt=md` | Download the changes as `md`, `json`, or `csv` |
 | `POST` | `/upload` | Parse targets from an uploaded file (multipart field `file`) |
+| `POST` | `/wake` | Send a Wake-on-LAN packet: `{"mac", "broadcast"?, "port"?}`; `400` for an invalid MAC or address |
 | WebSocket | `/ws` | Live scan events |
 
 The exact fields of every request and response are in the

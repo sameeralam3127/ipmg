@@ -64,6 +64,7 @@ export const demo = {
   },
   deleteScan: (id) => { scans = scans.filter((s) => s.id !== Number(id)); records.delete(Number(id)); return null; },
   cancelScan: (id) => ({ id, cancelling: true }),
+  wake: (mac) => ({ mac, broadcast: "255.255.255.255", port: 9 }),
   upload: async (file) => ({ filename: file.name, count: (await file.text()).split(/\r?\n/).filter(Boolean).length, targets: (await file.text()).split(/\r?\n/).filter(Boolean) }),
   reportUrl: (id) => `data:text/csv;charset=utf-8,${encodeURIComponent(csv(demo.results(id)))}`,
   diff: (id, { baseline } = {}) => {

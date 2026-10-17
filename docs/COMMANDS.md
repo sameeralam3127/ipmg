@@ -39,6 +39,7 @@ website. `ipmg --help` (and `ipmg web --help`, `ipmg history --help`,
 | `ipmg history [options]` | List scans stored in the local history database |
 | `ipmg history prune [options]` | Delete old scans from the history ([retention](#keeping-history-and-reports-bounded)) |
 | `ipmg diff [SCAN_ID ...] [options]` | Compare two stored scans |
+| `ipmg wake MAC [MAC ...] [options]` | Wake hosts with a Wake-on-LAN magic packet ([details](#wake-on-lan)) |
 | `ipmg --version` | Print the installed version |
 | `python -m ipmg ...` | Same as `ipmg ...`, useful when the script is not on your `PATH` |
 
@@ -579,6 +580,33 @@ fi
 [ "$status" -eq 0 ] && status=$scan_status
 exit "$status"
 ```
+
+---
+
+## Wake-on-LAN
+
+When a scan shows a workstation or server as down, wake it:
+
+```bash
+ipmg wake AA:BB:CC:DD:EE:FF                            # broadcast on this network segment
+ipmg wake aa-bb-cc-dd-ee-ff AABBCCDDEE01               # several hosts; any common spelling
+ipmg wake AA:BB:CC:DD:EE:FF --broadcast 192.168.2.255  # a directed broadcast to another subnet
+ipmg wake AA:BB:CC:DD:EE:FF --port 7                   # some cards listen on 7 instead of 9
+```
+
+The magic packet (six `0xFF` bytes, then the MAC 16 times) goes out as an
+ordinary UDP broadcast, with no raw sockets or administrator rights. It only
+works when:
+
+- the target has Wake-on-LAN enabled, in its firmware and its operating system;
+- the broadcast reaches it: the target is on this network segment, or
+  `--broadcast` names its subnet's directed broadcast address and the router
+  between you forwards directed broadcasts (most do not by default).
+
+Every MAC is checked before any packet is sent; an invalid one is an error
+with exit status `1`. A scan with [`--mac`](#mac-addresses-and-vendors)
+records each host's MAC, and IPMG Web's inventory then offers a **Wake**
+button for it (`POST /api/v1/wake`, behind the same access token).
 
 ---
 

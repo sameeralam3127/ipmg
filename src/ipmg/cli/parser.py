@@ -9,6 +9,7 @@ from ipmg.cli.config import add_config_arguments, config_help
 from ipmg.core.discovery import DISCOVERY_FAMILIES
 from ipmg.core.engine import DEFAULT_DNS_TIMEOUT_S, PROBE_METHODS
 from ipmg.core.portscan import DEFAULT_PORTS, parse_port_list
+from ipmg.core.wake import DEFAULT_BROADCAST, DEFAULT_PORT as DEFAULT_WAKE_PORT
 from ipmg.infrastructure.file_io import DEFAULT_INPUT_FILE
 from ipmg.infrastructure.incremental import (
     DEFAULT_AUTOSAVE_S,
@@ -38,7 +39,8 @@ PROG = "IPMG - IP Management & Ping Monitoring Tool"
 #: someone who typed an unknown flag needs to see them.
 COMMANDS_HINT = (
     "Commands: 'ipmg web' (IPMG Web, the browser UI), 'ipmg history' (stored scans; "
-    "'ipmg history prune' deletes old ones), 'ipmg diff' (compare two scans)."
+    "'ipmg history prune' deletes old ones), 'ipmg diff' (compare two scans), "
+    "'ipmg wake' (Wake-on-LAN)."
 )
 
 
@@ -628,6 +630,40 @@ def build_prune_parser() -> argparse.ArgumentParser:
         help="Afterwards, compact the database file to give the freed space back.",
     )
     _add_database_argument(parser)
+    parser.add_argument("--verbose", action="store_true")
+    return parser
+
+
+def build_wake_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        "ipmg wake",
+        description=(
+            "Wake hosts with a Wake-on-LAN magic packet. The host must have "
+            "Wake-on-LAN enabled and be reachable by the broadcast: on this network "
+            "segment, or behind a router that forwards a directed broadcast."
+        ),
+    )
+    parser.add_argument(
+        "macs",
+        nargs="+",
+        metavar="MAC",
+        help="MAC address: AA:BB:CC:DD:EE:FF, AA-BB-CC-DD-EE-FF, or AABBCCDDEEFF.",
+    )
+    parser.add_argument(
+        "--broadcast",
+        default=DEFAULT_BROADCAST,
+        metavar="ADDRESS",
+        help=(
+            f"IPv4 broadcast address to send to (default: {DEFAULT_BROADCAST}); a "
+            "directed broadcast such as 192.168.1.255 reaches another subnet."
+        ),
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=DEFAULT_WAKE_PORT,
+        help=f"UDP port (default: {DEFAULT_WAKE_PORT}; 7 is the other common choice).",
+    )
     parser.add_argument("--verbose", action="store_true")
     return parser
 

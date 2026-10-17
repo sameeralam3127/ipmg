@@ -30,7 +30,7 @@ from ipmg.reporting.frames import report_columns, results_table
         "b8:27:eb:12:34:56",
         "B8-27-EB-12-34-56",
         "b827.eb12.3456",
-        "b827eb123456",
+        "b827eb123456",  # pragma: allowlist secret
         "b8:27:eb:12:34:56 ",
     ],
 )

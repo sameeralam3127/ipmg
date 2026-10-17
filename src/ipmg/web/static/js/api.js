@@ -76,6 +76,12 @@ export const api = {
     form.append("file", file);
     return useDemo ? demo.upload(file) : request("/upload", { method: "POST", body: form });
   },
+  wake: (mac) =>
+    useDemo ? Promise.resolve(demo.wake(mac)) : request("/wake", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mac }),
+    }),
   reportUrl: (id, fmt) => useDemo ? demo.reportUrl(id, fmt) : `${BASE}/scans/${id}/report?fmt=${fmt}`,
   diff: (id, { baseline, latencyThreshold, latencyPct } = {}) =>
     useDemo ? Promise.resolve(demo.diff(id, { baseline, latencyThreshold, latencyPct })) : request(`/scans/${id}/diff${diffQuery({ baseline, latencyThreshold, latencyPct })}`),

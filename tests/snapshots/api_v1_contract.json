@@ -352,6 +352,29 @@
       "security": [
         "HTTPBearer"
       ]
+    },
+    "POST /api/v1/wake": {
+      "parameters": {},
+      "requestBody": {
+        "application/json": "WakeRequest"
+      },
+      "responses": {
+        "200": {
+          "application/json": "WakeSent"
+        },
+        "400": {
+          "application/json": "ErrorResponse"
+        },
+        "401": {
+          "application/json": "ErrorResponse"
+        },
+        "422": {
+          "application/json": "ErrorResponse"
+        }
+      },
+      "security": [
+        "HTTPBearer"
+      ]
     }
   },
   "schemas": {
@@ -710,6 +733,28 @@
         "loc",
         "msg",
         "type"
+      ]
+    },
+    "WakeRequest": {
+      "properties": {
+        "broadcast": "string",
+        "mac": "string",
+        "port": "integer"
+      },
+      "required": [
+        "mac"
+      ]
+    },
+    "WakeSent": {
+      "properties": {
+        "broadcast": "string",
+        "mac": "string",
+        "port": "integer"
+      },
+      "required": [
+        "broadcast",
+        "mac",
+        "port"
       ]
     },
     "WebSocketEvent": {

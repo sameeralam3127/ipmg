@@ -167,6 +167,24 @@ class Asset(ApiModel):
     scan_count: int
 
 
+class WakeRequest(BaseModel):
+    """Send a Wake-on-LAN magic packet."""
+
+    mac: str = Field(description="MAC address: AA:BB:CC:DD:EE:FF, AA-BB-..., or AABBCCDDEEFF")
+    broadcast: str = Field(
+        default="255.255.255.255",
+        description="IPv4 broadcast address; a directed one such as 192.168.1.255 "
+        "reaches another subnet",
+    )
+    port: int = Field(default=9, description="UDP port (1-65535)")
+
+
+class WakeSent(ApiModel):
+    mac: str = Field(description="The MAC address the packet was built for")
+    broadcast: str
+    port: int
+
+
 class UploadResult(ApiModel):
     filename: Optional[str]
     count: int = Field(description="Number of targets parsed")

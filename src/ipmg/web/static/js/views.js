@@ -695,6 +695,23 @@ export async function scanDetailView(root, scanId) {
 
 // ------------------------------------------------------------ inventory
 
+// Wake-on-LAN for a host whose MAC address a --mac scan recorded.
+function wakeButton(asset) {
+  const button = h("button", { class: "ghost-btn", type: "button", title: `Send a Wake-on-LAN packet to ${asset.mac}` }, "Wake");
+  button.addEventListener("click", async () => {
+    button.disabled = true;
+    try {
+      const sent = await api.wake(asset.mac);
+      toast(`Magic packet sent to ${sent.mac} (${asset.ip}).`);
+    } catch (err) {
+      toast(`Could not wake ${asset.ip}: ${err.message}`, "error");
+    } finally {
+      button.disabled = false;
+    }
+  });
+  return button;
+}
+
 export async function inventoryView(root) {
   root.append(
     h("h1", { class: "page-title" }, "Inventory"),
@@ -736,7 +753,7 @@ export async function inventoryView(root) {
             h(
               "tr",
               {},
-              ...["IP Address", "Hostname", "MAC Address", "Vendor", "Last status", "Avg latency", "Last seen active", "Last checked", "Scans"].map((t) => h("th", {}, t))
+              ...["IP Address", "Hostname", "MAC Address", "Vendor", "Last status", "Avg latency", "Last seen active", "Last checked", "Scans", ""].map((t) => h("th", {}, t))
             )
           ),
           h(
@@ -754,7 +771,8 @@ export async function inventoryView(root) {
                 h("td", {}, fmtLatency(asset.avg_latency)),
                 h("td", {}, asset.last_seen || "never"),
                 h("td", {}, asset.last_checked || ""),
-                h("td", {}, String(asset.scan_count))
+                h("td", {}, String(asset.scan_count)),
+                h("td", {}, asset.mac ? wakeButton(asset) : "")
               )
             )
           )

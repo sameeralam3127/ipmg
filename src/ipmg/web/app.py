@@ -39,6 +39,7 @@ from ipmg import __version__
 from ipmg.core.diff import DiffOptions
 from ipmg.core.engine import HostResult, ScanConfig
 from ipmg.core.portscan import decode_ports
+from ipmg.core.wake import WakeError, send_magic_packet
 from ipmg.exceptions import FileIOError, HistoryError, ReportError
 from ipmg.infrastructure.database import DEFAULT_DB_PATH, Database
 from ipmg.infrastructure.file_io import (
@@ -62,6 +63,8 @@ from ipmg.web.schemas import (
     ScanSummary,
     Stats,
     UploadResult,
+    WakeRequest,
+    WakeSent,
     websocket_event_schemas,
 )
 
@@ -510,6 +513,21 @@ def _register_diff_routes(api: APIRouter, history: HistoryService) -> None:
         )
 
 
+def _register_wake_route(api: APIRouter) -> None:
+    @api.post(
+        "/wake",
+        response_model=WakeSent,
+        responses=_errors(400),
+        summary="Send a Wake-on-LAN magic packet",
+    )
+    def wake(request: WakeRequest) -> Dict[str, Any]:
+        try:
+            mac = send_magic_packet(request.mac, broadcast=request.broadcast, port=request.port)
+        except WakeError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"mac": mac, "broadcast": request.broadcast, "port": request.port}
+
+
 def _register_upload_route(api: APIRouter) -> None:
     @api.post(
         "/upload",
@@ -708,6 +726,7 @@ def create_app(
     _register_report_routes(api, database)
     _register_diff_routes(api, history)
     _register_upload_route(api)
+    _register_wake_route(api)
     app.include_router(api)
 
     _register_websocket(app, manager, token)
