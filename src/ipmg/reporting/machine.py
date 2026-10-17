@@ -23,11 +23,11 @@ import json
 import sys
 import time
 from dataclasses import dataclass
-from typing import Dict, Optional, Sequence
+from typing import Dict, Optional, Sequence, Tuple
 
 from ipmg.core.engine import HostResult
 from ipmg.infrastructure.incremental import jsonl_record, result_row
-from ipmg.reporting.frames import ReportTable
+from ipmg.reporting.frames import RESULT_COLUMNS, ReportTable
 
 
 @dataclass(frozen=True)
@@ -58,15 +58,17 @@ class MachineStream:
         batch_timestamp: object,
         previous: Optional[Sequence[HostResult]] = None,
         previous_elapsed_s: float = 0.0,
+        columns: Sequence[str] = tuple(RESULT_COLUMNS),
     ) -> None:
         self._batch_timestamp = batch_timestamp
+        self._columns: Tuple[str, ...] = tuple(columns)
         self._started_at = time.monotonic() - previous_elapsed_s
         for result in previous or ():
-            self._write(result_row(result, batch_timestamp, previous_elapsed_s))
+            self._write(result_row(result, batch_timestamp, previous_elapsed_s, self._columns))
 
     def record(self, result: HostResult) -> None:
         elapsed_s = time.monotonic() - self._started_at
-        self._write(result_row(result, self._batch_timestamp, elapsed_s))
+        self._write(result_row(result, self._batch_timestamp, elapsed_s, self._columns))
 
     @staticmethod
     def _write(row: Dict[str, object]) -> None:

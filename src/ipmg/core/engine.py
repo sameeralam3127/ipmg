@@ -6,8 +6,8 @@ import concurrent.futures
 from dataclasses import dataclass, field
 from typing import Callable, Iterable, List, Optional, Tuple
 
-from ipmg.core.ping import ping_ip
-from ipmg.core.portscan import DEFAULT_PORTS, scan_ports
+from ipmg.core.ping import ping_ip, validate_ip
+from ipmg.core.portscan import DEFAULT_PORTS, scan_ports, tcp_probe
 from ipmg.exceptions import PingError
 from ipmg.utils.helpers import HostnameCache, clamp_int
 
@@ -19,6 +19,10 @@ MAX_PORT_PROBE_WORKERS = 128
 #: Seconds a reverse DNS lookup may take before the host is recorded as
 #: Unresolvable. The system resolver's own retries can take 30 s.
 DEFAULT_DNS_TIMEOUT_S = 2.0
+
+#: How a scan decides a host is up. ``icmp,tcp`` tries TCP only for hosts
+#: that did not answer the ping, so hosts that block ICMP are not missed.
+PROBE_METHODS = ("icmp", "tcp", "icmp,tcp")
 
 
 @dataclass(frozen=True)
@@ -34,6 +38,12 @@ class ScanConfig:
     dns_timeout: float = DEFAULT_DNS_TIMEOUT_S
     #: Skip the PTR lookup for hosts that did not answer.
     resolve_active_only: bool = False
+    #: One of :data:`PROBE_METHODS`; TCP probes connect to ``ports``.
+    probe: str = "icmp"
+
+    @property
+    def uses_tcp_probe(self) -> bool:
+        return "tcp" in self.probe.split(",")
 
     def clamped(self) -> "ScanConfig":
         return ScanConfig(
@@ -47,6 +57,7 @@ class ScanConfig:
             port_timeout=max(min(self.port_timeout, 30.0), 0.1),
             dns_timeout=max(min(float(self.dns_timeout), 60.0), 0.1),
             resolve_active_only=self.resolve_active_only,
+            probe=self.probe if self.probe in PROBE_METHODS else "icmp",
         )
 
 
@@ -57,6 +68,9 @@ class HostResult:
     latency: Optional[float]
     hostname: str = ""
     open_ports: Tuple[int, ...] = field(default_factory=tuple)
+    #: Which probe found the host ("icmp" or "tcp"); set only when a scan
+    #: uses TCP probing, and only for hosts that answered.
+    method: str = ""
 
 
 ResultCallback = Callable[[HostResult, int, int], None]
@@ -86,7 +100,7 @@ def execute_scan(
     results: List[HostResult] = []
 
     port_executor: Optional[concurrent.futures.ThreadPoolExecutor] = None
-    if config.scan_ports and config.ports:
+    if (config.scan_ports or config.uses_tcp_probe) and config.ports:
         port_executor = concurrent.futures.ThreadPoolExecutor(
             max_workers=min(MAX_PORT_PROBE_WORKERS, config.threads * len(config.ports)),
             thread_name_prefix="ipmg-port",
@@ -134,18 +148,13 @@ def _probe_host(
     cache: Optional[HostnameCache],
     port_executor: Optional[concurrent.futures.Executor],
 ) -> HostResult:
-    """Ping one host, then resolve its name and probe its ports.
+    """Probe one host, then resolve its name and probe its ports.
 
     Runs on a pool worker, so reverse DNS is spread across ``config.threads``
     workers instead of running one host at a time on the thread that collects
     results. Port probes go to the scan's shared, bounded ``port_executor``.
     """
-    try:
-        status, latency = ping_ip(ip, config.timeout, config.count)
-    except PingError:
-        raise
-    except Exception:
-        status, latency = "Error", None
+    status, latency, method = _reachability(ip, config, port_executor)
 
     resolve = cache is not None and (status == "Active" or not config.resolve_active_only)
     hostname = cache.resolve(ip) if resolve else ""
@@ -156,5 +165,41 @@ def _probe_host(
         )
 
     return HostResult(
-        ip=ip, status=status, latency=latency, hostname=hostname, open_ports=open_ports
+        ip=ip,
+        status=status,
+        latency=latency,
+        hostname=hostname,
+        open_ports=open_ports,
+        method=method,
     )
+
+
+def _reachability(
+    ip: str,
+    config: ScanConfig,
+    port_executor: Optional[concurrent.futures.Executor],
+) -> Tuple[str, Optional[float], str]:
+    """Status, latency, and the method that found the host, per ``config.probe``."""
+    methods = config.probe.split(",")
+    # Only a scan that can use more than one method says which one answered.
+    tagged = "tcp" in methods
+    status, latency = "Timeout", None
+    if "icmp" in methods:
+        try:
+            status, latency = ping_ip(ip, config.timeout, config.count)
+        except PingError:
+            raise
+        except Exception:
+            status, latency = "Error", None
+        if status == "Active":
+            return status, latency, "icmp" if tagged else ""
+        if status == "Invalid IP" or not tagged:
+            return status, latency, ""
+    elif not validate_ip(ip):
+        return "Invalid IP", None, ""
+
+    tcp_status, tcp_latency = tcp_probe(ip, config.ports, config.port_timeout, port_executor)
+    if tcp_status == "Active":
+        return "Active", tcp_latency, "tcp"
+    # Both missed: ping's verdict (it says more) stands, else TCP's.
+    return (status, latency, "") if "icmp" in methods else (tcp_status, None, "")

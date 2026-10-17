@@ -1,13 +1,13 @@
 from datetime import datetime, timedelta
 
 import pytest
+from scan_helpers import scan_args
 
 from ipmg.cli import commands
 from ipmg.core.engine import HostResult
 from ipmg.infrastructure.database import Database
 from ipmg.infrastructure.retention import parse_age, plan_prune, prune_reports, report_files
 from ipmg.services.scan_service import run_scan
-from scan_helpers import scan_args
 
 NOW = datetime(2026, 10, 17, 12, 0, 0)
 
@@ -199,7 +199,10 @@ def test_prune_reports_keeps_the_newest_of_each_format(tmp_path):
     removed = prune_reports([str(base)], keep=2)
 
     assert sorted(removed) == sorted(
-        [str(tmp_path / "results_20261001_000000.csv"), str(tmp_path / "results_20261001_000000.md")]
+        [
+            str(tmp_path / "results_20261001_000000.csv"),
+            str(tmp_path / "results_20261001_000000.md"),
+        ]
     )
     assert all(path.exists() for path in unrelated)
     assert [path.name for path in report_files(str(base))["csv"]] == [

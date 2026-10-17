@@ -63,7 +63,8 @@ CREATE TABLE IF NOT EXISTS results (
     latency REAL,
     hostname TEXT NOT NULL DEFAULT '',
     open_ports TEXT NOT NULL DEFAULT '',
-    checked_at TEXT NOT NULL
+    checked_at TEXT NOT NULL,
+    method TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_results_scan ON results(scan_id);
@@ -104,6 +105,8 @@ class Database:
         columns = {row["name"] for row in conn.execute("PRAGMA table_info(results)")}
         if "open_ports" not in columns:
             conn.execute("ALTER TABLE results ADD COLUMN open_ports TEXT NOT NULL DEFAULT ''")
+        if "method" not in columns:
+            conn.execute("ALTER TABLE results ADD COLUMN method TEXT NOT NULL DEFAULT ''")
 
     @property
     def path(self) -> str:
@@ -153,6 +156,7 @@ class Database:
                 result.hostname,
                 encode_ports(result.open_ports),
                 checked_at,
+                result.method,
             )
             for result in results
         ]
@@ -160,8 +164,8 @@ class Database:
             return 0
         conn.executemany(
             "INSERT INTO results "
-            "(scan_id, ip, status, latency, hostname, open_ports, checked_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "(scan_id, ip, status, latency, hostname, open_ports, checked_at, method) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             rows,
         )
         conn.execute(
@@ -364,7 +368,7 @@ class Database:
         search: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         query = (
-            "SELECT ip, status, latency, hostname, open_ports, checked_at "
+            "SELECT ip, status, latency, hostname, open_ports, checked_at, method "
             "FROM results WHERE scan_id = ?"
         )
         params: List[Any] = [scan_id]

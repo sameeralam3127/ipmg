@@ -33,6 +33,7 @@ IP_WIDTH = 18
 LATENCY_WIDTH = 11
 HOSTNAME_WIDTH = 32
 PORTS_WIDTH = 26
+PROBE_WIDTH = 7
 
 #: Blank space kept between columns so truncated cells never touch.
 COLUMN_GAP = 2
@@ -72,6 +73,8 @@ def _columns(config: ScanConfig) -> List[Tuple[str, int, str]]:
         ("Host", IP_WIDTH, "left"),
         ("Latency", LATENCY_WIDTH, "right"),
     ]
+    if config.probe != "icmp":
+        columns.append(("Probe", PROBE_WIDTH, "left"))
     if config.resolve:
         columns.append(("Name", HOSTNAME_WIDTH, "left"))
     if config.scan_ports:
@@ -99,6 +102,8 @@ def format_result(result: HostResult, config: ScanConfig) -> Text:
     row.append_text(status)
     row.append_text(_cell(result.ip, IP_WIDTH, "ipmg.value"))
     row.append_text(_cell(ui.format_latency(result.latency), LATENCY_WIDTH, "muted", "right"))
+    if config.probe != "icmp":
+        row.append_text(_cell(result.method or dash, PROBE_WIDTH, "muted"))
     if config.resolve:
         row.append_text(_cell(result.hostname or dash, HOSTNAME_WIDTH, "muted"))
     if config.scan_ports:

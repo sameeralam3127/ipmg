@@ -457,6 +457,7 @@
         "hostname": "string",
         "ip": "string",
         "latency": "null | number",
+        "method": "string",
         "open_ports": "array[integer]",
         "status": "string"
       },
@@ -474,6 +475,7 @@
         "hostname": "string",
         "ip": "string",
         "latency": "null | number",
+        "method": "string",
         "open_ports": "string",
         "status": "string"
       },
@@ -596,6 +598,7 @@
         "dns_cache_ttl": "integer",
         "dns_timeout": "number",
         "ips": "array[string] | null",
+        "probe": "enum 'icmp', 'tcp', 'icmp,tcp'",
         "resolve": "boolean",
         "resolve_active_only": "boolean",
         "source": "string",

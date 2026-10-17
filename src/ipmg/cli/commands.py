@@ -58,9 +58,20 @@ def _scan_command(argv: List[str]) -> int:
         # and nothing else, so every line a person reads goes to stderr.
         ui.use_stderr()
     ui.header("scan")
-    print_disclaimer_once()
+    print_disclaimer_once(_probe_kinds(args))
     run_scan(args)
     return EXIT_OK
+
+
+def _probe_kinds(args) -> List[str]:
+    """What a scan will send, for the authorization notice."""
+    kinds = []
+    probe = (getattr(args, "probe", None) or "icmp").split(",")
+    if "icmp" in probe:
+        kinds.append("ICMP")
+    if "tcp" in probe or getattr(args, "scan_ports", False):
+        kinds.append("TCP connect")
+    return kinds
 
 
 def _web_command(argv: List[str]) -> int:

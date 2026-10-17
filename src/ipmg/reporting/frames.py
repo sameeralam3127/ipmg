@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, List, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from ipmg.core.engine import HostResult
 
@@ -16,6 +16,43 @@ RESULT_COLUMNS: List[str] = [
     "Batch Timestamp",
     "Scan Duration (s)",
 ]
+
+#: Which probe found the host, with ``--probe tcp`` or ``--probe icmp,tcp``.
+PROBE_COLUMN = "Probe"
+
+
+def report_columns(config: Any = None) -> Tuple[str, ...]:
+    """The columns a scan's report has.
+
+    The default set, plus each optional column for something the scan was
+    asked to find, placed after "Open Ports". A scan that asks for nothing
+    extra writes exactly the report it always did. ``config`` is a
+    :class:`~ipmg.core.engine.ScanConfig` or the dict stored with a scan.
+    """
+
+    def setting(name: str, default: Any) -> Any:
+        if isinstance(config, Mapping):
+            return config.get(name, default)
+        return getattr(config, name, default)
+
+    extra: List[str] = []
+    if setting("probe", "icmp") not in ("icmp", "", None):
+        extra.append(PROBE_COLUMN)
+    at = RESULT_COLUMNS.index("Open Ports") + 1
+    return tuple(RESULT_COLUMNS[:at] + extra + RESULT_COLUMNS[at:])
+
+
+def result_values(result: HostResult) -> Dict[str, Any]:
+    """Every per-host column a report can carry, before choosing the ones it has."""
+    return {
+        "IP Address": result.ip,
+        "Status": result.status,
+        "Latency": result.latency,
+        "Hostname": result.hostname,
+        "Open Ports": format_open_ports(result.open_ports),
+        PROBE_COLUMN: result.method,
+    }
+
 
 Row = Dict[str, Any]
 
@@ -55,20 +92,14 @@ def results_table(
     results: Iterable[HostResult],
     batch_timestamp: Any,
     duration_s: Optional[float],
+    columns: Sequence[str] = tuple(RESULT_COLUMNS),
 ) -> ReportTable:
     """Build the report table, keeping the column set stable when empty."""
     duration = None if duration_s is None else round(duration_s, 3)
-    return ReportTable(
-        [
-            {
-                "IP Address": result.ip,
-                "Status": result.status,
-                "Latency": result.latency,
-                "Hostname": result.hostname,
-                "Open Ports": format_open_ports(result.open_ports),
-                "Batch Timestamp": batch_timestamp,
-                "Scan Duration (s)": duration,
-            }
-            for result in results
-        ]
-    )
+    rows = []
+    for result in results:
+        values = result_values(result)
+        values["Batch Timestamp"] = batch_timestamp
+        values["Scan Duration (s)"] = duration
+        rows.append({column: values.get(column) for column in columns})
+    return ReportTable(rows, columns=tuple(columns))

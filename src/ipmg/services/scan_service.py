@@ -40,7 +40,7 @@ from ipmg.infrastructure.notify import (
 from ipmg.infrastructure.retention import prune_reports
 from ipmg.reporting import ui
 from ipmg.reporting.diff_report import export_diff, print_diff
-from ipmg.reporting.frames import ReportTable, results_table
+from ipmg.reporting.frames import ReportTable, report_columns, results_table
 from ipmg.reporting.live import DEFAULT_REFRESH_S, StreamOptions, scan_display
 from ipmg.reporting.machine import MachineOutput, MachineStream, write_array
 from ipmg.reporting.summary import print_summary
@@ -51,6 +51,9 @@ log = logging.getLogger(__name__)
 
 #: What a scan writes when --formats is not given.
 DEFAULT_FORMATS = ("xlsx",)
+
+#: How the Config line names each --probe method.
+PROBE_LABELS = {"icmp": "ICMP", "tcp": "TCP", "icmp,tcp": "ICMP, then TCP"}
 
 
 @dataclass(frozen=True)
@@ -174,6 +177,7 @@ def _config_from_args(args) -> ScanConfig:
         port_timeout=getattr(args, "port_timeout", 1.0),
         dns_timeout=getattr(args, "dns_timeout", DEFAULT_DNS_TIMEOUT_S),
         resolve_active_only=bool(getattr(args, "resolve_active_only", False)),
+        probe=getattr(args, "probe", None) or "icmp",
     ).clamped()
 
 
@@ -222,6 +226,11 @@ def _print_configuration(sources: List[str], targets: int, config: ScanConfig) -
                     f" {ui.glyph('sep')} {ui.plural(len(config.ports), 'port')} scan"
                     if config.scan_ports
                     else ""
+                )
+                + (
+                    f" {ui.glyph('sep')} {PROBE_LABELS[config.probe]} probe"
+                    if config.probe != "icmp"
+                    else ""
                 ),
             ),
         ]
@@ -261,6 +270,7 @@ def _open_report(
     batch_timestamp: datetime,
     previous: List[HostResult],
     previous_elapsed_s: float,
+    columns: Tuple[str, ...],
 ) -> Optional[IncrementalReport]:
     """Start writing this pass's report, unless incremental writing is off."""
     if not incremental.enabled or not args.formats:
@@ -273,6 +283,7 @@ def _open_report(
         options=incremental,
         previous=previous,
         previous_elapsed_s=previous_elapsed_s,
+        columns=columns,
     )
 
 
@@ -346,18 +357,21 @@ def _run_single_pass(
     _print_configuration(sources, len(ip_list), config)
     if resume:
         _announce_resume(resume, len(previous), len(ip_list))
+    columns = report_columns(config)
     report = _open_report(
-        args, incremental, output, timestamp, batch_timestamp, previous, previous_elapsed_s
+        args, incremental, output, timestamp, batch_timestamp, previous, previous_elapsed_s, columns
     )
     machine_stream = (
-        MachineStream(batch_timestamp, previous, previous_elapsed_s) if machine.stream else None
+        MachineStream(batch_timestamp, previous, previous_elapsed_s, columns)
+        if machine.stream
+        else None
     )
     results = previous + _run_pass(remaining, config, stream, report, machine_stream)
     duration = previous_elapsed_s + time.perf_counter() - started_at
 
     return ScanOutcome(
         results=results,
-        frame=results_table(results, batch_timestamp, duration),
+        frame=results_table(results, batch_timestamp, duration, columns),
         batch_timestamp=batch_timestamp,
         duration_s=duration,
         source=source,

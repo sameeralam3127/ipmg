@@ -61,8 +61,19 @@ for your distribution — see
 
 Something is dropping ICMP — a host firewall, a VPN, or a cloud security group.
 Confirm by running `ping` by hand against one of the addresses: if that fails
-too, it is the network and not IPMG. Note that `--scan-ports` will not help
-here — ports are only probed on hosts that already answered a ping.
+too, it is the network and not IPMG.
+
+Hosts that drop ping usually still serve traffic, so probe them with TCP
+instead:
+
+```bash
+ipmg --input targets.txt --probe icmp,tcp                 # TCP only for hosts that did not answer the ping
+ipmg --input targets.txt --probe tcp --ports 22,443,3389  # TCP only, on the ports your hosts serve
+```
+
+A host counts as up when any of `--ports` accepts the connection, or refuses
+it: a refusal is a TCP reset, which only a live host sends. The `Probe`
+column then says which method found each host.
 
 ### The scan is slower than I expected
 
@@ -81,7 +92,8 @@ Pass the network you meant explicitly: `ipmg --input 192.168.1.0/24`.
 ### Hostname shows `Unresolvable`
 
 That host has no DNS PTR record. Nothing is broken — there is simply no name to
-look up.
+look up. A lookup that takes longer than `--dns-timeout` (default 2 seconds)
+also shows `Unresolvable`; raise it if your resolver is slow.
 
 ---
 

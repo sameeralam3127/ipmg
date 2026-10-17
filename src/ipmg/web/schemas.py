@@ -66,6 +66,11 @@ class ScanRequest(BaseModel):
     resolve_active_only: bool = Field(
         default=False, description="Only reverse-resolve hosts that answered"
     )
+    probe: Literal["icmp", "tcp", "icmp,tcp"] = Field(
+        default="icmp",
+        description="How to tell a host is up: ping, a TCP connection to a common port, "
+        "or TCP only for hosts that did not answer the ping",
+    )
 
 
 class ScanCreated(ApiModel):
@@ -114,6 +119,11 @@ class HostResultRow(ApiModel):
     hostname: str = Field(description="Resolved hostname; empty when not resolved")
     open_ports: str = Field(description="Comma-separated open TCP ports; empty when none")
     checked_at: str = Field(description="Local time the result was stored")
+    method: str = Field(
+        default="",
+        description="Which probe found the host, 'icmp' or 'tcp', when the scan used TCP "
+        "probing; empty otherwise",
+    )
 
 
 # ------------------------------------------------------------------- overview
@@ -213,6 +223,7 @@ class HostResultModel(ApiModel):
     latency: Optional[float] = Field(description="Round-trip time in ms; null if no reply")
     hostname: str
     open_ports: List[int] = Field(description="Open TCP ports, when port scanning was on")
+    method: str = Field(default="", description="Which probe found the host, as in results")
 
 
 class ScanStartedEvent(ApiModel):

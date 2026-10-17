@@ -642,3 +642,24 @@ def test_frontend_has_no_inline_scripts_or_styles():
         source = script.read_text(encoding="utf-8")
         assert 'setAttribute("style"' not in source, script.name
         assert "eval(" not in source and "new Function" not in source, script.name
+
+
+def test_a_tcp_probe_scan_reports_which_method_found_each_host(client, monkeypatch):
+    monkeypatch.setattr("ipmg.core.engine.ping_ip", lambda *_a: ("Timeout", None))
+    monkeypatch.setattr("ipmg.core.engine.tcp_probe", lambda *_a: ("Active", 3.0))
+
+    scan_id = client.post(
+        "/api/v1/scans", json={"targets": "10.0.0.1", "probe": "icmp,tcp"}
+    ).json()["id"]
+    wait_for_completion(client, scan_id)
+
+    [row] = client.get(f"/api/v1/scans/{scan_id}/results").json()
+    assert (row["status"], row["method"]) == ("Active", "tcp")
+    report = client.get(f"/api/v1/scans/{scan_id}/report?fmt=csv").text
+    assert report.splitlines()[0].split(",")[5] == "Probe"
+
+
+def test_an_unknown_probe_is_rejected(client):
+    response = client.post("/api/v1/scans", json={"targets": "10.0.0.1", "probe": "udp"})
+
+    assert response.status_code == 422

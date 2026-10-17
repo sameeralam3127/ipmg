@@ -48,7 +48,7 @@ from ipmg.infrastructure.file_io import (
     render_report,
 )
 from ipmg.reporting.diff_report import DIFF_FORMATS, render_diff
-from ipmg.reporting.frames import ReportTable, results_table
+from ipmg.reporting.frames import ReportTable, report_columns, results_table
 from ipmg.services.history_service import HistoryService
 from ipmg.web.manager import DEFAULT_MAX_SCANS, OVERFLOW, ScanLimitError, ScanManager
 from ipmg.web.schemas import (
@@ -253,10 +253,13 @@ def _results_table(scan: Dict[str, Any], rows: List[Dict[str, Any]]) -> ReportTa
             latency=row["latency"],
             hostname=row["hostname"] or "",
             open_ports=decode_ports(row.get("open_ports") or ""),
+            method=row.get("method") or "",
         )
         for row in rows
     ]
-    return results_table(results, scan["started_at"], scan["duration_s"])
+    # The same columns the scan's own report had, from the settings it ran with.
+    columns = report_columns(scan.get("config") or {})
+    return results_table(results, scan["started_at"], scan["duration_s"], columns)
 
 
 def _render_report(table: ReportTable, fmt: str) -> bytes:
@@ -318,6 +321,7 @@ def _register_scan_routes(api: APIRouter, database: Database, manager: ScanManag
             dns_cache_ttl=request.dns_cache_ttl,
             dns_timeout=request.dns_timeout,
             resolve_active_only=request.resolve_active_only,
+            probe=request.probe,
         ).clamped()
         try:
             scan_id = manager.start_scan(ips, config, source=request.source)

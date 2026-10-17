@@ -85,13 +85,16 @@ function tile(value, label) {
 
 function resultsTable(rows) {
   if (!rows.length) return h("div", { class: "empty" }, "No results.");
+  // Columns for what the scan was asked to find, as in its report.
+  const showProbe = rows.some((row) => row.method);
+  const headings = ["IP Address", "Status", "Latency", ...(showProbe ? ["Probe"] : []), "Hostname", "Checked"];
   return h(
     "div",
     { class: "table-wrap" },
     h(
       "table",
       {},
-      h("thead", {}, h("tr", {}, ...["IP Address", "Status", "Latency", "Hostname", "Checked"].map((t) => h("th", {}, t)))),
+      h("thead", {}, h("tr", {}, ...headings.map((t) => h("th", {}, t)))),
       h(
         "tbody",
         {},
@@ -102,6 +105,7 @@ function resultsTable(rows) {
             h("td", {}, row.ip),
             h("td", {}, statusPill(row.status)),
             h("td", {}, fmtLatency(row.latency)),
+            showProbe ? h("td", {}, row.method ? row.method.toUpperCase() : "—") : null,
             h("td", {}, row.hostname || "—"),
             h("td", {}, row.checked_at || "")
           )
@@ -294,6 +298,15 @@ export async function newScanView(root) {
     numField("DNS timeout (s)", "dns_timeout", "2", { min: 0.1, max: 60, step: 0.1 })
   );
 
+  const probeSelect = h(
+    "select",
+    { name: "probe" },
+    h("option", { value: "icmp" }, "ICMP (ping)"),
+    h("option", { value: "icmp,tcp" }, "ICMP, then TCP for hosts that block ping"),
+    h("option", { value: "tcp" }, "TCP connect only")
+  );
+  const probeField = h("label", { class: "field" }, h("span", {}, "Probe"), probeSelect);
+
   const resolveCheck = h("label", { class: "check" }, h("input", { type: "checkbox", name: "resolve" }), "Resolve hostnames (reverse DNS)");
   const activeOnlyCheck = h("label", { class: "check" }, h("input", { type: "checkbox", name: "resolve_active_only" }), "Only resolve hosts that answer");
   const submit = h("button", { class: "btn", type: "submit" }, "Start Scan");
@@ -301,6 +314,7 @@ export async function newScanView(root) {
   form.append(
     h("label", { class: "field" }, h("span", {}, "Targets"), targetsInput),
     configGrid,
+    probeField,
     resolveCheck,
     activeOnlyCheck,
     submit
@@ -322,6 +336,7 @@ export async function newScanView(root) {
         dns_timeout: Number(data.get("dns_timeout")),
         resolve: data.get("resolve") === "on",
         resolve_active_only: data.get("resolve_active_only") === "on",
+        probe: data.get("probe") || "icmp",
       });
       toast(`Scan #${scan.id} created successfully.`);
       location.hash = `#/monitor/${scan.id}`;

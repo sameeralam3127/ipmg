@@ -40,7 +40,7 @@ from typing import IO, Dict, List, Optional, Sequence, Set, Tuple
 
 from ipmg.core.engine import HostResult
 from ipmg.exceptions import FileIOError
-from ipmg.reporting.frames import RESULT_COLUMNS, ReportTable, format_open_ports
+from ipmg.reporting.frames import PROBE_COLUMN, RESULT_COLUMNS, ReportTable, result_values
 from ipmg.utils.helpers import FORMULA_PREFIXES, spreadsheet_escape
 
 log = logging.getLogger(__name__)
@@ -99,6 +99,7 @@ def result_row(
     result: HostResult,
     batch_timestamp: object,
     elapsed_s: Optional[float],
+    columns: Sequence[str] = tuple(RESULT_COLUMNS),
 ) -> Dict[str, object]:
     """One report row, with the same columns a finished scan writes.
 
@@ -107,15 +108,10 @@ def result_row(
     duration of the whole pass; until then, elapsed time is the only honest
     value available.
     """
-    return {
-        "IP Address": result.ip,
-        "Status": result.status,
-        "Latency": result.latency,
-        "Hostname": result.hostname,
-        "Open Ports": format_open_ports(result.open_ports),
-        "Batch Timestamp": str(batch_timestamp),
-        "Scan Duration (s)": None if elapsed_s is None else round(elapsed_s, 3),
-    }
+    values = result_values(result)
+    values["Batch Timestamp"] = str(batch_timestamp)
+    values["Scan Duration (s)"] = None if elapsed_s is None else round(elapsed_s, 3)
+    return {column: values.get(column) for column in columns}
 
 
 class IncrementalReport:
@@ -135,8 +131,10 @@ class IncrementalReport:
         options: IncrementalOptions = IncrementalOptions(),
         previous: Optional[Sequence[HostResult]] = None,
         previous_elapsed_s: float = 0.0,
+        columns: Sequence[str] = tuple(RESULT_COLUMNS),
     ) -> None:
         self.options = options.clamped()
+        self._columns = tuple(columns)
         self._base = base
         self._timestamp = timestamp
         self._batch_timestamp = batch_timestamp
@@ -146,7 +144,9 @@ class IncrementalReport:
         # count on from it, so a report interrupted twice still knows how long
         # the whole scan has taken.
         self._rows: List[Dict[str, object]] = [
-            result_row(result, batch_timestamp, previous_elapsed_s if previous else None)
+            result_row(
+                result, batch_timestamp, previous_elapsed_s if previous else None, self._columns
+            )
             for result in self._results
         ]
         self._handles: Dict[str, IO[str]] = {}
@@ -197,7 +197,7 @@ class IncrementalReport:
         # rewriting it is cheap next to the scan itself.
         handle = open(path, "w", encoding="utf-8", newline="")
         if fmt == "csv":
-            handle.write(",".join(RESULT_COLUMNS) + "\n")
+            handle.write(",".join(self._columns) + "\n")
         for row in self._rows:
             handle.write(self._render(fmt, row))
         handle.flush()
@@ -210,7 +210,9 @@ class IncrementalReport:
         if self._closed:
             return
 
-        row = result_row(result, self._batch_timestamp, time.monotonic() - self._started_at)
+        row = result_row(
+            result, self._batch_timestamp, time.monotonic() - self._started_at, self._columns
+        )
         self._results.append(result)
         self._rows.append(row)
 
@@ -227,7 +229,7 @@ class IncrementalReport:
 
     def _render(self, fmt: str, row: Dict[str, object]) -> str:
         if fmt == "csv":
-            return ",".join(_csv_cell(row[column]) for column in RESULT_COLUMNS) + "\n"
+            return ",".join(_csv_cell(row[column]) for column in self._columns) + "\n"
         return jsonl_record(row)
 
     def _due_for_snapshot(self) -> bool:
@@ -249,7 +251,7 @@ class IncrementalReport:
         # snapshot indistinguishable from a finished report.
         from ipmg.infrastructure.file_io import write_report
 
-        frame = ReportTable(list(self._rows))
+        frame = ReportTable(list(self._rows), columns=self._columns)
         written: List[str] = []
         for fmt in formats:
             try:
@@ -464,6 +466,7 @@ def _row_result(row: Dict[str, object], unescape: bool) -> Optional[HostResult]:
         latency=_latency(row.get("Latency")),
         hostname=_text(row.get("Hostname"), unescape),
         open_ports=_open_ports(row.get("Open Ports")),
+        method=_text(row.get(PROBE_COLUMN)),
     )
 
 

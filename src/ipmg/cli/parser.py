@@ -7,7 +7,7 @@ import argparse
 from ipmg import __version__
 from ipmg.cli.config import add_config_arguments, config_help
 from ipmg.core.discovery import DISCOVERY_FAMILIES
-from ipmg.core.engine import DEFAULT_DNS_TIMEOUT_S
+from ipmg.core.engine import DEFAULT_DNS_TIMEOUT_S, PROBE_METHODS
 from ipmg.core.portscan import DEFAULT_PORTS, parse_port_list
 from ipmg.infrastructure.file_io import DEFAULT_INPUT_FILE
 from ipmg.infrastructure.incremental import (
@@ -348,11 +348,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="Exit with status 3 if fewer than PERCENT of the targets are Active (0-100).",
     )
 
-    ports_group = parser.add_argument_group("TCP service discovery")
+    ports_group = parser.add_argument_group("TCP checks")
+    ports_group.add_argument(
+        "--probe",
+        choices=PROBE_METHODS,
+        default="icmp",
+        help=(
+            "How to tell a host is up: icmp (ping, the default), tcp (a connection to "
+            "any of --ports, accepted or refused), or icmp,tcp (TCP only for hosts that "
+            "did not answer the ping, for hosts that block ICMP)."
+        ),
+    )
     ports_group.add_argument(
         "--scan-ports",
         action="store_true",
-        help="Probe common TCP ports on hosts that answer ICMP (off by default).",
+        help="List which of --ports are open on every host that is up (off by default).",
     )
     ports_group.add_argument(
         "--ports",
@@ -360,7 +370,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_PORTS,
         metavar="PORTS",
         help=(
-            "Comma-separated TCP ports to probe when --scan-ports is set "
+            "Comma-separated TCP ports for --scan-ports and --probe tcp "
             f"(default: {','.join(str(p) for p in DEFAULT_PORTS)})."
         ),
     )
@@ -369,7 +379,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=1.0,
         metavar="SECONDS",
-        help="Connect timeout per port when --scan-ports is set (default: 1).",
+        help="Connect timeout per port, for --scan-ports and --probe tcp (default: 1).",
     )
 
     reports = parser.add_argument_group("report writing")

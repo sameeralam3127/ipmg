@@ -184,7 +184,7 @@ ipmg --input targets.txt --scan-ports --ports 22,80,443                 # your o
 ipmg --input targets.txt --scan-ports --ports 22,80,443 --port-timeout 0.5
 ```
 
-Ports are only probed on hosts that answered the ping. The default list is:
+Ports are only probed on hosts that are up. The default list is:
 
 | Port | Service | Port | Service |
 | --- | --- | --- | --- |
@@ -194,6 +194,30 @@ Ports are only probed on hosts that answered the ping. The default list is:
 | 53 | DNS | 3389 | RDP |
 | 80 | HTTP | 5432 | PostgreSQL |
 | 443 | HTTPS | | |
+
+### Hosts that block ping
+
+Firewalled servers, cloud instances with default security groups, and Windows
+machines often drop ICMP while serving traffic, so a ping sweep reports them
+as down. `--probe` changes how IPMG decides a host is up:
+
+```bash
+ipmg --input 10.0.0.0/24 --probe icmp,tcp                # ping first, TCP for hosts that did not answer
+ipmg --input servers.txt --probe tcp --ports 22,443      # TCP connections only, no ping
+ipmg --input servers.txt --probe tcp --port-timeout 0.5
+```
+
+| `--probe` | A host is up when |
+| --- | --- |
+| `icmp` (default) | it answers a ping |
+| `tcp` | any of `--ports` accepts a connection or refuses it (a TCP reset) |
+| `icmp,tcp` | it answers a ping, or, if not, a TCP connection as above |
+
+Its latency is then the connect time. With `tcp` or `icmp,tcp`, reports gain a
+`Probe` column (after `Open Ports`) that says which method found each host:
+`icmp`, `tcp`, or empty for a host that is down. TCP probes are ordinary
+connections, so they need no extra privileges, and they share the bounded
+connection pool `--scan-ports` uses.
 
 ---
 
@@ -280,7 +304,9 @@ audit_20260911_232230.md
 
 Each file has one row per host with `IP Address`, `Status`, `Latency`,
 `Hostname` (with `--resolve`), `Open Ports` (with `--scan-ports`),
-`Batch Timestamp`, and `Scan Duration (s)`. `Status` is one of `Active`,
+`Batch Timestamp`, and `Scan Duration (s)`. A scan that asks for more adds a
+column for it after `Open Ports`: `Probe` with `--probe tcp` or
+`--probe icmp,tcp`. `Status` is one of `Active`,
 `Inactive`, `Timeout`, `Unreachable`, `Invalid IP`, or `Error`. The `md` format
 adds a status summary, ready to paste into a ticket, and `jsonl` writes one
 JSON object per line for `jq` and log pipelines.
