@@ -568,3 +568,38 @@ def test_send_email_allows_cleartext_auth_on_loopback_host(diff, fake_smtp):
     send_email(settings, email_message(diff, settings))
 
     assert fake_smtp[0].calls == [("login", "u", "pw"), ("send", "ops@x.test"), "quit"]
+
+
+def test_send_alert_reaches_every_destination_whatever_the_severity_filter():
+    posts, mails = [], []
+    options = NotifyOptions(
+        webhook_url="https://example.test/hook",
+        slack_url="https://example.test/slack",
+        teams_url="https://example.test/teams",
+        email=SmtpSettings("mail", 587, "starttls", "ipmg@x.test", ("ops@x.test",)),
+        # A failed scan is not filtered like a change: it always goes out.
+        min_severity=Severity.CRITICAL,
+    )
+
+    failed = notify.send_alert(
+        "IPMG could not scan",
+        "Input file 'targets.csv' was not found.",
+        options,
+        post=lambda url, payload: posts.append((url, payload)),
+        mail=lambda settings, message: mails.append(message),
+    )
+
+    assert failed == []
+    by_url = dict(posts)
+    assert by_url["https://example.test/hook"]["event"] == "ipmg.scan_failed"
+    assert by_url["https://example.test/hook"]["severity"] == "critical"
+    assert by_url["https://example.test/slack"]["text"] == "IPMG: IPMG could not scan"
+    card = by_url["https://example.test/teams"]["attachments"][0]["content"]
+    assert card["body"][1]["text"] == "Input file 'targets.csv' was not found."
+    [message] = mails
+    assert message["Subject"] == "IPMG: IPMG could not scan"
+    assert "was not found" in message.get_content()
+
+
+def test_send_alert_without_destinations_sends_nothing():
+    assert notify.send_alert("t", "m", NotifyOptions(), post=pytest.fail) == []

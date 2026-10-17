@@ -238,6 +238,20 @@ ipmg --input targets.txt --count 3                  # more reliable on flaky lin
 ipmg --input targets.txt --interval 5 --compare     # rescan every 5 minutes and report changes
 ```
 
+### Monitoring with `--interval`
+
+Passes keep a fixed cadence: `--interval 5` starts a pass every five minutes
+however long each scan takes, rather than sleeping five minutes after it. A
+pass that overruns its slot skips to the next free one instead of starting
+the next pass at once.
+
+A monitor rides out a pass that cannot scan: the target file missing while a
+tool rewrites it, `--discover` failing during a network blip, a full disk. It
+prints a warning, sends a "could not scan" alert to every configured
+`--notify-*` destination (whatever `--notify-severity` is set to), and tries
+again at the next interval. Only the first pass is fatal, so a typo in
+`--input` still ends the command at once with exit status `1`.
+
 ---
 
 ## Reports
@@ -383,6 +397,11 @@ A notification is sent only when at least one change reaches
 With `--interval`, each pass is compared with the one before it, so you hear
 about a host going offline once, when it happens, and again only when
 something else changes.
+
+A monitor pass that could not scan at all sends an alert of its own, whatever
+`--notify-severity` says ([details](#monitoring-with---interval)). The webhook
+receives `{"event": "ipmg.scan_failed", "headline": …, "severity": "critical",
+"error": …, "ipmg_version": …}` instead of a change report.
 
 ### Secrets and the environment
 

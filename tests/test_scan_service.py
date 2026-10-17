@@ -126,11 +126,10 @@ def scan_args(tmp_path, **overrides):
 def stub_scan(monkeypatch):
     """Run scans against a scripted set of ping results."""
     state = {"statuses": {}}
+    # Kept on the state so a test can wrap the loader instead of replacing it.
+    state["load"] = lambda _sources: list(state["statuses"])
 
-    monkeypatch.setattr(
-        "ipmg.services.scan_service.load_all_targets",
-        lambda _sources: list(state["statuses"]),
-    )
+    monkeypatch.setattr("ipmg.services.scan_service.load_all_targets", state["load"])
     monkeypatch.setattr("ipmg.services.scan_service.save_results", lambda *_args, **_kwargs: None)
     monkeypatch.setattr("ipmg.services.scan_service.print_summary", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
@@ -437,3 +436,97 @@ def test_run_scan_records_every_source_in_history(tmp_path, monkeypatch):
 
     stored = Database(db).list_scans(limit=1)
     assert stored[0]["source"] == "10.0.0.1, 10.0.0.5"
+
+
+def test_interval_monitor_survives_a_pass_that_cannot_scan(
+    tmp_path, stub_scan, captured_posts, monkeypatch, capsys
+):
+    # The target file disappears after the first pass, as when a config tool
+    # rewrites it, and is back for the third.
+    from ipmg.exceptions import FileIOError
+
+    passes = []
+    real_load = stub_scan["load"]
+
+    def flaky_load(sources):
+        if len(passes) == 1:
+            raise FileIOError("Input file 'targets.csv' was not found.")
+        return real_load(sources)
+
+    def next_pass(_seconds):
+        passes.append(1)
+        if len(passes) == 3:
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr("ipmg.services.scan_service.load_all_targets", flaky_load)
+    monkeypatch.setattr("ipmg.services.scan_service.time.sleep", next_pass)
+    stub_scan["statuses"] = {"10.0.0.1": ("Active", 1.0)}
+
+    with pytest.raises(KeyboardInterrupt):
+        run_scan(
+            scan_args(tmp_path, history=False, interval=1, notify_webhook="https://example.test/h")
+        )
+
+    out = capsys.readouterr().out
+    assert "This pass could not scan: Input file 'targets.csv' was not found." in out
+    # The third pass ran: the monitor kept going after the failed one.
+    assert len(passes) == 3
+    [(url, payload)] = captured_posts
+    assert payload["event"] == "ipmg.scan_failed"
+    assert "was not found" in payload["error"]
+
+
+def test_interval_monitor_stops_when_its_first_pass_fails(tmp_path, stub_scan, monkeypatch):
+    from ipmg.exceptions import FileIOError
+
+    def missing(_sources):
+        raise FileIOError("Input file 'targets.csv' was not found.")
+
+    monkeypatch.setattr("ipmg.services.scan_service.load_all_targets", missing)
+    monkeypatch.setattr(
+        "ipmg.services.scan_service.time.sleep", lambda _s: pytest.fail("should not sleep")
+    )
+
+    with pytest.raises(FileIOError):
+        run_scan(scan_args(tmp_path, history=False, interval=1))
+
+
+def test_interval_passes_keep_a_fixed_cadence(tmp_path, stub_scan, monkeypatch):
+    # Each pass "takes" 20 s of a 60 s interval: the sleeps must be the 40 s
+    # left in each slot, not a full minute after every pass.
+    clock = {"now": 1000.0}
+    sleeps = []
+
+    def fake_monotonic():
+        return clock["now"]
+
+    def fake_sleep(seconds):
+        sleeps.append(round(seconds, 3))
+        clock["now"] += seconds
+        if len(sleeps) == 3:
+            raise KeyboardInterrupt
+
+    real_load = stub_scan["load"]
+
+    def slow_load(sources):
+        clock["now"] += 20
+        return real_load(sources)
+
+    monkeypatch.setattr("ipmg.services.scan_service.time.monotonic", fake_monotonic)
+    monkeypatch.setattr("ipmg.services.scan_service.time.sleep", fake_sleep)
+    monkeypatch.setattr("ipmg.services.scan_service.load_all_targets", slow_load)
+    stub_scan["statuses"] = {"10.0.0.1": ("Active", 1.0)}
+
+    with pytest.raises(KeyboardInterrupt):
+        run_scan(scan_args(tmp_path, history=False, interval=1))
+
+    assert sleeps == [40.0, 40.0, 40.0]
+
+
+def test_next_pass_delay_skips_a_slot_a_pass_overran():
+    from ipmg.services.scan_service import next_pass_delay
+
+    assert next_pass_delay(0.0, 300.0, 120.0) == 180.0
+    # A 7-minute pass in a 5-minute cadence waits for the 10-minute slot.
+    assert next_pass_delay(0.0, 300.0, 420.0) == 180.0
+    assert next_pass_delay(0.0, 300.0, 300.0) == 300.0

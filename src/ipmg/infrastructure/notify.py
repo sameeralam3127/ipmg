@@ -405,9 +405,93 @@ def send_notifications(
         ui.note(f"No change at or above {options.min_severity.value}; no notification sent.")
         return []
 
+    return _deliver(_deliveries(diff, options, post or post_json, mail or send_email), options)
+
+
+# ------------------------------------------------------------------ alerts
+
+
+def alert_payloads(title: str, message: str) -> Dict[str, Dict[str, Any]]:
+    """The webhook, Slack, and Teams bodies for an alert that is not a change report."""
+    card = {
+        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+        "type": "AdaptiveCard",
+        "version": "1.4",
+        "body": [
+            {"type": "TextBlock", "text": title, "size": "Medium", "weight": "Bolder"},
+            {"type": "TextBlock", "text": message, "wrap": True},
+        ],
+    }
+    return {
+        "webhook": {
+            "event": "ipmg.scan_failed",
+            "ipmg_version": __version__,
+            "headline": title,
+            "severity": Severity.CRITICAL.value,
+            "error": message,
+        },
+        "slack": {
+            "text": f"IPMG: {title}",
+            "blocks": [
+                {"type": "header", "text": {"type": "plain_text", "text": title}},
+                {"type": "section", "text": {"type": "mrkdwn", "text": _slack_escape(message)}},
+            ],
+        },
+        "teams": {
+            "type": "message",
+            "attachments": [
+                {"contentType": "application/vnd.microsoft.card.adaptive", "content": card}
+            ],
+        },
+    }
+
+
+def send_alert(
+    title: str,
+    message: str,
+    options: NotifyOptions,
+    post: Optional[Callable[[str, Mapping[str, Any]], None]] = None,
+    mail: Optional[Callable[[SmtpSettings, EmailMessage], None]] = None,
+) -> List[str]:
+    """Tell every configured destination that something went wrong.
+
+    For failures rather than changes, such as a monitor pass that could not
+    scan, so it is sent whatever ``--notify-severity`` is: a monitor that has
+    stopped seeing the network is as serious as an alert gets.
+    """
+    if not options.enabled:
+        return []
+    post = post or post_json
+    mail = mail or send_email
+    payloads = alert_payloads(title, message)
+
+    deliveries: List[Delivery] = []
+    if options.webhook_url:
+        deliveries.append(("Webhook", lambda: post(options.webhook_url, payloads["webhook"])))
+    if options.slack_url:
+        deliveries.append(("Slack", lambda: post(options.slack_url, payloads["slack"])))
+    if options.teams_url:
+        deliveries.append(("Teams", lambda: post(options.teams_url, payloads["teams"])))
+    if options.email:
+        settings = options.email
+
+        def email() -> None:
+            alert = EmailMessage()
+            alert["Subject"] = f"IPMG: {title}"
+            alert["From"] = settings.sender
+            alert["To"] = ", ".join(settings.recipients)
+            alert.set_content(message)
+            mail(settings, alert)
+
+        deliveries.append(("Email", email))
+    return _deliver(deliveries, options)
+
+
+def _deliver(deliveries: List[Delivery], options: NotifyOptions) -> List[str]:
+    """Run each delivery, reporting failures; returns the names that failed."""
     sent: List[str] = []
     failed: List[str] = []
-    for name, deliver in _deliveries(diff, options, post or post_json, mail or send_email):
+    for name, deliver in deliveries:
         try:
             deliver()
         except Exception as exc:  # a failed alert must never fail the scan

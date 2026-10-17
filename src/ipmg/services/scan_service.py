@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import os
 import time
 from dataclasses import dataclass, field
@@ -14,7 +15,7 @@ from ipmg.core.discovery import discover_targets
 from ipmg.core.engine import DEFAULT_DNS_TIMEOUT_S, HostResult, ScanConfig, execute_scan
 from ipmg.core.health import HealthPolicy, HostsDownError, check_health
 from ipmg.core.portscan import DEFAULT_PORTS
-from ipmg.exceptions import FileIOError, HistoryError
+from ipmg.exceptions import FileIOError, HistoryError, IPMGError
 from ipmg.infrastructure.file_io import (
     DEFAULT_INPUT_FILE,
     create_sample_file,
@@ -30,7 +31,12 @@ from ipmg.infrastructure.incremental import (
     find_partial_report,
     load_partial_report,
 )
-from ipmg.infrastructure.notify import NotifyOptions, notify_options, send_notifications
+from ipmg.infrastructure.notify import (
+    NotifyOptions,
+    notify_options,
+    send_alert,
+    send_notifications,
+)
 from ipmg.reporting import ui
 from ipmg.reporting.diff_report import export_diff, print_diff
 from ipmg.reporting.frames import ReportTable, results_table
@@ -411,6 +417,54 @@ def _store_and_compare(
     return scan_id
 
 
+def _scan_pass(
+    args,
+    config: ScanConfig,
+    stream: StreamOptions,
+    incremental: IncrementalOptions,
+    machine: MachineOutput,
+    history_options: HistoryOptions,
+    health: HealthPolicy,
+    resume: Optional[PartialReport],
+) -> Optional[str]:
+    """Scan once, write the reports and history, and say why it failed --fail-on-down."""
+    outcome = _run_single_pass(args, config, stream, incremental, machine, resume)
+
+    print_summary(outcome.frame, outcome.batch_timestamp, outcome.duration_s)
+    if machine.array:
+        write_array(outcome.frame)
+    # Overwrites whatever the incremental writer left on those same paths,
+    # so a finished scan produces exactly the report it always did.
+    save_results(outcome.frame, outcome.output, args.formats, timestamp=outcome.timestamp)
+    _store_and_compare(history_options, config, outcome)
+    return check_health(outcome.results, health)
+
+
+def next_pass_delay(cadence_start: float, period_s: float, now: float) -> float:
+    """Seconds until the next ``--interval`` slot, counted from the first pass.
+
+    Passes start at ``cadence_start + n * period_s``, so ``--interval 5`` means
+    every five minutes whatever each scan takes, rather than five minutes of
+    sleep after it. A pass that overruns its slot skips to the next free one
+    instead of starting the next pass straight away.
+    """
+    elapsed = max(now - cadence_start, 0.0)
+    slots_done = math.floor(elapsed / period_s) + 1
+    return cadence_start + slots_done * period_s - now
+
+
+def _report_failed_pass(exc: BaseException, notify: NotifyOptions) -> None:
+    """Keep the monitor going after a pass that could not scan, and say so."""
+    reason = str(exc).strip() or type(exc).__name__
+    if not reason.endswith((".", "!", "?")):
+        reason += "."
+    ui.blank()
+    ui.warn(f"This pass could not scan: {reason} The monitor continues at the next interval.")
+    log.debug("interval pass failed", exc_info=True)
+    # A monitor that cannot scan is itself worth an alert.
+    send_alert("IPMG could not scan", str(exc), notify)
+
+
 def run_scan(args) -> None:
     machine = machine_output(args)
     if machine.enabled:
@@ -427,21 +481,30 @@ def run_scan(args) -> None:
     _ensure_input_file(args)
     resume = _load_resume(args)
 
+    period_s = (args.interval or 0) * 60
+    cadence_start = time.monotonic()
+    first_pass = True
     while True:
-        outcome = _run_single_pass(args, config, stream, incremental, machine, resume)
+        pass_started = time.monotonic()
+        try:
+            failure = _scan_pass(
+                args, config, stream, incremental, machine, history_options, health, resume
+            )
+        except (IPMGError, OSError) as exc:
+            # A one-off scan reports its error and exits, and so does a monitor
+            # whose very first pass fails: that is a mistake to fix, not a
+            # blip to ride out. After that a failed pass (a target file being
+            # rewritten, --discover during a network blip, a full disk) must
+            # not end the watch.
+            if not args.interval or first_pass:
+                raise
+            _report_failed_pass(exc, history_options.notify)
+            failure = None
         # Only the first pass picks up where an earlier run stopped; every
         # --interval pass after it is a fresh scan.
         resume = None
+        first_pass = False
 
-        print_summary(outcome.frame, outcome.batch_timestamp, outcome.duration_s)
-        if machine.array:
-            write_array(outcome.frame)
-        # Overwrites whatever the incremental writer left on those same paths,
-        # so a finished scan produces exactly the report it always did.
-        save_results(outcome.frame, outcome.output, args.formats, timestamp=outcome.timestamp)
-        _store_and_compare(history_options, config, outcome)
-
-        failure = check_health(outcome.results, health)
         if not args.interval:
             if failure:
                 # Raised only now, with the reports and history already written.
@@ -453,4 +516,12 @@ def run_scan(args) -> None:
         if failure:
             ui.blank()
             ui.warn(failure)
-        time.sleep(args.interval * 60)
+
+        now = time.monotonic()
+        if now - pass_started > period_s:
+            ui.blank()
+            ui.note(
+                f"That pass took longer than --interval {args.interval}; "
+                "the next one starts at the following interval."
+            )
+        time.sleep(next_pass_delay(cadence_start, period_s, now))
