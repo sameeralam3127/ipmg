@@ -8,7 +8,7 @@ commands run from the repository root with IPMG installed in `.venv`
 | File | Shows | Made with |
 | --- | --- | --- |
 | `docs/assets/ipmg-demo.gif` | A scan with live results | `docs/demo/record.py` + [agg](https://github.com/asciinema/agg) |
-| `docs/assets/ipmg-compare.gif` | A scan, a new device, and `--compare` | `docs/demo/ipmg-compare.tape` + [VHS](https://github.com/charmbracelet/vhs) |
+| `docs/assets/ipmg-compare.gif` | A streamed scan, a new device, and `--compare` | `docs/demo/ipmg-compare.tape` + [VHS](https://github.com/charmbracelet/vhs) |
 | `docs/assets/ipmg-web.png` | IPMG Web dashboard | `docs/demo/screenshots.cjs` + Playwright |
 | `docs/assets/ipmg-changes.png` | IPMG Web Changes view | `docs/demo/screenshots.cjs` + Playwright |
 | `docs/assets/ipmg-builder.png` | The website's command builder | no script yet |
@@ -37,8 +37,8 @@ vhs docs/demo/ipmg-compare.tape
 ```
 
 The tape adds `.venv/bin` to `PATH`, works in a temporary directory with its
-own history database, scans, appends `192.0.2.30` to the target file, and
-scans again with `--compare`.
+own history database, scans with `--stream`, appends `192.0.2.30` to the
+target file, and scans again with `--compare`.
 
 **If VHS finishes without writing the GIF** (seen with VHS 0.12 and
 ffmpeg 9, where its own encoding step fails silently), have it write frames

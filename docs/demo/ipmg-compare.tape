@@ -26,7 +26,7 @@ Enter
 Wait
 Show
 
-Type "ipmg --input targets.txt --db history.db --formats md"
+Type "ipmg --input targets.txt --db history.db --formats md --stream"
 Sleep 400ms
 Enter
 Wait

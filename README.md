@@ -16,10 +16,10 @@ CIDR blocks, and ranges (IPv4 and IPv6), IPMG Web, a local dashboard that
 works offline, and reports in Excel, CSV, JSON, and Markdown.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/sameeralam3127/ipmg/main/docs/assets/ipmg-compare.gif" alt="ipmg scans 13 hosts, a new address is added to the target file, and a second scan with --compare reports a new host (warning) and a latency change (info) against the first" width="820">
+  <img src="https://raw.githubusercontent.com/sameeralam3127/ipmg/main/docs/assets/ipmg-compare.gif" alt="ipmg scans 13 hosts with --stream, printing each one as it answers; a new address is added to the target file; a second scan with --compare reports it as a new host (warning) against the first" width="820">
 </p>
 
-[How it compares](#how-it-compares) to `nmap -sn`, `fping`, and Angry IP Scanner.
+[How it compares](#how-it-compares) to nmap, fping, and Uptime Kuma.
 
 **Website:** [sameeralam3127.github.io/ipmg](https://sameeralam3127.github.io/ipmg/) ·
 **Live demo:** [IPMG Web with sample data](https://sameeralam3127.github.io/ipmg/demo/) ·
@@ -56,21 +56,26 @@ ipmg --discover --compare   # later: scan again and see what changed
 
 ## How it compares
 
-| | IPMG | `nmap -sn` | `fping` | Angry IP Scanner |
+| | IPMG | nmap | fping | Uptime Kuma |
 | --- | --- | --- | --- | --- |
-| Parallel ping sweep | Yes, one system `ping` per host | Yes | Yes, fastest of the four | Yes |
-| Scan history and "what changed" | Built in | Save XML, compare with `ndiff` | No | No |
-| Change severities and alerts | critical / warning / info; Slack, Teams, webhook, email | No | No | No |
-| Exit codes for cron and CI | `3` with `--fail-on-down`, `2` with `diff --fail-on-change` | No | Non-zero if any host is unreachable | No (GUI first) |
-| Reports | Excel, CSV, JSON, Markdown | XML, grepable text | Plain text | CSV, TXT, XML |
-| Browser UI | IPMG Web, local, works offline | No (Zenmap is a desktop app) | No | Desktop app (Java) |
-| Port checks | Common TCP ports (connect only) | Full port, service, and OS scanner | No | Via fetchers |
+| Primary purpose | Network discovery, scan history, and what changed | Network discovery and security auditing ([nmap.org](https://nmap.org/)) | Fast ICMP reachability for many hosts at once ([man page](https://fping.org/fping.8.html)) | Self-hosted uptime monitoring of individual services ([features](https://github.com/louislam/uptime-kuma#-features)) |
+| Ping sweeps of CIDR blocks and ranges | Yes, one system `ping` per host, `--threads` at a time | Yes, `-sn` host discovery ([docs](https://nmap.org/book/man-host-discovery.html)) | Yes, round-robin from one process with `-g`; the fastest here ([man page](https://fping.org/fping.8.html)) | No: one Ping monitor per host ([features](https://github.com/louislam/uptime-kuma#-features)) |
+| TCP checks | Connect checks on chosen ports, and `--probe tcp` for hosts that block ping | A full port scanner ([docs](https://nmap.org/book/man-port-scanning-techniques.html)) | No ([man page](https://fping.org/fping.8.html)) | A TCP monitor per host and port ([features](https://github.com/louislam/uptime-kuma#-features)) |
+| HTTP checks | `--http-check`: status, time, redirects, TLS, certificate expiry | Through NSE scripts such as `http-title` ([NSE](https://nmap.org/nsedoc/scripts/http-title.html)) | No ([man page](https://fping.org/fping.8.html)) | HTTP(s), keyword, and JSON query monitors ([features](https://github.com/louislam/uptime-kuma#-features)) |
+| History and "what changed" | Built in: every scan stored, changes with severities | Save XML, compare two scans with `ndiff` ([ndiff](https://nmap.org/ndiff/)) | No ([man page](https://fping.org/fping.8.html)) | Up/down state and ping charts per monitor ([features](https://github.com/louislam/uptime-kuma#-features)) |
+| Alerts | Slack, Teams, webhook, email, filtered by severity | No; it writes output files for other tools ([output](https://nmap.org/book/man-output.html)) | No ([man page](https://fping.org/fping.8.html)) | 90+ notification services ([features](https://github.com/louislam/uptime-kuma#-features)) |
+| Exit codes for cron and CI | `3` with `--fail-on-down`, `2` with `diff --fail-on-change` | No; parse its XML output instead ([output](https://nmap.org/book/man-output.html)) | `1` if any host is unreachable ([man page](https://fping.org/fping.8.html)) | Not a command-line tool ([install](https://github.com/louislam/uptime-kuma#-how-to-install)) |
+| Reports | Excel, CSV, JSON, JSON Lines, Markdown | Normal, XML, grepable ([output](https://nmap.org/book/man-output.html)) | Plain text, with summaries (`-s`, `-C`) ([man page](https://fping.org/fping.8.html)) | Status pages ([features](https://github.com/louislam/uptime-kuma#-features)) |
+| Browser UI | IPMG Web: local, offline, with scheduled scans | No; Zenmap is a desktop app ([Zenmap](https://nmap.org/zenmap/)) | No ([man page](https://fping.org/fping.8.html)) | It is a web app ([features](https://github.com/louislam/uptime-kuma#-features)) |
+| Install | `pip`, `uv`, one-line installers, Homebrew, Docker | Packages and installers ([download](https://nmap.org/download.html)) | From source, or Docker ([README](https://github.com/schweikert/fping#installation)) | Docker, or Node.js ([install](https://github.com/louislam/uptime-kuma#-how-to-install)) |
 
 Where the others are better: **nmap** is a real port, service, and OS
 scanner, and IPMG does not try to be one. **fping** sends every probe from a
 single process, so on large ranges it is much faster than IPMG, which starts
-one `ping` per host (`--threads` at a time). Angry IP Scanner is a
-point-and-click desktop app with a plugin system.
+one `ping` per host. **Uptime Kuma** is built for watching a fixed set of
+services around the clock, with status pages to share. [Angry IP
+Scanner](https://angryip.org/) is a point-and-click desktop scanner with a
+plugin system.
 
 Reach for IPMG when you look after a network and need to know what moved since
 yesterday, with a report you can hand to someone.
