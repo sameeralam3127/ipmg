@@ -24,8 +24,12 @@ Found a security problem? Please report it privately as described in
 ## Ways to help
 
 - **Report a bug or request a feature** in
-  [issues](https://github.com/sameeralam3127/ipmg/issues). For bugs, include
-  your OS, `ipmg --version`, the command you ran, and what you expected.
+  [issues](https://github.com/sameeralam3127/ipmg/issues/new/choose). The
+  forms ask for what a fix needs: your OS, `ipmg --version`, how IPMG was
+  installed, and the command you ran. Questions go to
+  [Discussions](https://github.com/sameeralam3127/ipmg/discussions), and
+  security problems to a private
+  [advisory](https://github.com/sameeralam3127/ipmg/security/advisories/new).
 - **Pick up an issue.** Issues labelled
   [`good first issue`](https://github.com/sameeralam3127/ipmg/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
   are scoped for newcomers. Comment on one before starting so work isn't
@@ -214,7 +218,7 @@ docs: explain --latency-pct in the change detection section
    if users will notice the change.
 4. Make sure tests and `ruff check` pass locally.
 5. Open the pull request against `main`, and link the issue it resolves
-   (`Closes #123`).
+   (`Closes #123`). The pull request template has a checklist of the rest.
 
 **Use a Conventional Commit as the pull request title.** Pull requests are
 squash-merged, so the title becomes the commit message on `main` and decides
