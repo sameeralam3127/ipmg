@@ -93,7 +93,7 @@
     <section class="wrap stats reveal" aria-label="IPMG at a glance">
       <div class="stat"><strong data-count="65536">65,536</strong><span>hosts in a single scan</span></div>
       <div class="stat"><strong data-count="5">5</strong><span>report formats</span></div>
-      <div class="stat"><strong data-count="12">12</strong><span>kinds of change detected</span></div>
+      <div class="stat"><strong data-count="17">17</strong><span>kinds of change detected</span></div>
       <div class="stat"><strong data-count="0">0</strong><span>CDN assets — works offline</span></div>
     </section>
 
@@ -138,8 +138,8 @@
           </article>
           <article class="feature reveal">
             <div class="icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg></div>
-            <h3>Check web services</h3>
-            <p><code>--http-check</code> records status, response time, redirects, TLS errors, and certificate expiry, and alerts when a check starts failing.</p>
+            <h3>Check services and network gear</h3>
+            <p><code>--http-check</code> catches failing web services and expiring certificates; <code>--snmp</code> asks switches and routers for their uptime and interfaces, and alerts when one reboots or an uplink goes down.</p>
           </article>
           <article class="feature reveal">
             <div class="icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="2"/><path d="M8 10h.01M12 10h.01M16 10h.01M8 14h8"/></svg></div>
@@ -264,6 +264,7 @@
                   <label class="toggle"><input type="checkbox" name="scan-scanPorts"><span>Open ports <small>TCP services</small></span></label>
                   <label class="toggle"><input type="checkbox" name="scan-tcpProbe"><span>Hosts that block ping <small>try TCP too</small></span></label>
                   <label class="toggle"><input type="checkbox" name="scan-mac"><span>MAC &amp; vendor <small>local network</small></span></label>
+                  <label class="toggle"><input type="checkbox" name="scan-snmp"><span>Switches &amp; routers <small>SNMP</small></span></label>
                   <label class="toggle"><input type="checkbox" name="scan-stream" checked><span>Live results <small>hosts that answer</small></span></label>
                   <label class="toggle"><input type="checkbox" name="scan-streamAll"><span>Every result live <small>including timeouts</small></span></label>
                   <label class="toggle"><input type="checkbox" name="scan-compare"><span>Changes <small>vs. previous scan</small></span></label>
@@ -276,6 +277,10 @@
                     <input id="scan-ports" name="scan-ports" type="text" placeholder="21,22,25,53,80,443,445,1433,3306,3389,5432" autocomplete="off" spellcheck="false" maxlength="200">
                   </label>
                   <label class="field" for="scan-portTimeout"><span>Port timeout (s)</span><input id="scan-portTimeout" name="scan-portTimeout" type="number" min="0.1" max="60" step="0.1" value="1"></label>
+                </div>
+
+                <div class="subfields" data-show-if="scan-snmp" hidden>
+                  <label class="toggle span-2"><input type="checkbox" name="scan-snmpV3"><span>SNMPv3 <small>user and keys from the environment</small></span></label>
                 </div>
 
                 <div class="subfields" data-show-if="scan-compare" hidden>
@@ -451,10 +456,10 @@ ipmg diff --fail-on-change   # exit 2 for cron or CI</code></pre>
 
         <div class="changes-card reveal">
           <div class="filter" role="group" aria-label="Filter by severity">
-            <button type="button" class="chip" data-severity-filter="all" aria-pressed="true">All <span>12</span></button>
+            <button type="button" class="chip" data-severity-filter="all" aria-pressed="true">All <span>17</span></button>
             <button type="button" class="chip sev-critical" data-severity-filter="critical" aria-pressed="false">Critical <span>2</span></button>
-            <button type="button" class="chip sev-warning" data-severity-filter="warning" aria-pressed="false">Warning <span>6</span></button>
-            <button type="button" class="chip sev-info" data-severity-filter="info" aria-pressed="false">Info <span>4</span></button>
+            <button type="button" class="chip sev-warning" data-severity-filter="warning" aria-pressed="false">Warning <span>9</span></button>
+            <button type="button" class="chip sev-info" data-severity-filter="info" aria-pressed="false">Info <span>6</span></button>
           </div>
           <ul class="change-list">
             <li data-severity="critical"><span class="sev critical">critical</span><div><strong>Host offline</strong><p>Reachable in the baseline, not reachable now</p></div></li>
@@ -465,10 +470,15 @@ ipmg diff --fail-on-change   # exit 2 for cron or CI</code></pre>
             <li data-severity="warning"><span class="sev warning">warning</span><div><strong>MAC address changed</strong><p>A different device answers at the same IP</p></div></li>
             <li data-severity="warning"><span class="sev warning">warning</span><div><strong>HTTP status changed</strong><p>A checked URL answers differently</p></div></li>
             <li data-severity="warning"><span class="sev warning">warning</span><div><strong>Status changed</strong><p>Status moved between failure modes, e.g. Timeout → Unreachable</p></div></li>
+            <li data-severity="warning"><span class="sev warning">warning</span><div><strong>Device rebooted</strong><p>A switch or router's uptime started again (<code>--snmp</code>)</p></div></li>
+            <li data-severity="warning"><span class="sev warning">warning</span><div><strong>Interface down</strong><p>An enabled interface that was up stopped passing traffic</p></div></li>
+            <li data-severity="warning"><span class="sev warning">warning</span><div><strong>SNMP not answering</strong><p>The device answers the scan, but its agent stopped answering</p></div></li>
             <li data-severity="info"><span class="sev info">info</span><div><strong>Host back online</strong><p>Recovered since the baseline</p></div></li>
             <li data-severity="info"><span class="sev info">info</span><div><strong>Hostname changed</strong><p>Same IP, different PTR record</p></div></li>
             <li data-severity="info"><span class="sev info">info</span><div><strong>Latency changed</strong><p>Moved past both thresholds (5 ms and 25% by default)</p></div></li>
             <li data-severity="info"><span class="sev info">info</span><div><strong>HTTP check recovered</strong><p>A failing check passes again</p></div></li>
+            <li data-severity="info"><span class="sev info">info</span><div><strong>Interface back up</strong><p>An interface that went down is up again</p></div></li>
+            <li data-severity="info"><span class="sev info">info</span><div><strong>SNMP answering again</strong><p>The device's agent answers again</p></div></li>
           </ul>
         </div>
       </div>

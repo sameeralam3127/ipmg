@@ -79,6 +79,11 @@ _NOT_FROM_PROJECT = frozenset(
     }
 )
 
+#: Tables of credentials, by the ``args`` attribute a scan reads them from.
+#: They are not flags, so a secret in one never reaches a command line, a
+#: process listing, or shell history.
+CREDENTIAL_TABLES = {"snmp-credentials": "snmp_credentials"}
+
 #: Sentinel for "this key is valid but should leave the flag's own default
 #: alone" — a boolean key set to false, meaning the flag was simply not passed.
 _KEEP = object()
@@ -184,7 +189,13 @@ def _select(
     profiles: dict[str, Any],
 ) -> list[tuple[str, Any, Path]]:
     """One file's keys: its top level, then the chosen profile on top."""
-    layers = [{key: value for key, value in table.items() if key != PROFILE_TABLE}]
+    layers = [
+        {
+            key: value
+            for key, value in table.items()
+            if key != PROFILE_TABLE and key not in CREDENTIAL_TABLES
+        }
+    ]
     if profile is not None and profile in profiles:
         layers.append(profiles[profile])
     return [(key, value, path) for layer in layers for key, value in layer.items()]
@@ -345,7 +356,34 @@ def resolve(
             else:
                 defaults[action.dest] = resolved
     _check_exclusive(parser, defaults, given)
+    defaults.update(_credential_tables(sources, explicit))
     return defaults
+
+
+def _credential_tables(
+    sources: list[tuple[Path, dict[str, Any]]], explicit: str | None
+) -> dict[str, dict[str, Any]]:
+    """Each credentials table, merged across files, keyed by its ``args`` attribute.
+
+    A project's ./ipmg.toml may not hold one: it usually lives in the
+    repository next to the code, and a secret in it gets committed with it.
+    """
+    found: dict[str, dict[str, Any]] = {}
+    for path, table in sources:
+        for name, dest in CREDENTIAL_TABLES.items():
+            if name not in table:
+                continue
+            section = table[name]
+            if not isinstance(section, dict):
+                raise ConfigError(f"[{name}] in {path} must be a table of settings.")
+            if explicit is None and path == Path(PROJECT_CONFIG):
+                raise ConfigError(
+                    f"[{name}] in {path}: keep credentials out of a project file, which is "
+                    f"usually committed with the code. Put them in {_user_config_path()}, "
+                    "in a file you pass with --config, or in environment variables."
+                )
+            found.setdefault(dest, {}).update(section)
+    return found
 
 
 def _check_exclusive(

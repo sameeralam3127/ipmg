@@ -79,6 +79,8 @@ def _probe_kinds(args) -> list[str]:
         kinds.append("ICMP")
     if "tcp" in probe or getattr(args, "scan_ports", False):
         kinds.append("TCP connect")
+    if getattr(args, "snmp", False):
+        kinds.append("SNMP")
     if getattr(args, "http_check", None):
         kinds.append("HTTP")
     return kinds

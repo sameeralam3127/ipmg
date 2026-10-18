@@ -40,6 +40,7 @@ _UNICODE_GLYPHS = {
     "dash": "—",
     "bar_full": "━",
     "bar_empty": "─",
+    "ellipsis": "…",
 }
 
 _ASCII_GLYPHS = {
@@ -52,6 +53,7 @@ _ASCII_GLYPHS = {
     "dash": "-",
     "bar_full": "#",
     "bar_empty": ".",
+    "ellipsis": "...",
 }
 
 _glyphs: dict | None = None

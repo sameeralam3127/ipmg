@@ -13,6 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from ipmg.core.diff import format_uptime
 from ipmg.core.ping import validate_ip
 from ipmg.exceptions import FileIOError
 from ipmg.infrastructure.incremental import atomic_write_bytes, jsonl_record
@@ -599,6 +600,167 @@ def save_http_results(
         except ValueError:
             continue
         saved.append(path)
+    if saved:
+        ui.blank()
+        ui.field_list("Saved", saved)
+    return saved
+
+
+#: Columns of an SNMP report, one row per polled device.
+SNMP_COLUMNS = (
+    "IP",
+    "Result",
+    "Name",
+    "Description",
+    "Location",
+    "Uptime",
+    "Uptime (s)",
+    "Interfaces Up",
+    "Interfaces Down",
+    "Down Interfaces",
+    "Response Time (ms)",
+    "Failure",
+    "Error",
+    "SNMP Version",
+    "Batch Timestamp",
+)
+
+#: Columns of an SNMP interface report, one row per interface.
+SNMP_INTERFACE_COLUMNS = (
+    "IP",
+    "Device",
+    "Index",
+    "Interface",
+    "Alias",
+    "Description",
+    "Admin Status",
+    "Oper Status",
+    "Speed (Mbps)",
+    "In Octets",
+    "Out Octets",
+    "Batch Timestamp",
+)
+
+
+def snmp_results_table(results, batch_timestamp: Any) -> ReportTable:
+    """``--snmp`` polls as a report table, one row per device."""
+    return ReportTable(
+        [
+            {
+                "IP": device.ip,
+                "Result": device.outcome,
+                "Name": device.sys_name,
+                "Description": device.sys_descr,
+                "Location": device.sys_location,
+                "Uptime": format_uptime(device.uptime_s) if device.ok else "",
+                "Uptime (s)": device.uptime_s,
+                "Interfaces Up": device.interfaces_up if device.interfaces else None,
+                "Interfaces Down": len(device.interfaces_down) if device.interfaces else None,
+                "Down Interfaces": ", ".join(i.name for i in device.interfaces_down),
+                "Response Time (ms)": device.response_ms,
+                "Failure": device.failure,
+                "Error": device.error,
+                "SNMP Version": device.version,
+                "Batch Timestamp": batch_timestamp,
+            }
+            for device in results
+        ],
+        columns=SNMP_COLUMNS,
+    )
+
+
+def snmp_interfaces_table(results, batch_timestamp: Any) -> ReportTable:
+    """Every interface of every polled device, one row each."""
+    return ReportTable(
+        [
+            {
+                "IP": device.ip,
+                "Device": device.sys_name,
+                "Index": interface.index,
+                "Interface": interface.name,
+                "Alias": interface.alias,
+                "Description": interface.description,
+                "Admin Status": interface.admin_status,
+                "Oper Status": interface.oper_status,
+                "Speed (Mbps)": interface.speed_mbps,
+                "In Octets": interface.in_octets,
+                "Out Octets": interface.out_octets,
+                "Batch Timestamp": batch_timestamp,
+            }
+            for device in results
+            for interface in device.interfaces
+        ],
+        columns=SNMP_INTERFACE_COLUMNS,
+    )
+
+
+def _snmp_markdown(results, table: ReportTable) -> str:
+    """Devices, then the interfaces that are down: the full table is in the other formats."""
+    failed = sum(1 for row in table.rows if row.get("Result") != "OK")
+    lines = [
+        "# IPMG SNMP Report",
+        "",
+        f"- Batch timestamp: {table.rows[0].get('Batch Timestamp') if table.rows else 'Unknown'}",
+        f"- Devices polled: {len(table)}",
+        f"- Not answering: {failed}",
+        "",
+        "| Result | IP | Name | Uptime | Interfaces up | Down | Detail |",
+        "| --- | --- | --- | ---: | ---: | ---: | --- |",
+    ]
+    for row in table.rows:
+        detail = row.get("Error") or str(row.get("Description") or "").split("\n")[0]
+        cells = [
+            row.get(column)
+            for column in ("Result", "IP", "Name", "Uptime", "Interfaces Up", "Interfaces Down")
+        ]
+        lines.append(
+            "| " + " | ".join(_format_markdown_value(cell) for cell in [*cells, detail]) + " |"
+        )
+    down = [(device, interface) for device in results for interface in device.interfaces_down]
+    if down:
+        lines += ["", "## Interfaces down", "", "| IP | Device | Interface | Alias | Status |"]
+        lines.append("| --- | --- | --- | --- | --- |")
+        for device, interface in down:
+            cells = [device.ip, device.sys_name, interface.name, interface.alias]
+            lines.append(
+                "| "
+                + " | ".join(
+                    _format_markdown_value(cell) for cell in [*cells, interface.oper_status]
+                )
+                + " |"
+            )
+    lines.append("")
+    return "\n".join(lines)
+
+
+def save_snmp_results(
+    results,
+    base: str,
+    formats: list[str],
+    batch_timestamp: Any,
+    timestamp: str | None = None,
+) -> list[str]:
+    """Write ``--snmp`` polls beside the host reports: devices, and their interfaces.
+
+    The interface report is skipped for Markdown, whose device report lists
+    the interfaces that are down instead of every one.
+    """
+    table = snmp_results_table(results, batch_timestamp)
+    interfaces = snmp_interfaces_table(results, batch_timestamp)
+    ts = timestamp or timestamp_str()
+    saved: list[str] = []
+    for fmt in formats:
+        path = f"{base}_{ts}.{fmt}"
+        content = _snmp_markdown(results, table).encode("utf-8") if fmt == "md" else None
+        try:
+            atomic_write_bytes(path, content if content is not None else render_report(table, fmt))
+        except ValueError:
+            continue
+        saved.append(path)
+        if fmt != "md" and len(interfaces):
+            interfaces_path = f"{base}_interfaces_{ts}.{fmt}"
+            atomic_write_bytes(interfaces_path, render_report(interfaces, fmt))
+            saved.append(interfaces_path)
     if saved:
         ui.blank()
         ui.field_list("Saved", saved)

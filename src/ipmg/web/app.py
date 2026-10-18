@@ -76,6 +76,7 @@ from ipmg.web.schemas import (
     Schedule,
     SchedulePatch,
     ScheduleRequest,
+    SnmpDeviceRow,
     Stats,
     UploadResult,
     ValidationIssue,
@@ -367,6 +368,10 @@ def _register_scan_routes(api: APIRouter, database: Database, manager: ScanManag
             raise HTTPException(status_code=404, detail="Scan not found")
         return database.get_results(scan_id, status=status, search=search)
 
+
+def _register_check_routes(api: APIRouter, database: Database) -> None:
+    """What a scan checked beyond reachability: HTTP services and SNMP devices."""
+
     @api.get(
         "/scans/{scan_id}/http",
         response_model=list[HttpCheckRow],
@@ -377,6 +382,17 @@ def _register_scan_routes(api: APIRouter, database: Database, manager: ScanManag
         if database.get_scan(scan_id) is None:
             raise HTTPException(status_code=404, detail="Scan not found")
         return database.get_http_checks(scan_id)
+
+    @api.get(
+        "/scans/{scan_id}/snmp",
+        response_model=list[SnmpDeviceRow],
+        responses=_errors(404),
+        summary="Devices a scan polled over SNMP (ipmg --snmp), with their interfaces",
+    )
+    def get_snmp_devices(scan_id: int) -> list[dict[str, Any]]:
+        if database.get_scan(scan_id) is None:
+            raise HTTPException(status_code=404, detail="Scan not found")
+        return database.get_snmp_devices(scan_id)
 
 
 def _register_scan_control_routes(api: APIRouter, database: Database, manager: ScanManager) -> None:
@@ -870,6 +886,7 @@ def create_app(
     )
     _register_overview_routes(api, database)
     _register_scan_routes(api, database, manager)
+    _register_check_routes(api, database)
     _register_scan_control_routes(api, database, manager)
     _register_schedule_routes(api, database)
     _register_schedule_control_routes(api, database, scheduler)

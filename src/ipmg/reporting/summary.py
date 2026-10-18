@@ -8,6 +8,7 @@ from typing import Any
 
 from rich.text import Text
 
+from ipmg.core.diff import format_uptime
 from ipmg.reporting import ui
 
 STATUS_STYLES = {
@@ -118,6 +119,73 @@ def print_http_checks(results: Sequence[Any]) -> None:
     failed = sum(1 for check in results if not check.ok)
     ui.blank()
     ui.joined([ui.plural(len(results), "URL"), f"{failed} failed"])
+
+
+def interface_counts(device: Any) -> str:
+    """``20 up · 2 down`` for a polled device's interfaces."""
+    if not device.interfaces:
+        return "-"
+    return f"{device.interfaces_up} up {ui.glyph('sep')} {len(device.interfaces_down)} down"
+
+
+#: Characters of detail per SNMP row; a sysDescr can run to hundreds.
+_SNMP_DETAIL_CHARS = 72
+
+
+def _snmp_detail(device: Any) -> str:
+    text = _snmp_reason(device)
+    if len(text) > _SNMP_DETAIL_CHARS:
+        text = text[: _SNMP_DETAIL_CHARS - 1].rstrip() + ui.glyph("ellipsis")
+    return text
+
+
+def _snmp_reason(device: Any) -> str:
+    if device.error:
+        return device.error
+    down = [interface.name for interface in device.interfaces_down]
+    if down:
+        shown = ", ".join(down[:3])
+        return f"down: {shown}" + (f" +{len(down) - 3} more" if len(down) > 3 else "")
+    return device.sys_descr.splitlines()[0] if device.sys_descr else ""
+
+
+def print_snmp(results: Sequence[Any]) -> None:
+    """One row per ``--snmp`` device: answered or not, name, uptime, interfaces, and why."""
+    ui.blank()
+    ui.heading("SNMP")
+    grid = ui.table(
+        "",
+        "Host",
+        "Name",
+        "Uptime",
+        "Interfaces",
+        "Detail",
+        justify=["left", "left", "left", "right", "right", "left"],
+        min_widths=[6, 15, 12, 7, 13, None],
+    )
+    for device in results:
+        grid.add_row(
+            Text(
+                f"{ui.glyph('ok' if device.ok else 'fail')} {device.outcome}",
+                style="success" if device.ok else "danger",
+            ),
+            device.ip,
+            device.sys_name or "-",
+            format_uptime(device.uptime_s),
+            interface_counts(device),
+            Text(_snmp_detail(device), style="muted"),
+        )
+    ui.print_table(grid)
+    failed = sum(1 for device in results if not device.ok)
+    down = sum(len(device.interfaces_down) for device in results)
+    ui.blank()
+    ui.joined(
+        [
+            ui.plural(len(results), "device"),
+            f"{failed} not answering",
+            ui.plural(down, "interface") + " down",
+        ]
+    )
 
 
 def _short_timestamp(value: Any) -> str:

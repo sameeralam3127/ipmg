@@ -42,6 +42,19 @@ function scanRows(scan) {
   return rows;
 }
 
+// What `ipmg --snmp` polled on the branch-office scans: the gateway's backup
+// WAN link is down in #24, so comparing #23 with #24 shows "Interface down".
+function snmpDevices(scan) {
+  const day = scan.id - 21;
+  const port = (if_index, name, alias, oper, speed, traffic) => ({ if_index, name, description: name, alias, admin_status: "up", oper_status: oper, speed_mbps: speed, in_octets: traffic * (day + 1), out_octets: Math.round(traffic * 0.4) * (day + 1) });
+  return [
+    { ip: "10.24.8.1", ok: true, version: "2c", sys_name: "gateway-bom-01", sys_descr: "Cisco IOS XE Software, ISR4331, Version 17.9.4a", sys_object_id: "1.3.6.1.4.1.9.1.1861", sys_location: "Mumbai branch, rack A2", uptime_s: 3801600 + day * 86400, response_ms: 3.1, failure: "", error: "", polled_at: scan.started_at,
+      interfaces: [port(1, "Gi0/0/0", "WAN uplink", "up", 1000, 912345678901), port(2, "Gi0/0/1", "LAN core", "up", 1000, 523456789012), port(3, "Gi0/0/2", "Backup WAN", scan.id === 24 ? "down" : "up", 100, 1234567890)] },
+    { ip: "10.24.8.21", ok: true, version: "2c", sys_name: "reception-ap-01", sys_descr: "ArubaOS (MODEL: 515), Version 8.10.0.6", sys_object_id: "1.3.6.1.4.1.14823.1.2.111", sys_location: "Reception", uptime_s: 1209600 + day * 86400, response_ms: 5.4, failure: "", error: "", polled_at: scan.started_at,
+      interfaces: [port(1, "eth0", "", "up", 2500, 45678901234), port(2, "radio0", "2.4 GHz", "up", 573, 3456789012), port(3, "radio1", "5 GHz", "up", 2402, 34567890123)] },
+  ];
+}
+
 function csv(rows) {
   return ["IP Address,Hostname,Status,Latency,Checked", ...rows.map((r) => [r.ip, r.hostname, r.status, r.latency ?? "", r.checked_at].map((v) => `\"${String(v).replaceAll("\"", "\"\"")}\"`).join(","))].join("\n");
 }
@@ -64,7 +77,8 @@ export const demo = {
   runSchedule: (id) => ({ id: demo.startScan({ targets: schedules.find((s) => s.id === id)?.targets || "", source: "demo schedule" }).id, total: 0 }),
   deleteSchedule: (id) => { schedules = schedules.filter((s) => s.id !== id); return null; },
   stats: () => ({ scan_count: scans.length, host_count: hosts.length, latest_scan: scans[0], running_scans: [], trend: [...scans].reverse().map((s) => ({ ...s, active: s.status_counts.Active || 0 })) }),
-  assets: () => hosts.map(([ip, hostname, status, latency], index) => ({ ip, hostname, status, avg_latency: latency, last_seen: status === "Active" ? "2026-08-07 09:40" : null, last_checked: "2026-08-07 09:40", scan_count: index < 16 ? 4 : 3 })),
+  snmp: (id) => { const scan = demo.scan(id); return scan && scan.source === "branch-office.csv" ? snmpDevices(scan) : []; },
+  assets: () => hosts.map(([ip, hostname, status, latency], index) => ({ ip, hostname, status, snmp_name: { "10.24.8.1": "gateway-bom-01", "10.24.8.21": "reception-ap-01" }[ip] || null, avg_latency: latency, last_seen: status === "Active" ? "2026-08-07 09:40" : null, last_checked: "2026-08-07 09:40", scan_count: index < 16 ? 4 : 3 })),
   scans: (limit = 50) => scans.slice(0, limit),
   scan: (id) => scans.find((scan) => scan.id === Number(id)) || null,
   results: (id, { status, search } = {}) => scanRows(demo.scan(id)).filter((row) => (!status || row.status === status) && (!search || `${row.ip} ${row.hostname}`.toLowerCase().includes(search.toLowerCase()))),
@@ -85,6 +99,7 @@ export const demo = {
     const current = demo.results(id); const previous = demo.results(baseline || scans.find((s) => s.id !== Number(id)).id);
     const before = new Map(previous.map((row) => [row.ip, row]));
     const changes = current.flatMap((row) => { const old = before.get(row.ip); if (!old) return [{ severity: "warning", label: "New host", ip: row.ip, hostname: row.hostname, previous: null, current: row.status }]; if (old.status !== row.status) { const [severity, label] = old.status === "Active" ? ["critical", "Host offline"] : row.status === "Active" ? ["info", "Host back online"] : ["warning", "Status changed"]; return [{ severity, label, ip: row.ip, hostname: row.hostname, previous: old.status, current: row.status }]; } if (row.latency && old.latency && Math.abs(row.latency - old.latency) >= 5) return [{ severity: "info", label: "Latency changed", ip: row.ip, hostname: row.hostname, previous: `${old.latency} ms`, current: `${row.latency} ms`, delta: row.latency - old.latency }]; return []; });
+    if (Number(id) === 24 && Number(baseline || 23) === 23) changes.push({ severity: "warning", label: "Interface down", ip: "10.24.8.1", hostname: "gateway-bom-01", previous: null, current: "Gi0/0/2 (Backup WAN)" });
     return { changes, summary: { total_changes: changes.length, severity_counts: statusCounts(changes.map((c) => ({ status: c.severity }))), unchanged_hosts: current.length - changes.length, baseline_hosts: previous.length, current_hosts: current.length } };
   },
   diffReportUrl: (id, _fmt, options) => `data:text/csv;charset=utf-8,${encodeURIComponent(csv(demo.results(id, options)))}`,

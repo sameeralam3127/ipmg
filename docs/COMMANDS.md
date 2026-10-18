@@ -20,6 +20,7 @@ website. `ipmg --help` (and `ipmg web --help`, `ipmg history --help`,
 [Choosing targets](#choosing-targets) ·
 [Names and open ports](#names-and-open-ports) ·
 [HTTP checks](#http-checks) ·
+[SNMP polling](#snmp-polling) ·
 [Live output and logs](#live-output-and-logs) ·
 [Speed and accuracy](#speed-and-accuracy) ·
 [Reports](#reports) ·
@@ -314,6 +315,38 @@ The change's `ip` field holds the URL. `--fail-on-down` also fails the run
 
 ---
 
+## SNMP polling
+
+A switch or router can answer ping while an uplink is down. `--snmp` asks the
+hosts that answered for their name, model, uptime, and interfaces over SNMP,
+after the sweep:
+
+```bash
+IPMG_SNMP_COMMUNITY=lab ipmg --input switches.txt --snmp
+ipmg --input core.txt --snmp --snmp-version 3          # IPMG_SNMP_USER and keys from the environment
+ipmg --input switches.txt --snmp --compare --interval 15 --notify-slack
+```
+
+| Flag | Default | Meaning |
+| --- | --- | --- |
+| `--snmp` | off | Poll every host that answered |
+| `--snmp-version 2c\|3` | `2c` | SNMP version; v3 encryption needs the `snmp` extra |
+| `--snmp-port PORT` | `161` | Agent UDP port |
+| `--snmp-timeout SECONDS` | `2` | Wait for each answer |
+| `--snmp-retries N` | `1` | Resend an unanswered request up to N times |
+| `--snmp-no-interfaces` | off | Read only the system group, not the interface tables |
+
+Credentials never go on the command line: the community string and the v3
+user, keys, and context come from `IPMG_SNMP_*` environment variables or the
+`[snmp-credentials]` table of your config file. Results print as their own
+table, are saved as `<prefix>_snmp_<timestamp>.<format>` and
+`<prefix>_snmp_interfaces_<timestamp>.<format>`, are stored in the history, and
+are compared like hosts: a reboot, an interface going down or coming back, and
+an agent that stops or resumes answering are changes. The
+[SNMP guide](SNMP.md) has the details.
+
+---
+
 ## Live output and logs
 
 <p align="center">
@@ -546,10 +579,15 @@ ipmg diff --latency-threshold 10 --latency-pct 50   # defaults: 5 ms and 25%
 | Status changed | warning | Status moved between failure modes (e.g. `Timeout` → `Unreachable`) |
 | MAC address changed | warning | With `--mac`: a different device answers at the same IP |
 | HTTP status changed | warning | An HTTP check's status or failure reason changed |
+| Device rebooted | warning | With `--snmp`: the device's uptime started again |
+| Interface down | warning | With `--snmp`: an enabled interface that was up stopped passing traffic |
+| SNMP not answering | warning | With `--snmp`: the device answers the scan, but no longer SNMP |
 | Host back online | info | Recovered since the baseline |
 | Hostname changed | info | Same IP, different PTR record |
 | Latency changed | info | Latency moved past both thresholds |
 | HTTP check recovered | info | A failing HTTP check passes again |
+| Interface back up | info | With `--snmp`: an interface that went down is up again |
+| SNMP answering again | info | With `--snmp`: the device's agent answers again |
 
 By default a scan is compared with the previous scan **of the same target
 source**, so file-based and `--discover` runs do not get mixed up;
@@ -686,6 +724,11 @@ including a repository you just cloned, so it cannot say where results are
 sent: the `--notify-*` destinations and `--smtp-*` settings are only read from
 `~/.config/ipmg/config.toml` or a file you pass with `--config`. A file also
 cannot combine flags that exclude each other, such as `json` and `jsonl`.
+
+One table is not flags: `[snmp-credentials]` holds the SNMP community string
+and v3 user, keys, and context (see the [SNMP guide](SNMP.md#credentials)). It
+is only read from your own config file or a `--config` file, never from a
+project's `./ipmg.toml`, which is usually committed with the code.
 
 ---
 
@@ -831,6 +874,17 @@ commands list theirs with `ipmg web --help`, `ipmg history --help`,
 | `--http-method` | `GET` | Request method (default: GET). Choices: `GET`, `HEAD`. |
 | `--http-no-redirects` | off | Do not follow redirects; the redirect's own status is checked. |
 | `--http-insecure` | off | Do not verify TLS certificates (for self-signed lab hosts; not recommended). |
+
+**SNMP polling**
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--snmp` | off | Poll every host that answered over SNMP: name, description, uptime, and interfaces. Reboots, interfaces going down, and agents that stop answering are reported as changes. |
+| `--snmp-version` | `2c` | SNMP version (default: 2c). Version 3 encryption needs the snmp extra. Choices: `2c`, `3`. |
+| `--snmp-port PORT` | `161` | Agent UDP port (default: 161). |
+| `--snmp-timeout SECONDS` | `2.0` | Seconds to wait for each answer (default: 2). |
+| `--snmp-retries N` | `1` | Times to resend an unanswered request (default: 1). |
+| `--snmp-no-interfaces` | off | Read only the system group, not the interface tables. |
 
 **Report writing**
 

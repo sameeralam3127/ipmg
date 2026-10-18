@@ -441,6 +441,14 @@ const BUILDERS = {
     if (form.on("scan-mac")) {
       line.flag("--mac", "Add each responding host's MAC address and vendor (hosts on this machine's network only).");
     }
+    if (form.on("scan-snmp")) {
+      line.flag("--snmp", "Ask every host that answers for its name, uptime, and interfaces over SNMP, and report reboots and interfaces that go down.");
+      if (form.on("scan-snmpV3")) {
+        line.flag("--snmp-version", "Use SNMPv3. The user and keys come from IPMG_SNMP_USER, IPMG_SNMP_AUTH_KEY, and IPMG_SNMP_PRIV_KEY, never from the command line.", "3");
+      } else {
+        line.info("The community string comes from IPMG_SNMP_COMMUNITY (default: public), never from the command line.");
+      }
+    }
 
     if (form.on("scan-scanPorts")) {
       line.flag("--scan-ports", "Check TCP ports on every host that answers the ping.");

@@ -157,6 +157,43 @@ class HttpCheckRow(ApiModel):
     checked_at: str
 
 
+class SnmpInterfaceRow(ApiModel):
+    """One interface of a device, from ifTable and ifXTable."""
+
+    if_index: int = Field(description="ifIndex")
+    name: str = Field(description="ifName, else ifDescr")
+    description: str = Field(description="ifDescr")
+    alias: str = Field(description="ifAlias, the description an operator gave the interface")
+    admin_status: str = Field(description="up, down, or testing; empty if unknown")
+    oper_status: str = Field(
+        description="up, down, testing, unknown, dormant, notPresent, or lowerLayerDown"
+    )
+    speed_mbps: int | None = Field(description="Speed in Mbit/s")
+    in_octets: int | None = Field(description="Octets received (64-bit counter where available)")
+    out_octets: int | None = Field(description="Octets sent (64-bit counter where available)")
+
+
+class SnmpDeviceRow(ApiModel):
+    """One device as a scan polled it with ``ipmg --snmp``."""
+
+    ip: str
+    ok: bool = Field(description="Whether the agent answered")
+    version: str = Field(description="SNMP version used: 2c or 3")
+    sys_name: str = Field(description="sysName")
+    sys_descr: str = Field(description="sysDescr")
+    sys_object_id: str = Field(description="sysObjectID, the vendor's identifier for the model")
+    sys_location: str = Field(description="sysLocation")
+    uptime_s: float | None = Field(description="Seconds since the agent started, from sysUpTime")
+    response_ms: float | None = Field(description="Time to the system group's answer, in ms")
+    failure: str = Field(
+        description="Why it failed: timeout, refused, auth, error, protocol, unsupported, or "
+        "network; empty when it answered"
+    )
+    error: str = Field(description="Human-readable failure reason, or a note on a partial answer")
+    polled_at: str
+    interfaces: list[SnmpInterfaceRow]
+
+
 # ------------------------------------------------------------------- overview
 
 
@@ -184,6 +221,8 @@ class Asset(ApiModel):
     status: str = Field(description="Status in the most recent scan")
     mac: str | None = Field(default=None, description="Most recent MAC address seen")
     vendor: str | None = Field(default=None, description="Vendor of that MAC address")
+    snmp_name: str | None = Field(default=None, description="Most recent SNMP sysName")
+    snmp_descr: str | None = Field(default=None, description="Most recent SNMP sysDescr")
     avg_latency: float | None = Field(description="Mean latency when active, in ms")
     last_seen: str | None = Field(description="Last time the host was active")
     last_checked: str

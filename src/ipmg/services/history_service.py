@@ -46,14 +46,16 @@ class HistoryService:
         config: ScanConfig,
         duration_s: float,
         http_checks: Sequence[Any] = (),
+        snmp_devices: Sequence[Any] = (),
     ) -> int:
-        """Store a finished scan, and its HTTP checks, and return its id."""
+        """Store a finished scan, its HTTP checks, and its SNMP polls, and return its id."""
         return self._db.record_scan(
             source=source,
             results=results,
             config=asdict(config),
             duration_s=duration_s,
             http_checks=http_checks,
+            snmp_devices=snmp_devices,
         )
 
     # ------------------------------------------------------------ listing
@@ -96,6 +98,8 @@ class HistoryService:
             current_ref=target_ref,
             baseline_http=self._db.http_snapshot(baseline_id),
             current_http=self._db.http_snapshot(target_id),
+            baseline_snmp=self._db.snmp_snapshot(baseline_id),
+            current_snmp=self._db.snmp_snapshot(target_id),
         )
 
     def compare_with_previous(

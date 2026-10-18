@@ -20,7 +20,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from ipmg.core.diff import HostSnapshot, HttpSnapshot, ScanRef, ip_sort_key
+from ipmg.core.diff import (
+    HostSnapshot,
+    HttpSnapshot,
+    InterfaceSnapshot,
+    ScanRef,
+    SnmpSnapshot,
+    ip_sort_key,
+)
 from ipmg.core.engine import HostResult
 from ipmg.core.portscan import encode_ports
 
@@ -88,6 +95,41 @@ CREATE TABLE IF NOT EXISTS http_checks (
 
 CREATE INDEX IF NOT EXISTS idx_http_checks_scan ON http_checks(scan_id);
 
+CREATE TABLE IF NOT EXISTS snmp_devices (
+    scan_id INTEGER NOT NULL REFERENCES scans(id) ON DELETE CASCADE,
+    ip TEXT NOT NULL,
+    ok INTEGER NOT NULL,
+    version TEXT NOT NULL DEFAULT '',
+    sys_name TEXT NOT NULL DEFAULT '',
+    sys_descr TEXT NOT NULL DEFAULT '',
+    sys_object_id TEXT NOT NULL DEFAULT '',
+    sys_location TEXT NOT NULL DEFAULT '',
+    uptime_s REAL,
+    response_ms REAL,
+    failure TEXT NOT NULL DEFAULT '',
+    error TEXT NOT NULL DEFAULT '',
+    polled_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_snmp_devices_scan ON snmp_devices(scan_id);
+CREATE INDEX IF NOT EXISTS idx_snmp_devices_ip ON snmp_devices(ip);
+
+CREATE TABLE IF NOT EXISTS snmp_interfaces (
+    scan_id INTEGER NOT NULL REFERENCES scans(id) ON DELETE CASCADE,
+    ip TEXT NOT NULL,
+    if_index INTEGER NOT NULL,
+    name TEXT NOT NULL DEFAULT '',
+    description TEXT NOT NULL DEFAULT '',
+    alias TEXT NOT NULL DEFAULT '',
+    admin_status TEXT NOT NULL DEFAULT '',
+    oper_status TEXT NOT NULL DEFAULT '',
+    speed_mbps INTEGER,
+    in_octets INTEGER,
+    out_octets INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_snmp_interfaces_scan ON snmp_interfaces(scan_id, ip);
+
 CREATE TABLE IF NOT EXISTS schedules (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
@@ -110,12 +152,56 @@ _SCHEDULE_SQL = (
     "LEFT JOIN scans s ON s.id = sc.last_scan_id"
 )
 
+#: SQLite integers are signed 64-bit; a Counter64 above that is stored as unknown.
+_SQLITE_MAX_INT = 2**63 - 1
+
 #: ``ESCAPE`` character used to neutralise user-supplied LIKE wildcards.
 _LIKE_ESCAPE = "\\"
 
 
 def _now() -> str:
     return datetime.now().isoformat(sep=" ", timespec="seconds")
+
+
+def _counter(value: int | None) -> int | None:
+    return value if value is not None and value <= _SQLITE_MAX_INT else None
+
+
+def _snmp_device_row(scan_id: int, device: Any, polled_at: str) -> tuple:
+    return (
+        scan_id,
+        device.ip,
+        int(device.ok),
+        device.version,
+        device.sys_name,
+        device.sys_descr,
+        device.sys_object_id,
+        device.sys_location,
+        device.uptime_s,
+        device.response_ms,
+        device.failure,
+        device.error,
+        polled_at,
+    )
+
+
+def _snmp_interface_rows(scan_id: int, device: Any) -> list[tuple]:
+    return [
+        (
+            scan_id,
+            device.ip,
+            interface.index,
+            interface.name,
+            interface.description,
+            interface.alias,
+            interface.admin_status,
+            interface.oper_status,
+            interface.speed_mbps,
+            _counter(interface.in_octets),
+            _counter(interface.out_octets),
+        )
+        for interface in device.interfaces
+    ]
 
 
 def _escape_like(term: str) -> str:
@@ -243,6 +329,7 @@ class Database:
         duration_s: float,
         status: str = "complete",
         http_checks: Sequence[Any] = (),
+        snmp_devices: Sequence[Any] = (),
     ) -> int:
         """Persist an already-finished scan (used by the CLI) in one go.
 
@@ -279,7 +366,73 @@ class Database:
                     for check in http_checks
                 ],
             )
+            self._insert_snmp(conn, scan_id, snmp_devices, now)
         return scan_id
+
+    @staticmethod
+    def _insert_snmp(
+        conn: sqlite3.Connection, scan_id: int, devices: Sequence[Any], polled_at: str
+    ) -> None:
+        if not devices:
+            return
+        conn.executemany(
+            "INSERT INTO snmp_devices (scan_id, ip, ok, version, sys_name, sys_descr, "
+            "sys_object_id, sys_location, uptime_s, response_ms, failure, error, polled_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [_snmp_device_row(scan_id, device, polled_at) for device in devices],
+        )
+        conn.executemany(
+            "INSERT INTO snmp_interfaces (scan_id, ip, if_index, name, description, alias, "
+            "admin_status, oper_status, speed_mbps, in_octets, out_octets) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [row for device in devices for row in _snmp_interface_rows(scan_id, device)],
+        )
+
+    def get_snmp_devices(self, scan_id: int) -> list[dict[str, Any]]:
+        """A scan's ``--snmp`` polls, each with its interfaces, in the order polled."""
+        with self._session() as conn:
+            devices = conn.execute(
+                "SELECT ip, ok, version, sys_name, sys_descr, sys_object_id, sys_location, "
+                "uptime_s, response_ms, failure, error, polled_at FROM snmp_devices "
+                "WHERE scan_id = ? ORDER BY rowid",
+                (scan_id,),
+            ).fetchall()
+            interfaces = conn.execute(
+                "SELECT ip, if_index, name, description, alias, admin_status, oper_status, "
+                "speed_mbps, in_octets, out_octets FROM snmp_interfaces "
+                "WHERE scan_id = ? ORDER BY rowid",
+                (scan_id,),
+            ).fetchall()
+        by_ip: dict[str, list[dict[str, Any]]] = {}
+        for row in interfaces:
+            interface = dict(row)
+            by_ip.setdefault(interface.pop("ip"), []).append(interface)
+        return [
+            {**dict(row), "ok": bool(row["ok"]), "interfaces": by_ip.get(row["ip"], [])}
+            for row in devices
+        ]
+
+    def snmp_snapshot(self, scan_id: int) -> list[SnmpSnapshot]:
+        return [
+            SnmpSnapshot(
+                ip=device["ip"],
+                ok=device["ok"],
+                uptime_s=device["uptime_s"],
+                failure=device["failure"],
+                sys_name=device["sys_name"],
+                polled_at=device["polled_at"],
+                interfaces=tuple(
+                    InterfaceSnapshot(
+                        name=interface["name"],
+                        alias=interface["alias"],
+                        admin_status=interface["admin_status"],
+                        oper_status=interface["oper_status"],
+                    )
+                    for interface in device["interfaces"]
+                ),
+            )
+            for device in self.get_snmp_devices(scan_id)
+        ]
 
     def get_http_checks(self, scan_id: int) -> list[dict[str, Any]]:
         """A scan's ``--http-check`` results, in the order they were checked."""
@@ -545,6 +698,12 @@ class Database:
             "  (SELECT r5.vendor FROM results r5 "
             "   WHERE r5.ip = r.ip AND r5.mac != '' "
             "   ORDER BY r5.rowid DESC LIMIT 1) AS vendor, "
+            "  (SELECT d.sys_name FROM snmp_devices d "
+            "   WHERE d.ip = r.ip AND d.ok = 1 AND d.sys_name != '' "
+            "   ORDER BY d.rowid DESC LIMIT 1) AS snmp_name, "
+            "  (SELECT d2.sys_descr FROM snmp_devices d2 "
+            "   WHERE d2.ip = r.ip AND d2.ok = 1 AND d2.sys_descr != '' "
+            "   ORDER BY d2.rowid DESC LIMIT 1) AS snmp_descr, "
             "  AVG(CASE WHEN r.status = 'Active' THEN r.latency END) AS avg_latency, "
             "  MAX(CASE WHEN r.status = 'Active' THEN r.checked_at END) AS last_seen, "
             "  MAX(r.checked_at) AS last_checked, "

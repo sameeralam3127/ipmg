@@ -73,10 +73,13 @@ web = [
     "websockets>=12",
     "python-multipart>=0.0.9",
 ]
-# Everything; what the one-line installers and the Docker image install.
-all = ["ipmg[web]"]
+# SNMPv3 encryption (`--snmp` with a privacy key). SNMP v2c and v3 without
+# encryption need nothing extra.
+snmp = ["cryptography>=42"]
+# Everything.
+all = ["ipmg[web,snmp]"]
 dev = [
-    "ipmg[web]",
+    "ipmg[web,snmp]",
     "pytest>=7.4",
     "pytest-cov>=5.0",
     "ruff>=0.4",
@@ -100,7 +103,7 @@ ipmg = "ipmg.cli.commands:run"
 
 [dependency-groups]
 dev = [
-    "ipmg[web]",
+    "ipmg[web,snmp]",
     "pytest>=7.4",
     "pytest-cov>=5.0",
     "ruff>=0.4",

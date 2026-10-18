@@ -204,6 +204,15 @@ The one-line installers, Homebrew, and the Docker image install it with the
 `web` extra already. Run `ipmg web` without it and IPMG tells you the command
 that adds it.
 
+SNMP polling (`--snmp`) needs nothing extra, except SNMPv3 encryption, which
+needs the `cryptography` package from the `snmp` extra:
+
+```bash
+pip install "ipmg[web,snmp]"        # or: uv tool install --force --python ">=3.10" "ipmg[web,snmp]"
+```
+
+`ipmg[all]` installs every extra.
+
 ## Tab completion
 
 `ipmg completion SHELL` prints a completion script for commands, flags, their

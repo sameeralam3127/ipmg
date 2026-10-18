@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import logging
 import math
 import os
@@ -10,6 +11,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from ipmg.core.diff import DiffOptions
 from ipmg.core.discovery import discover_targets
@@ -33,6 +35,7 @@ from ipmg.infrastructure.file_io import (
     load_all_targets,
     save_http_results,
     save_results,
+    save_snmp_results,
 )
 from ipmg.infrastructure.incremental import (
     DEFAULT_AUTOSAVE_S,
@@ -54,9 +57,13 @@ from ipmg.reporting.diff_report import export_diff, print_diff
 from ipmg.reporting.frames import ReportTable, report_columns, results_table
 from ipmg.reporting.live import DEFAULT_REFRESH_S, StreamOptions, scan_display
 from ipmg.reporting.machine import MachineOutput, MachineStream, write_array
-from ipmg.reporting.summary import print_http_checks, print_summary
+from ipmg.reporting.summary import print_http_checks, print_snmp, print_summary
 from ipmg.services.history_service import HistoryService
+from ipmg.services.snmp_settings import describe_credentials, snmp_options
 from ipmg.utils.helpers import current_timestamp, timestamp_str
+
+if TYPE_CHECKING:
+    from ipmg.core.snmp import SnmpOptions, SnmpResult
 
 log = logging.getLogger(__name__)
 
@@ -87,6 +94,8 @@ class ScanOutcome:
     http_results: list[HttpCheckResult] = field(default_factory=list)
     #: Whether this pass probed hosts at all; a run of only HTTP checks does not.
     scanned_hosts: bool = True
+    #: ``--snmp`` polls of the hosts that answered, in scan order.
+    snmp_results: list[SnmpResult] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -260,12 +269,28 @@ def _ensure_input_file(args) -> None:
         )
 
 
+def snmp_description(args, snmp: SnmpOptions) -> str:
+    """The SNMP line of the Config block: how devices are polled, and as whom."""
+    sep = f" {ui.glyph('sep')} "
+    parts = [
+        f"v{snmp.version}",
+        f"port {snmp.port}",
+        f"{snmp.timeout_s:g}s timeout",
+        f"{snmp.retries} {'retry' if snmp.retries == 1 else 'retries'}",
+        describe_credentials(args),
+    ]
+    if not snmp.interfaces:
+        parts.append("system group only")
+    return sep.join(parts)
+
+
 def _print_configuration(
     sources: list[str],
     targets: int,
     config: ScanConfig,
     urls: Sequence[str] = (),
     http: HttpCheckOptions | None = None,
+    snmp_line: str = "",
 ) -> None:
     ping_word = "ping" if config.count == 1 else "pings"
     ui.blank()
@@ -303,6 +328,32 @@ def _print_configuration(
             ),
         ]
     )
+    if snmp_line:
+        ui.field("SNMP", snmp_line)
+
+
+def _poll_snmp(
+    results: Sequence[HostResult], options: SnmpOptions, threads: int
+) -> list[SnmpResult]:
+    """Poll the hosts that answered, within ``--threads``, after the sweep."""
+    from ipmg.core.snmp import poll_device
+
+    ips = [result.ip for result in results if result.status == "Active"]
+    if not ips:
+        ui.blank()
+        ui.note("SNMP: no host answered, so none was polled.")
+        return []
+    with (
+        ui.progress("SNMP") as bar,
+        concurrent.futures.ThreadPoolExecutor(
+            max_workers=max(1, min(threads, len(ips))), thread_name_prefix="ipmg-snmp"
+        ) as pool,
+    ):
+        task = bar.add_task("snmp", total=len(ips))
+        futures = [pool.submit(poll_device, ip, options) for ip in ips]
+        for _done in concurrent.futures.as_completed(futures):
+            bar.advance(task)
+        return [future.result() for future in futures]
 
 
 def _scan_with_progress(
@@ -401,6 +452,7 @@ def _run_single_pass(
     incremental: IncrementalOptions,
     machine: MachineOutput,
     resume: PartialReport | None = None,
+    snmp: SnmpOptions | None = None,
 ) -> ScanOutcome:
     batch_timestamp = (resume and resume.batch_timestamp) or current_timestamp()
     timestamp = resume.timestamp if resume else timestamp_str()
@@ -428,7 +480,14 @@ def _run_single_pass(
     scanned = {result.ip for result in previous}
     remaining = [ip for ip in ip_list if ip not in scanned]
 
-    _print_configuration(sources, len(ip_list) if scanned_hosts else 0, config, urls, http)
+    _print_configuration(
+        sources,
+        len(ip_list) if scanned_hosts else 0,
+        config,
+        urls,
+        http,
+        snmp_description(args, snmp) if snmp is not None and scanned_hosts else "",
+    )
     if resume:
         _announce_resume(resume, len(previous), len(ip_list))
     columns = report_columns(config)
@@ -443,6 +502,9 @@ def _run_single_pass(
     results = previous
     if scanned_hosts:
         results = previous + _run_pass(remaining, config, stream, report, machine_stream)
+    snmp_results: list[SnmpResult] = []
+    if snmp is not None and scanned_hosts:
+        snmp_results = _poll_snmp(results, snmp, config.threads)
     http_results: list[HttpCheckResult] = []
     if urls:
         # Within --threads, like the host probes, and after them, so the two
@@ -460,6 +522,7 @@ def _run_single_pass(
         output=output,
         http_results=http_results,
         scanned_hosts=scanned_hosts,
+        snmp_results=snmp_results,
     )
 
 
@@ -507,6 +570,7 @@ def _store_and_compare(
             config=config,
             duration_s=outcome.duration_s,
             http_checks=outcome.http_results,
+            snmp_devices=outcome.snmp_results,
         )
     except HistoryError as exc:
         ui.blank()
@@ -539,8 +603,11 @@ def _prune_reports(args, outcome: ScanOutcome) -> None:
     keep = getattr(args, "keep_reports", None)
     if not keep:
         return
+    snmp_base = snmp_report_base(outcome.output)
     removed = prune_reports(
-        [outcome.output, http_report_base(outcome.output)], keep, protect=outcome.timestamp
+        [outcome.output, http_report_base(outcome.output), snmp_base, f"{snmp_base}_interfaces"],
+        keep,
+        protect=outcome.timestamp,
     )
     if removed:
         ui.blank()
@@ -556,12 +623,15 @@ def _scan_pass(
     history_options: HistoryOptions,
     health: HealthPolicy,
     resume: PartialReport | None,
+    snmp: SnmpOptions | None = None,
 ) -> str | None:
     """Scan once, write the reports and history, and say why it failed --fail-on-down."""
-    outcome = _run_single_pass(args, config, stream, incremental, machine, resume)
+    outcome = _run_single_pass(args, config, stream, incremental, machine, resume, snmp)
 
     if outcome.scanned_hosts:
         print_summary(outcome.frame, outcome.batch_timestamp, outcome.duration_s)
+    if outcome.snmp_results:
+        print_snmp(outcome.snmp_results)
     if outcome.http_results:
         print_http_checks(outcome.http_results)
     if machine.array:
@@ -578,6 +648,14 @@ def _scan_pass(
             batch_timestamp=outcome.batch_timestamp,
             timestamp=outcome.timestamp,
         )
+    if outcome.snmp_results:
+        save_snmp_results(
+            outcome.snmp_results,
+            snmp_report_base(outcome.output),
+            args.formats,
+            batch_timestamp=outcome.batch_timestamp,
+            timestamp=outcome.timestamp,
+        )
     _prune_reports(args, outcome)
     _store_and_compare(history_options, config, outcome)
     return check_health(outcome.results, health, outcome.http_results)
@@ -586,6 +664,11 @@ def _scan_pass(
 def http_report_base(output: str) -> str:
     """HTTP check reports sit beside the host reports: ``results_http_<timestamp>.csv``."""
     return f"{output}_http"
+
+
+def snmp_report_base(output: str) -> str:
+    """SNMP reports sit beside the host reports: ``results_snmp_<timestamp>.csv``."""
+    return f"{output}_snmp"
 
 
 def next_pass_delay(cadence_start: float, period_s: float, now: float) -> float:
@@ -626,6 +709,9 @@ def run_scan(args) -> None:
     health = _health_policy(args)
     stream = _stream_options(args)
     incremental = _incremental_options(args)
+    # Before anything is scanned: missing SNMPv3 credentials are a mistake
+    # to fix now, not after the sweep.
+    snmp = snmp_options(args)
     _ensure_input_file(args)
     _ensure_output_folder(args)
     resume = _load_resume(args)
@@ -637,7 +723,7 @@ def run_scan(args) -> None:
         pass_started = time.monotonic()
         try:
             failure = _scan_pass(
-                args, config, stream, incremental, machine, history_options, health, resume
+                args, config, stream, incremental, machine, history_options, health, resume, snmp
             )
         except (IPMGError, OSError) as exc:
             # A one-off scan reports its error and exits, and so does a monitor
