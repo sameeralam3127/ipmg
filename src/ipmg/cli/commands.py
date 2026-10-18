@@ -40,6 +40,9 @@ WEB_EXTRA_MISSING = (
     "  pip install 'ipmg[web]'"
 )
 
+#: Where ``ipmg web --lan`` listens; only ever used when asked for with --lan.
+ALL_INTERFACES = "0.0.0.0"  # nosec B104
+
 EXIT_OK = 0
 EXIT_ERROR = 1
 EXIT_CHANGES_DETECTED = 2
@@ -96,13 +99,15 @@ def _web_command(argv: List[str]) -> int:
             raise
         raise IPMGError(WEB_EXTRA_MISSING) from exc
 
+    host = args.host or (ALL_INTERFACES if args.lan or args.open_firewall else "127.0.0.1")
     run_dashboard(
-        host=args.host,
+        host=host,
         port=args.port,
         open_browser=not args.no_browser,
         db_path=args.db,
         metrics_sources=max(args.metrics_sources, 1) if args.metrics else None,
         max_scans=max(args.max_scans, 1),
+        open_firewall=args.open_firewall,
     )
     return EXIT_OK
 

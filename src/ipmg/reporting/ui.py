@@ -121,13 +121,18 @@ def heading(title: str) -> None:
     console.print(Text(INDENT + title, style="ipmg.heading"))
 
 
-def field(label: str, value: object, value_style: str = "ipmg.value") -> None:
-    """One aligned ``label   value`` line."""
+def field(label: str, value: object, value_style: str = "ipmg.value", wrap: bool = True) -> None:
+    """One aligned ``label   value`` line.
+
+    ``wrap=False`` keeps the value on one line however narrow the terminal,
+    for a URL or a command someone will copy: a line break rich inserted
+    would end up in the pasted text.
+    """
     text = Text(INDENT)
     # A label as long as the column still gets one space before its value.
     text.append(f"{label:<{LABEL_WIDTH - 1}} ", style="ipmg.label")
     text.append(str(value), style=value_style)
-    console.print(text)
+    console.print(text, soft_wrap=not wrap)
 
 
 def fields(pairs: Iterable[Tuple[str, object]]) -> None:
