@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://pypi.org/project/ipmg/"><img src="https://img.shields.io/pypi/v/ipmg" alt="PyPI"></a>
+  <a href="https://pypi.org/project/ipmg/"><img src="https://img.shields.io/github/v/release/sameeralam3127/ipmg?label=pypi" alt="PyPI"></a>
   <a href="https://pypi.org/project/ipmg/"><img src="https://img.shields.io/badge/python-3.10%2B-blue" alt="Python Version"></a>
   <a href="https://github.com/sameeralam3127/ipmg/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
   <a href="https://github.com/sameeralam3127/ipmg/actions/workflows/publish.yml"><img src="https://github.com/sameeralam3127/ipmg/actions/workflows/publish.yml/badge.svg" alt="Publish"></a>
