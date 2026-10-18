@@ -2,11 +2,13 @@
 
 > **IPMG 4.0.0 shipped in October 2026** with everything from 3.2 (TCP and
 > HTTP checks, MAC lookup, schedules, retention, IPMG Web on the LAN), on
-> Python 3.10 and newer, and with every 3.x workflow kept compatible. The
+> Python 3.10 and newer, and with every 3.x workflow kept compatible; 4.1.0
+> added SNMP polling and made mypy a release gate. The rest of the
 > architectural work this plan describes (the protocols, plugins, streaming
-> pipeline, typed domain models, and contract tests below) was not part of
-> 4.0.0. It continues in the 4.x releases, under the same compatibility
-> contract.
+> pipeline, typed domain models, and contract tests below) is **not
+> scheduled** (#129, closed as not planned). The plan is kept for reference:
+> when a concrete need appears, such as a second storage backend, that piece
+> gets an issue of its own.
 
 IPMG v4 is an **architectural release, not a feature release**. Its identity
 stays the same as 3.x: *fast network discovery, historical inventory, change
