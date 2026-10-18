@@ -4,12 +4,12 @@ name: Installer
 # (`powershell`) and PowerShell 7 (`pwsh`), the way a user would.
 on:
   pull_request:
-    branches: [main]
+    branches: [main, v4]
     paths:
       - install.ps1
       - .github/workflows/installer.yml
   push:
-    branches: [main]
+    branches: [main, v4]
     paths:
       - install.ps1
       - .github/workflows/installer.yml

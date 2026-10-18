@@ -2,9 +2,9 @@ name: Publish
 
 on:
   push:
-    branches: [main]
+    branches: [main, v4]
   pull_request:
-    branches: [main]
+    branches: [main, v4]
     # A docs-only PR cannot break the package, so it skips the 8-job matrix.
     paths-ignore:
       - "**.md"
@@ -16,9 +16,12 @@ env:
 permissions:
   contents: read
 
+# A new push to a PR supersedes its previous run. Runs on main queue instead:
+# cancelling one mid-release could leave a tag and GitHub release whose
+# version never reached PyPI or GHCR.
 concurrency:
   group: publish-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
@@ -48,18 +51,31 @@ jobs:
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python-version }}
-          cache: "pip"
+
+      # uv resolves and installs the dev extra in seconds, where pip took
+      # most of a minute per job; its cache is shared across the matrix.
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: pyproject.toml
 
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
-          pip install build
+        run: uv pip install --system -e ".[dev]" build
 
+      # One cell measures coverage, instead of a separate job running the
+      # whole suite a ninth time. Fails below fail_under in pyproject.toml.
       - name: Run tests
+        shell: bash
         env:
           PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
-        run: pytest -q
+          COVERAGE: ${{ matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12' }}
+        run: |
+          if [ "$COVERAGE" = "true" ]; then
+            pytest -q -p pytest_cov --cov --cov-report=term-missing:skip-covered
+          else
+            pytest -q
+          fi
 
       - name: Smoke-test the installed CLI
         run: |
@@ -114,7 +130,8 @@ jobs:
 
   release:
     needs: [test, core-install]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # main cuts releases; v4 cuts 4.0.0 betas (the branch groups in pyproject.toml).
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/v4')
     runs-on: ubuntu-latest
     environment: pypi
 
@@ -177,13 +194,25 @@ jobs:
       tag: ${{ steps.release.outputs.tag }}
       version: ${{ steps.release.outputs.version }}
 
-  # The container image for the release just cut. A separate job, because it
-  # needs packages: write, and because the tag semantic-release pushed does not
+  # The container image for the release just cut. Separate jobs, because they
+  # need packages: write, and because the tag semantic-release pushed does not
   # trigger other workflows (pushes made with GITHUB_TOKEN never do).
+  #
+  # Each platform builds natively on its own runner (no QEMU), is smoke-tested
+  # there, and is pushed by digest; docker-manifest then tags both as one image.
   docker:
     needs: release
     if: needs.release.outputs.released == 'true'
-    runs-on: ubuntu-latest
+    name: docker (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
 
     permissions:
       contents: read
@@ -196,8 +225,74 @@ jobs:
           ref: ${{ needs.release.outputs.tag }}
           persist-credentials: false
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - name: Platform name for artifacts and the cache
+        id: platform
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: echo "pair=${PLATFORM//\//-}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Built and smoke-tested first, so a broken image is never pushed.
+      - name: Build for the smoke test
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          load: true
+          tags: ipmg:release
+          cache-from: type=gha,scope=docker-${{ steps.platform.outputs.pair }}
+          cache-to: type=gha,mode=max,scope=docker-${{ steps.platform.outputs.pair }}
+
+      - name: Smoke-test the image
+        run: .github/scripts/docker-smoke.sh ipmg:release
+
+      # A cache hit: the layers were all built by the step above.
+      - name: Push by digest
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          cache-from: type=gha,scope=docker-${{ steps.platform.outputs.pair }}
+          outputs: type=image,name=ghcr.io/${{ github.repository }},push-by-digest=true,name-canonical=true,push=true
+
+      - name: Record the digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/digests"
+          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: digest-${{ steps.platform.outputs.pair }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  docker-manifest:
+    needs: [release, docker]
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digest-*
+          merge-multiple: true
 
       - name: Set up Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
@@ -217,25 +312,25 @@ jobs:
           tags: |
             type=semver,pattern={{version}},value=${{ needs.release.outputs.version }}
             type=semver,pattern={{major}}.{{minor}},value=${{ needs.release.outputs.version }}
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ !contains(needs.release.outputs.version, '-') }}
+            type=raw,value=beta,enable=${{ contains(needs.release.outputs.version, '-beta') }}
 
-      # Built and smoke-tested natively first, so a broken image is never pushed.
-      - name: Build for the smoke test
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          platforms: linux/amd64
-          load: true
-          tags: ipmg:release
+      - name: Tag both platforms as one image
+        working-directory: ${{ runner.temp }}/digests
+        env:
+          IMAGE: ghcr.io/${{ github.repository }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          tag_args=()
+          while IFS= read -r tag; do
+            [ -n "$tag" ] && tag_args+=(--tag "$tag")
+          done <<< "$TAGS"
+          sources=()
+          for digest in *; do sources+=("$IMAGE@sha256:$digest"); done
+          docker buildx imagetools create "${tag_args[@]}" "${sources[@]}"
 
-      - name: Smoke-test the image
-        run: .github/scripts/docker-smoke.sh ipmg:release
-
-      - name: Build and push amd64 and arm64
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+      - name: Inspect the published image
+        env:
+          IMAGE: ghcr.io/${{ github.repository }}
+          VERSION: ${{ needs.release.outputs.version }}
+        run: docker buildx imagetools inspect "$IMAGE:$VERSION"

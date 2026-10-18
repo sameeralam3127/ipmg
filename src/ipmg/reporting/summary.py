@@ -23,6 +23,7 @@ SCAN_STATE_STYLES = {
     "running": "warning",
     "cancelled": "muted",
     "failed": "danger",
+    "interrupted": "danger",
 }
 
 
@@ -81,6 +82,41 @@ def print_summary(table, batch_timestamp, duration_seconds: float) -> None:
             batch_timestamp.isoformat(sep=" ", timespec="seconds"),
         ]
     )
+
+
+def print_http_checks(results: Sequence[Any]) -> None:
+    """One row per ``--http-check`` URL: passed or failed, status, time, and why."""
+    ui.blank()
+    ui.heading("HTTP checks")
+    grid = ui.table(
+        "",
+        "URL",
+        "Status",
+        "Time",
+        "Detail",
+        justify=["left", "left", "right", "right", "left"],
+        min_widths=[6, None, 6, 8, None],
+    )
+    for check in results:
+        detail = check.error
+        if not detail and check.final_url and check.final_url != check.url:
+            detail = f"{ui.glyph('arrow')} {check.final_url}"
+        if not detail and check.cert_expires:
+            detail = f"certificate expires {check.cert_expires}"
+        grid.add_row(
+            Text(
+                f"{ui.glyph('ok' if check.ok else 'fail')} {check.outcome}",
+                style="success" if check.ok else "danger",
+            ),
+            check.url,
+            check.summary,
+            ui.format_latency(check.response_ms),
+            Text(detail, style="muted"),
+        )
+    ui.print_table(grid)
+    failed = sum(1 for check in results if not check.ok)
+    ui.blank()
+    ui.joined([ui.plural(len(results), "URL"), f"{failed} failed"])
 
 
 def _short_timestamp(value: Any) -> str:

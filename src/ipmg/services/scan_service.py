@@ -3,23 +3,35 @@
 from __future__ import annotations
 
 import logging
+import math
 import os
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List, Optional, Tuple
+from pathlib import Path
+from typing import List, Optional, Sequence, Tuple
 
 from ipmg.core.diff import DiffOptions
 from ipmg.core.discovery import discover_targets
-from ipmg.core.engine import HostResult, ScanConfig, execute_scan
+from ipmg.core.engine import DEFAULT_DNS_TIMEOUT_S, HostResult, ScanConfig, execute_scan
 from ipmg.core.health import HealthPolicy, HostsDownError, check_health
+from ipmg.core.httpcheck import (
+    DEFAULT_EXPECT,
+    DEFAULT_HTTP_TIMEOUT_S,
+    HttpCheckOptions,
+    HttpCheckResult,
+    format_expect,
+    parse_expect,
+    run_http_checks,
+)
 from ipmg.core.portscan import DEFAULT_PORTS
-from ipmg.exceptions import FileIOError, HistoryError
+from ipmg.exceptions import FileIOError, HistoryError, IPMGError
 from ipmg.infrastructure.file_io import (
     DEFAULT_INPUT_FILE,
     create_sample_file,
     describe_sources,
     load_all_targets,
+    save_http_results,
     save_results,
 )
 from ipmg.infrastructure.incremental import (
@@ -30,13 +42,19 @@ from ipmg.infrastructure.incremental import (
     find_partial_report,
     load_partial_report,
 )
-from ipmg.infrastructure.notify import NotifyOptions, notify_options, send_notifications
+from ipmg.infrastructure.notify import (
+    NotifyOptions,
+    notify_options,
+    send_alert,
+    send_notifications,
+)
+from ipmg.infrastructure.retention import prune_reports
 from ipmg.reporting import ui
 from ipmg.reporting.diff_report import export_diff, print_diff
-from ipmg.reporting.frames import ReportTable, results_table
+from ipmg.reporting.frames import ReportTable, report_columns, results_table
 from ipmg.reporting.live import DEFAULT_REFRESH_S, StreamOptions, scan_display
 from ipmg.reporting.machine import MachineOutput, MachineStream, write_array
-from ipmg.reporting.summary import print_summary
+from ipmg.reporting.summary import print_http_checks, print_summary
 from ipmg.services.history_service import HistoryService
 from ipmg.utils.helpers import current_timestamp, timestamp_str
 
@@ -44,6 +62,12 @@ log = logging.getLogger(__name__)
 
 #: What a scan writes when --formats is not given.
 DEFAULT_FORMATS = ("xlsx",)
+
+#: How the Config line names each --probe method.
+PROBE_LABELS = {"icmp": "ICMP", "tcp": "TCP", "icmp,tcp": "ICMP, then TCP"}
+
+#: The history source of a run that only made HTTP checks (no --input).
+HTTP_ONLY_SOURCE = "http-checks"
 
 
 @dataclass(frozen=True)
@@ -59,6 +83,10 @@ class ScanOutcome:
     timestamp: str
     #: Report file name prefix; a resumed scan keeps the one it started with.
     output: str
+    #: ``--http-check`` results, in the order the URLs were given.
+    http_results: List[HttpCheckResult] = field(default_factory=list)
+    #: Whether this pass probed hosts at all; a run of only HTTP checks does not.
+    scanned_hosts: bool = True
 
 
 @dataclass(frozen=True)
@@ -73,6 +101,8 @@ class HistoryOptions:
     export_base: str = "changes"
     diff: DiffOptions = field(default_factory=DiffOptions)
     notify: NotifyOptions = field(default_factory=NotifyOptions)
+    #: After storing a scan, keep only this many of its source's scans.
+    keep_scans: Optional[int] = None
 
 
 def _history_options(args) -> HistoryOptions:
@@ -91,6 +121,7 @@ def _history_options(args) -> HistoryOptions:
             latency_pct=max(float(getattr(args, "latency_pct", 25.0)), 0.0),
         ),
         notify=notify,
+        keep_scans=getattr(args, "keep_scans", None),
     )
 
 
@@ -162,6 +193,28 @@ def _config_from_args(args) -> ScanConfig:
         scan_ports=getattr(args, "scan_ports", False),
         ports=tuple(getattr(args, "ports", None) or DEFAULT_PORTS),
         port_timeout=getattr(args, "port_timeout", 1.0),
+        dns_timeout=getattr(args, "dns_timeout", DEFAULT_DNS_TIMEOUT_S),
+        resolve_active_only=bool(getattr(args, "resolve_active_only", False)),
+        probe=getattr(args, "probe", None) or "icmp",
+        mac_lookup=bool(getattr(args, "mac", False)),
+    ).clamped()
+
+
+def http_check_urls(args) -> List[str]:
+    return [url for url in (getattr(args, "http_check", None) or []) if url.strip()]
+
+
+def _http_options(args) -> HttpCheckOptions:
+    try:
+        expect = parse_expect(getattr(args, "http_expect", None) or DEFAULT_EXPECT)
+    except ValueError as exc:
+        raise FileIOError(f"--http-expect: {exc}") from exc
+    return HttpCheckOptions(
+        timeout_s=float(getattr(args, "http_timeout", DEFAULT_HTTP_TIMEOUT_S)),
+        method=getattr(args, "http_method", None) or "GET",
+        expect=expect,
+        follow_redirects=not bool(getattr(args, "http_no_redirects", False)),
+        verify_tls=not bool(getattr(args, "http_insecure", False)),
     ).clamped()
 
 
@@ -173,6 +226,21 @@ def _health_policy(args) -> HealthPolicy:
     )
 
 
+def _ensure_output_folder(args) -> None:
+    """Create the folder ``--output`` names, before the scan rather than after it.
+
+    A missing folder used to fail the save only once the whole scan had run,
+    which for a service meant every pass was lost.
+    """
+    folder = Path(args.output).parent
+    if not args.formats or folder == Path("."):
+        return
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise FileIOError(f"Cannot create the report folder {folder}: {exc}") from exc
+
+
 def _ensure_input_file(args) -> None:
     """Fall back to the default input file, creating a sample only for that default.
 
@@ -180,7 +248,7 @@ def _ensure_input_file(args) -> None:
     creating it would silently scan the sample addresses instead of the hosts
     the user meant, so ``load_targets`` reports it as missing.
     """
-    if args.discover or args.input:
+    if args.discover or args.input or http_check_urls(args):
         return
     args.input = [DEFAULT_INPUT_FILE]
     if not os.path.exists(DEFAULT_INPUT_FILE):
@@ -192,9 +260,24 @@ def _ensure_input_file(args) -> None:
         )
 
 
-def _print_configuration(sources: List[str], targets: int, config: ScanConfig) -> None:
+def _print_configuration(
+    sources: List[str],
+    targets: int,
+    config: ScanConfig,
+    urls: Sequence[str] = (),
+    http: Optional[HttpCheckOptions] = None,
+) -> None:
     ping_word = "ping" if config.count == 1 else "pings"
     ui.blank()
+    if urls and http is not None:
+        ui.field(
+            "HTTP",
+            f"{ui.plural(len(urls), 'URL')} {ui.glyph('sep')} {http.method} {ui.glyph('sep')} "
+            f"{http.timeout_s:g}s timeout {ui.glyph('sep')} expect {format_expect(http.expect)}"
+            + ("" if http.verify_tls else f" {ui.glyph('sep')} TLS not verified"),
+        )
+        if not targets:
+            return
     # One source per line: a scan that merges a file with a few extra hosts
     # should show which hosts those were, not one run-together line.
     ui.field_list("Source", sources)
@@ -206,9 +289,15 @@ def _print_configuration(sources: List[str], targets: int, config: ScanConfig) -
                 f"{config.threads} threads {ui.glyph('sep')} {config.timeout}s timeout "
                 f"{ui.glyph('sep')} {config.count} {ping_word}"
                 + (f" {ui.glyph('sep')} reverse DNS" if config.resolve else "")
+                + (f" {ui.glyph('sep')} MAC lookup" if config.mac_lookup else "")
                 + (
                     f" {ui.glyph('sep')} {ui.plural(len(config.ports), 'port')} scan"
                     if config.scan_ports
+                    else ""
+                )
+                + (
+                    f" {ui.glyph('sep')} {PROBE_LABELS[config.probe]} probe"
+                    if config.probe != "icmp"
                     else ""
                 ),
             ),
@@ -249,6 +338,7 @@ def _open_report(
     batch_timestamp: datetime,
     previous: List[HostResult],
     previous_elapsed_s: float,
+    columns: Tuple[str, ...],
 ) -> Optional[IncrementalReport]:
     """Start writing this pass's report, unless incremental writing is off."""
     if not incremental.enabled or not args.formats:
@@ -261,6 +351,7 @@ def _open_report(
         options=incremental,
         previous=previous,
         previous_elapsed_s=previous_elapsed_s,
+        columns=columns,
     )
 
 
@@ -316,12 +407,18 @@ def _run_single_pass(
     output = resume.base if resume else args.output
     started_at = time.perf_counter()
 
+    urls = http_check_urls(args)
+    http = _http_options(args) if urls else None
     if args.discover:
         ip_list, sources = discover_targets(args.discover)
-    else:
+    elif args.input:
         sources = list(args.input)
         ip_list = load_all_targets(sources)
+    else:
+        # --http-check on its own: there are no hosts to probe.
+        ip_list, sources = [], [HTTP_ONLY_SOURCE]
     source = describe_sources(sources)
+    scanned_hosts = bool(args.discover or args.input)
 
     # Hosts the earlier run finished are kept only if they are still targets,
     # so resuming against an edited list never reports hosts it no longer has.
@@ -331,26 +428,38 @@ def _run_single_pass(
     scanned = {result.ip for result in previous}
     remaining = [ip for ip in ip_list if ip not in scanned]
 
-    _print_configuration(sources, len(ip_list), config)
+    _print_configuration(sources, len(ip_list) if scanned_hosts else 0, config, urls, http)
     if resume:
         _announce_resume(resume, len(previous), len(ip_list))
+    columns = report_columns(config)
     report = _open_report(
-        args, incremental, output, timestamp, batch_timestamp, previous, previous_elapsed_s
+        args, incremental, output, timestamp, batch_timestamp, previous, previous_elapsed_s, columns
     )
     machine_stream = (
-        MachineStream(batch_timestamp, previous, previous_elapsed_s) if machine.stream else None
+        MachineStream(batch_timestamp, previous, previous_elapsed_s, columns)
+        if machine.stream
+        else None
     )
-    results = previous + _run_pass(remaining, config, stream, report, machine_stream)
+    results = previous
+    if scanned_hosts:
+        results = previous + _run_pass(remaining, config, stream, report, machine_stream)
+    http_results: List[HttpCheckResult] = []
+    if urls:
+        # Within --threads, like the host probes, and after them, so the two
+        # never compete for the same budget.
+        http_results = run_http_checks(urls, http, max_workers=config.threads)
     duration = previous_elapsed_s + time.perf_counter() - started_at
 
     return ScanOutcome(
         results=results,
-        frame=results_table(results, batch_timestamp, duration),
+        frame=results_table(results, batch_timestamp, duration, columns),
         batch_timestamp=batch_timestamp,
         duration_s=duration,
         source=source,
         timestamp=timestamp,
         output=output,
+        http_results=http_results,
+        scanned_hosts=scanned_hosts,
     )
 
 
@@ -397,6 +506,7 @@ def _store_and_compare(
             results=outcome.results,
             config=config,
             duration_s=outcome.duration_s,
+            http_checks=outcome.http_results,
         )
     except HistoryError as exc:
         ui.blank()
@@ -406,7 +516,101 @@ def _store_and_compare(
 
     if options.compare:
         _report_changes(history, options, scan_id, outcome.source)
+    if options.keep_scans:
+        # After the comparison, which needs the previous scan.
+        _prune_history(history, options.keep_scans, outcome.source)
     return scan_id
+
+
+def _prune_history(history: HistoryService, keep: int, source: str) -> None:
+    try:
+        plan = history.plan_prune(keep=keep, source=source)
+        deleted = history.prune(plan)
+    except HistoryError as exc:
+        ui.blank()
+        ui.warn(f"Old scans not pruned: {exc}")
+        return
+    if deleted:
+        ui.blank()
+        ui.note(f"Removed {ui.plural(deleted, 'older scan')} of {source} (--keep-scans {keep}).")
+
+
+def _prune_reports(args, outcome: "ScanOutcome") -> None:
+    keep = getattr(args, "keep_reports", None)
+    if not keep:
+        return
+    removed = prune_reports(
+        [outcome.output, http_report_base(outcome.output)], keep, protect=outcome.timestamp
+    )
+    if removed:
+        ui.blank()
+        ui.note(f"Removed {ui.plural(len(removed), 'older report')} (--keep-reports {keep}).")
+
+
+def _scan_pass(
+    args,
+    config: ScanConfig,
+    stream: StreamOptions,
+    incremental: IncrementalOptions,
+    machine: MachineOutput,
+    history_options: HistoryOptions,
+    health: HealthPolicy,
+    resume: Optional[PartialReport],
+) -> Optional[str]:
+    """Scan once, write the reports and history, and say why it failed --fail-on-down."""
+    outcome = _run_single_pass(args, config, stream, incremental, machine, resume)
+
+    if outcome.scanned_hosts:
+        print_summary(outcome.frame, outcome.batch_timestamp, outcome.duration_s)
+    if outcome.http_results:
+        print_http_checks(outcome.http_results)
+    if machine.array:
+        write_array(outcome.frame)
+    if outcome.scanned_hosts:
+        # Overwrites whatever the incremental writer left on those same paths,
+        # so a finished scan produces exactly the report it always did.
+        save_results(outcome.frame, outcome.output, args.formats, timestamp=outcome.timestamp)
+    if outcome.http_results:
+        save_http_results(
+            outcome.http_results,
+            http_report_base(outcome.output),
+            args.formats,
+            batch_timestamp=outcome.batch_timestamp,
+            timestamp=outcome.timestamp,
+        )
+    _prune_reports(args, outcome)
+    _store_and_compare(history_options, config, outcome)
+    return check_health(outcome.results, health, outcome.http_results)
+
+
+def http_report_base(output: str) -> str:
+    """HTTP check reports sit beside the host reports: ``results_http_<timestamp>.csv``."""
+    return f"{output}_http"
+
+
+def next_pass_delay(cadence_start: float, period_s: float, now: float) -> float:
+    """Seconds until the next ``--interval`` slot, counted from the first pass.
+
+    Passes start at ``cadence_start + n * period_s``, so ``--interval 5`` means
+    every five minutes whatever each scan takes, rather than five minutes of
+    sleep after it. A pass that overruns its slot skips to the next free one
+    instead of starting the next pass straight away.
+    """
+    elapsed = max(now - cadence_start, 0.0)
+    slots_done = math.floor(elapsed / period_s) + 1
+    return cadence_start + slots_done * period_s - now
+
+
+def _report_failed_pass(exc: BaseException, notify: NotifyOptions) -> None:
+    """Keep the monitor going after a pass that could not scan, and say so."""
+    reason = str(exc).strip() or type(exc).__name__
+    if not reason.endswith((".", "!", "?")):
+        reason += "."
+    ui.blank()
+    ui.warn(f"This pass could not scan: {reason} The monitor continues at the next interval.")
+    log.debug("interval pass failed", exc_info=True)
+    # A monitor that cannot scan is itself worth an alert.
+    send_alert("IPMG could not scan", str(exc), notify)
 
 
 def run_scan(args) -> None:
@@ -423,23 +627,33 @@ def run_scan(args) -> None:
     stream = _stream_options(args)
     incremental = _incremental_options(args)
     _ensure_input_file(args)
+    _ensure_output_folder(args)
     resume = _load_resume(args)
 
+    period_s = (args.interval or 0) * 60
+    cadence_start = time.monotonic()
+    first_pass = True
     while True:
-        outcome = _run_single_pass(args, config, stream, incremental, machine, resume)
+        pass_started = time.monotonic()
+        try:
+            failure = _scan_pass(
+                args, config, stream, incremental, machine, history_options, health, resume
+            )
+        except (IPMGError, OSError) as exc:
+            # A one-off scan reports its error and exits, and so does a monitor
+            # whose very first pass fails: that is a mistake to fix, not a
+            # blip to ride out. After that a failed pass (a target file being
+            # rewritten, --discover during a network blip, a full disk) must
+            # not end the watch.
+            if not args.interval or first_pass:
+                raise
+            _report_failed_pass(exc, history_options.notify)
+            failure = None
         # Only the first pass picks up where an earlier run stopped; every
         # --interval pass after it is a fresh scan.
         resume = None
+        first_pass = False
 
-        print_summary(outcome.frame, outcome.batch_timestamp, outcome.duration_s)
-        if machine.array:
-            write_array(outcome.frame)
-        # Overwrites whatever the incremental writer left on those same paths,
-        # so a finished scan produces exactly the report it always did.
-        save_results(outcome.frame, outcome.output, args.formats, timestamp=outcome.timestamp)
-        _store_and_compare(history_options, config, outcome)
-
-        failure = check_health(outcome.results, health)
         if not args.interval:
             if failure:
                 # Raised only now, with the reports and history already written.
@@ -451,4 +665,12 @@ def run_scan(args) -> None:
         if failure:
             ui.blank()
             ui.warn(failure)
-        time.sleep(args.interval * 60)
+
+        now = time.monotonic()
+        if now - pass_started > period_s:
+            ui.blank()
+            ui.note(
+                f"That pass took longer than --interval {args.interval}; "
+                "the next one starts at the following interval."
+            )
+        time.sleep(next_pass_delay(cadence_start, period_s, now))

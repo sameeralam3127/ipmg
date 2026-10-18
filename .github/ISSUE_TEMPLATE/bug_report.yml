@@ -1,0 +1,81 @@
+name: Bug report
+description: Something IPMG does is wrong, or it fails.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. A security problem goes to a private
+        [security advisory](https://github.com/sameeralam3127/ipmg/security/advisories/new),
+        not here. [TROUBLESHOOTING.md](https://github.com/sameeralam3127/ipmg/blob/main/docs/TROUBLESHOOTING.md)
+        answers the most common problems.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: command
+    attributes:
+      label: The full command
+      description: >-
+        Exactly what you ran, flags included. Replace real addresses, hostnames,
+        and webhook URLs with placeholders if they are private.
+      render: shell
+      placeholder: ipmg --input targets.txt --resolve --formats csv
+    validations:
+      required: true
+
+  - type: textarea
+    id: output
+    attributes:
+      label: Output
+      description: >-
+        What IPMG printed. Run the command again with --verbose for more detail.
+        This box is rendered as code, so no backticks are needed.
+      render: text
+
+  - type: input
+    id: version
+    attributes:
+      label: IPMG version
+      description: The output of `ipmg --version`.
+      placeholder: IPMG - IP Management & Ping Monitoring Tool X.Y.Z
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install
+    attributes:
+      label: How IPMG was installed
+      options:
+        - One-line installer (install.sh or install.ps1)
+        - uv tool install
+        - pipx
+        - pip in a virtual environment
+        - Homebrew
+        - Docker image
+        - From source
+        - Other (say below)
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      description: Name and version, such as "Ubuntu 24.04", "macOS 15.4", or "Windows 11 24H2".
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else
+      description: >-
+        Python version (`python3 --version`), whether it runs in a container or
+        a VM, network setup, or how often it happens.

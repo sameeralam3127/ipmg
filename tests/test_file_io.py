@@ -1,4 +1,6 @@
 import json
+import time
+from datetime import datetime
 
 import openpyxl
 import pytest
@@ -185,6 +187,36 @@ def test_save_results_neutralizes_formulas_in_csv_and_xlsx(tmp_path, monkeypatch
     # JSON is data interchange, not a spreadsheet: it keeps the raw value.
     raw = json.loads((tmp_path / "scan_20260628_120000.json").read_text(encoding="utf-8"))
     assert raw[0]["Hostname"] == HOSTILE_HOSTNAME
+
+
+def _xlsx_table(rows, checked):
+    return ReportTable(
+        rows=[
+            {"IP Address": f"10.0.{i // 256}.{i % 256}", "Status": "Up", "Checked At": checked}
+            for i in range(rows)
+        ],
+        columns=("IP Address", "Status", "Checked At"),
+    )
+
+
+def test_xlsx_writes_a_large_scan_in_linear_time(tmp_path, monkeypatch):
+    monkeypatch.setattr("ipmg.infrastructure.file_io.timestamp_str", lambda: "20260628_120000")
+    checked = datetime(2026, 6, 28, 12, 0, 0, 123456)
+
+    def seconds_to_save(rows):
+        started = time.perf_counter()
+        save_results(_xlsx_table(rows, checked), str(tmp_path / f"scan{rows}"), ["xlsx"])
+        return time.perf_counter() - started
+
+    # 4x the rows should take ~4x the time. The old writer rescanned the sheet
+    # for every row, so it took ~15x (#102). A ratio holds on slow CI runners.
+    small, large = seconds_to_save(2_000), seconds_to_save(8_000)
+    assert large < 8 * small
+
+    sheet = openpyxl.load_workbook(tmp_path / "scan8000_20260628_120000.xlsx").active
+    assert sheet.max_row == 8_001
+    assert sheet["C2"].value == checked.replace(microsecond=123000)
+    assert sheet["C2"].number_format == "YYYY-MM-DD HH:MM:SS"
 
 
 @pytest.mark.parametrize(

@@ -24,8 +24,12 @@ Found a security problem? Please report it privately as described in
 ## Ways to help
 
 - **Report a bug or request a feature** in
-  [issues](https://github.com/sameeralam3127/ipmg/issues). For bugs, include
-  your OS, `ipmg --version`, the command you ran, and what you expected.
+  [issues](https://github.com/sameeralam3127/ipmg/issues/new/choose). The
+  forms ask for what a fix needs: your OS, `ipmg --version`, how IPMG was
+  installed, and the command you ran. Questions go to
+  [Discussions](https://github.com/sameeralam3127/ipmg/discussions), and
+  security problems to a private
+  [advisory](https://github.com/sameeralam3127/ipmg/security/advisories/new).
 - **Pick up an issue.** Issues labelled
   [`good first issue`](https://github.com/sameeralam3127/ipmg/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
   are scoped for newcomers. Comment on one before starting so work isn't
@@ -117,7 +121,7 @@ missing:
 
 ```bash
 uv tool install tox --with tox-uv   # once
-tox -e lint,lowest,coverage         # the checks in the Quality workflow
+tox -e lint,lowest,coverage         # lint and lowest deps (Quality), coverage (Publish)
 tox -e py310                        # the tests on one Python version
 tox -p                              # everything, in parallel
 ```
@@ -155,19 +159,28 @@ secret, it is fine to update the baseline in your pull request.
 
 ```text
 src/ipmg/
-  cli/             argument parsing and the `ipmg` command
-  core/            ping, discovery, port scanning, change detection
-  infrastructure/  SQLite history and file input/output
-  reporting/       terminal output, live streaming, reports
+  cli/             argument parsing, the `ipmg` commands, ipmg.toml, completion
+  core/            the scan engine, ping, TCP and HTTP checks, MAC lookup,
+                   discovery, change detection, cron, Wake-on-LAN
+  infrastructure/  SQLite history, report files, notifications, retention
+  reporting/       terminal output, live streaming, report tables, metrics
   services/        scan and history orchestration
   web/             IPMG Web (FastAPI); schemas.py is the API contract,
                    static/ holds its HTML, CSS, and JS
+  data/            the bundled MAC vendor database
 tests/             pytest suite (one file per module, roughly); snapshots/
                    holds the committed API contract
+contrib/           systemd and launchd service templates
+docs/              command reference, API, architecture, troubleshooting
 site/              project website published to GitHub Pages
+action.yml         the GitHub Action
 install.sh         one-line installer for Linux and macOS
 .github/workflows  CI: tests, security scan, release, Pages deploy
 ```
+
+How the pieces fit together (the layers, the life of a scan, the history
+database, IPMG Web, and where new features plug in) is in
+[docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md).
 
 ---
 
@@ -214,7 +227,7 @@ docs: explain --latency-pct in the change detection section
    if users will notice the change.
 4. Make sure tests and `ruff check` pass locally.
 5. Open the pull request against `main`, and link the issue it resolves
-   (`Closes #123`).
+   (`Closes #123`). The pull request template has a checklist of the rest.
 
 **Use a Conventional Commit as the pull request title.** Pull requests are
 squash-merged, so the title becomes the commit message on `main` and decides
@@ -274,3 +287,7 @@ cp -R src/ipmg/web/static/. _site/demo/
 python3 -m http.server 4173 -d _site
 # site: http://127.0.0.1:4173/   demo: http://127.0.0.1:4173/demo/?demo=1
 ```
+
+The screenshots and terminal GIFs in the README are generated;
+[docs/record-demo.md](../docs/record-demo.md) has the commands to recreate
+them after a UI change.

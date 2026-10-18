@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  IPMG network monitor for macOS: scan every 15 minutes as your own user and
+  report changes. Install and configure: docs/SERVICES.md.
+
+  CHANGE every /Users/YOU path, and the ipmg path (`command -v ipmg`).
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>io.github.sameeralam3127.ipmg.scan</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/YOU/.local/bin/ipmg</string>
+        <string>--input</string>
+        <string>/Users/YOU/ipmg/targets.txt</string>
+        <string>--interval</string>
+        <string>15</string>
+        <string>--compare</string>
+        <string>--db</string>
+        <string>/Users/YOU/ipmg/history.db</string>
+        <string>--output</string>
+        <string>/Users/YOU/ipmg/reports/scan</string>
+        <string>--formats</string>
+        <string>csv</string>
+        <string>--keep-reports</string>
+        <string>96</string>
+        <string>--keep-scans</string>
+        <string>2000</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/YOU/ipmg</string>
+
+    <!-- Add notification settings here (IPMG_NOTIFY_SLACK, IPMG_SMTP_PASSWORD, ...),
+         which keeps them out of the process list. -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>NO_COLOR</key>
+        <string>1</string>
+    </dict>
+
+    <!-- Start at login, and again if it ever exits. -->
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>60</integer>
+
+    <key>StandardOutPath</key>
+    <string>/Users/YOU/Library/Logs/ipmg/scan.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/YOU/Library/Logs/ipmg/scan.log</string>
+</dict>
+</plist>

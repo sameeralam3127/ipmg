@@ -114,3 +114,57 @@ def test_hostname_cache_treats_unexpected_lookup_errors_as_unresolvable(monkeypa
     assert cache.resolve("10.0.0.1") == "Unresolvable"
     # The in-flight marker was released, so a second call returns at once.
     assert cache.resolve("10.0.0.1") == "Unresolvable"
+
+
+def test_lookup_slower_than_the_timeout_is_unresolvable(monkeypatch):
+    # A resolver that has stopped answering must cost a host the timeout, not
+    # the system resolver's whole retry period.
+    released = threading.Event()
+
+    def hung_lookup(ip):
+        released.wait(10)
+        return ("late.example", [], [ip])
+
+    monkeypatch.setattr("ipmg.utils.helpers.socket.gethostbyaddr", hung_lookup)
+    cache = HostnameCache(ttl_seconds=60, timeout_s=0.1)
+    try:
+        started = time.monotonic()
+        assert cache.resolve("192.0.2.1") == "Unresolvable"
+        assert time.monotonic() - started < 2
+    finally:
+        released.set()
+        cache.close()
+
+
+def test_timed_lookups_run_on_daemon_threads(monkeypatch):
+    seen = []
+
+    def lookup(ip):
+        seen.append(threading.current_thread())
+        return (f"host-{ip}", [], [ip])
+
+    monkeypatch.setattr("ipmg.utils.helpers.socket.gethostbyaddr", lookup)
+    cache = HostnameCache(ttl_seconds=0, timeout_s=1.0, max_workers=2)
+    try:
+        assert cache.resolve("192.0.2.1") == "host-192.0.2.1"
+    finally:
+        cache.close()
+
+    # A hung lookup on a non-daemon thread would hold up interpreter exit.
+    assert seen and all(thread.daemon for thread in seen)
+    assert threading.current_thread() not in seen
+
+
+def test_closing_the_cache_stops_its_idle_lookup_threads(monkeypatch):
+    monkeypatch.setattr(
+        "ipmg.utils.helpers.socket.gethostbyaddr", lambda ip: (f"host-{ip}", [], [ip])
+    )
+    cache = HostnameCache(ttl_seconds=0, timeout_s=1.0, max_workers=3)
+    for n in range(3):
+        cache.resolve(f"192.0.2.{n + 1}")
+    threads = list(cache._pool._threads)
+    cache.close()
+
+    for thread in threads:
+        thread.join(2)
+    assert not any(thread.is_alive() for thread in threads)

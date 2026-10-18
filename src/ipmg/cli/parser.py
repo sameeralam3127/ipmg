@@ -5,9 +5,13 @@ from __future__ import annotations
 import argparse
 
 from ipmg import __version__
+from ipmg.cli.completion import SHELLS
 from ipmg.cli.config import add_config_arguments, config_help
 from ipmg.core.discovery import DISCOVERY_FAMILIES
+from ipmg.core.engine import DEFAULT_DNS_TIMEOUT_S, PROBE_METHODS
+from ipmg.core.httpcheck import DEFAULT_EXPECT, DEFAULT_HTTP_TIMEOUT_S, HTTP_METHODS, parse_expect
 from ipmg.core.portscan import DEFAULT_PORTS, parse_port_list
+from ipmg.core.wake import DEFAULT_BROADCAST, DEFAULT_PORT as DEFAULT_WAKE_PORT
 from ipmg.infrastructure.file_io import DEFAULT_INPUT_FILE
 from ipmg.infrastructure.incremental import (
     DEFAULT_AUTOSAVE_S,
@@ -25,6 +29,7 @@ from ipmg.infrastructure.notify import (
     NOTIFY_SEVERITIES,
     SMTP_SECURITY,
 )
+from ipmg.infrastructure.retention import parse_age
 from ipmg.reporting.diff_report import DIFF_FORMATS
 from ipmg.reporting.live import DEFAULT_REFRESH_S, MAX_REFRESH_S, MIN_REFRESH_S
 from ipmg.reporting.metrics import DEFAULT_MAX_SOURCES
@@ -35,8 +40,9 @@ PROG = "IPMG - IP Management & Ping Monitoring Tool"
 #: prints the epilog on --help but never on an error, which is exactly when
 #: someone who typed an unknown flag needs to see them.
 COMMANDS_HINT = (
-    "Commands: 'ipmg web' (IPMG Web, the browser UI), 'ipmg history' (stored scans), "
-    "'ipmg diff' (compare two scans)."
+    "Commands: 'ipmg web' (IPMG Web, the browser UI), 'ipmg history' (stored scans; "
+    "'ipmg history prune' deletes old ones), 'ipmg diff' (compare two scans), "
+    "'ipmg wake' (Wake-on-LAN), 'ipmg completion' (shell tab completion)."
 )
 
 
@@ -54,6 +60,31 @@ def _port_list(value: str) -> tuple:
         return parse_port_list(value)
     except ValueError as exc:
         raise argparse.ArgumentTypeError(str(exc)) from exc
+
+
+def _positive_int(value: str) -> int:
+    try:
+        number = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid whole number: {value!r}") from None
+    if number < 1:
+        raise argparse.ArgumentTypeError(f"must be at least 1: {value}")
+    return number
+
+
+def _age(value: str):
+    try:
+        return parse_age(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+
+
+def _status_ranges(value: str) -> str:
+    try:
+        parse_expect(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+    return value
 
 
 def _percent(value: str) -> float:
@@ -278,11 +309,34 @@ def build_parser() -> argparse.ArgumentParser:
         help="Look up each host's name with a reverse DNS (PTR) query.",
     )
     parser.add_argument(
+        "--mac",
+        action="store_true",
+        help=(
+            "Add each responding host's MAC address and its vendor, read from this "
+            "machine's ARP/neighbour table (hosts on the local network only)."
+        ),
+    )
+    parser.add_argument(
         "--dns-cache-ttl",
         type=int,
         default=300,
         metavar="SECONDS",
         help="Cache reverse DNS results for this many seconds (default: 300).",
+    )
+    parser.add_argument(
+        "--dns-timeout",
+        type=float,
+        default=DEFAULT_DNS_TIMEOUT_S,
+        metavar="SECONDS",
+        help=(
+            "Record a host as Unresolvable when its reverse DNS lookup takes longer "
+            f"(default: {DEFAULT_DNS_TIMEOUT_S:g}, range 0.1-60)."
+        ),
+    )
+    parser.add_argument(
+        "--resolve-active-only",
+        action="store_true",
+        help="With --resolve, only look up hosts that answered the probe.",
     )
     parser.add_argument(
         "--interval",
@@ -314,11 +368,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="Exit with status 3 if fewer than PERCENT of the targets are Active (0-100).",
     )
 
-    ports_group = parser.add_argument_group("TCP service discovery")
+    ports_group = parser.add_argument_group("TCP checks")
+    ports_group.add_argument(
+        "--probe",
+        choices=PROBE_METHODS,
+        default="icmp",
+        help=(
+            "How to tell a host is up: icmp (ping, the default), tcp (a connection to "
+            "any of --ports, accepted or refused), or icmp,tcp (TCP only for hosts that "
+            "did not answer the ping, for hosts that block ICMP)."
+        ),
+    )
     ports_group.add_argument(
         "--scan-ports",
         action="store_true",
-        help="Probe common TCP ports on hosts that answer ICMP (off by default).",
+        help="List which of --ports are open on every host that is up (off by default).",
     )
     ports_group.add_argument(
         "--ports",
@@ -326,7 +390,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_PORTS,
         metavar="PORTS",
         help=(
-            "Comma-separated TCP ports to probe when --scan-ports is set "
+            "Comma-separated TCP ports for --scan-ports and --probe tcp "
             f"(default: {','.join(str(p) for p in DEFAULT_PORTS)})."
         ),
     )
@@ -335,7 +399,51 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=1.0,
         metavar="SECONDS",
-        help="Connect timeout per port when --scan-ports is set (default: 1).",
+        help="Connect timeout per port, for --scan-ports and --probe tcp (default: 1).",
+    )
+
+    http = parser.add_argument_group(
+        "HTTP checks",
+        "Check that a service works, not only that its host answers. Without --input or "
+        "--discover, only the URLs are checked.",
+    )
+    http.add_argument(
+        "--http-check",
+        action="extend",
+        nargs="+",
+        default=None,
+        metavar="URL",
+        help="Request each URL and record its status, response time, and why it failed.",
+    )
+    http.add_argument(
+        "--http-timeout",
+        type=float,
+        default=DEFAULT_HTTP_TIMEOUT_S,
+        metavar="SECONDS",
+        help=f"Seconds per check, redirects included (default: {DEFAULT_HTTP_TIMEOUT_S:g}).",
+    )
+    http.add_argument(
+        "--http-expect",
+        type=_status_ranges,
+        default=DEFAULT_EXPECT,
+        metavar="CODES",
+        help=f"Status codes that pass, such as 200-299,401 (default: {DEFAULT_EXPECT}).",
+    )
+    http.add_argument(
+        "--http-method",
+        choices=HTTP_METHODS,
+        default="GET",
+        help="Request method (default: GET).",
+    )
+    http.add_argument(
+        "--http-no-redirects",
+        action="store_true",
+        help="Do not follow redirects; the redirect's own status is checked.",
+    )
+    http.add_argument(
+        "--http-insecure",
+        action="store_true",
+        help="Do not verify TLS certificates (for self-signed lab hosts; not recommended).",
     )
 
     reports = parser.add_argument_group("report writing")
@@ -353,6 +461,16 @@ def build_parser() -> argparse.ArgumentParser:
             "How often a running scan re-saves the xlsx, json, and md reports "
             f"(default: {DEFAULT_AUTOSAVE_S:g}, range: {MIN_AUTOSAVE_S:g}-{MAX_AUTOSAVE_S:g}). "
             "csv and jsonl are written per host regardless."
+        ),
+    )
+    reports.add_argument(
+        "--keep-reports",
+        type=_positive_int,
+        default=None,
+        metavar="N",
+        help=(
+            "After writing this scan's reports, delete all but the N newest report "
+            "files of each format named after --output (off by default)."
         ),
     )
     reports.add_argument(
@@ -429,6 +547,16 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Compare against the previous scan even if it used a different target source.",
     )
+    history.add_argument(
+        "--keep-scans",
+        type=_positive_int,
+        default=None,
+        metavar="N",
+        help=(
+            "After storing this scan, delete all but the N newest stored scans of its "
+            "source (off by default)."
+        ),
+    )
     _add_database_argument(history)
     _add_diff_export_arguments(history)
     _add_diff_threshold_arguments(parser)
@@ -460,6 +588,16 @@ def build_web_parser() -> argparse.ArgumentParser:
         help="Do not open IPMG Web in a browser automatically.",
     )
     parser.add_argument(
+        "--max-scans",
+        type=int,
+        default=2,
+        metavar="N",
+        help=(
+            "Run at most N scans at once; starting another is refused until one "
+            "finishes (default: 2)."
+        ),
+    )
+    parser.add_argument(
         "--metrics",
         action="store_true",
         help=(
@@ -485,7 +623,10 @@ def build_web_parser() -> argparse.ArgumentParser:
 def build_history_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         "ipmg history",
-        description="List scans stored in the local history database.",
+        description=(
+            "List scans stored in the local history database. "
+            "'ipmg history prune' deletes old ones."
+        ),
     )
     parser.add_argument(
         "--limit",
@@ -500,6 +641,102 @@ def build_history_parser() -> argparse.ArgumentParser:
     )
     _add_database_argument(parser)
     parser.add_argument("--verbose", action="store_true")
+    return parser
+
+
+def build_prune_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        "ipmg history prune",
+        description=(
+            "Delete old scans from the history database. Each source keeps its own "
+            "history: a scan is kept when it is one of the --keep newest of its source, "
+            "or newer than --older-than. With both, only scans neither rule keeps are "
+            "deleted. Running scans are never deleted."
+        ),
+    )
+    parser.add_argument(
+        "--keep",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Keep the N newest scans of each source.",
+    )
+    parser.add_argument(
+        "--older-than",
+        type=_age,
+        default=None,
+        metavar="AGE",
+        help="Delete scans older than AGE: a number with s, m, h, d, or w, such as 30d.",
+    )
+    parser.add_argument(
+        "--source",
+        default=None,
+        help="Only prune scans from this target source.",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what would be deleted, and delete nothing.",
+    )
+    parser.add_argument(
+        "--vacuum",
+        action="store_true",
+        help="Afterwards, compact the database file to give the freed space back.",
+    )
+    _add_database_argument(parser)
+    parser.add_argument("--verbose", action="store_true")
+    return parser
+
+
+def build_wake_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        "ipmg wake",
+        description=(
+            "Wake hosts with a Wake-on-LAN magic packet. The host must have "
+            "Wake-on-LAN enabled and be reachable by the broadcast: on this network "
+            "segment, or behind a router that forwards a directed broadcast."
+        ),
+    )
+    parser.add_argument(
+        "macs",
+        nargs="+",
+        metavar="MAC",
+        help="MAC address: AA:BB:CC:DD:EE:FF, AA-BB-CC-DD-EE-FF, or AABBCCDDEEFF.",
+    )
+    parser.add_argument(
+        "--broadcast",
+        default=DEFAULT_BROADCAST,
+        metavar="ADDRESS",
+        help=(
+            f"IPv4 broadcast address to send to (default: {DEFAULT_BROADCAST}); a "
+            "directed broadcast such as 192.168.1.255 reaches another subnet."
+        ),
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=DEFAULT_WAKE_PORT,
+        help=f"UDP port (default: {DEFAULT_WAKE_PORT}; 7 is the other common choice).",
+    )
+    parser.add_argument("--verbose", action="store_true")
+    return parser
+
+
+def build_completion_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        "ipmg completion",
+        description=(
+            "Print a tab-completion script for your shell. It completes commands, flags, "
+            "their choices, and file names."
+        ),
+        epilog=(
+            'bash: eval "$(ipmg completion bash)" in ~/.bashrc. '
+            'zsh: eval "$(ipmg completion zsh)" in ~/.zshrc, after compinit. '
+            "fish: ipmg completion fish > ~/.config/fish/completions/ipmg.fish. "
+            "PowerShell: ipmg completion powershell | Out-String | Invoke-Expression in $PROFILE."
+        ),
+    )
+    parser.add_argument("shell", choices=SHELLS, help="The shell to complete for.")
     return parser
 
 

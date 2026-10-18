@@ -29,16 +29,22 @@ organization's policies or the law.
 IPMG Web is designed for local use: it binds to `127.0.0.1` by
 default, requires an access token (random per start, or `IPMG_WEB_TOKEN`)
 on every API request and WebSocket, origin-checks WebSocket connections,
-disconnects live-update clients that stop reading, caps uploads and target
-expansion, and uses parameterized SQL throughout. It serves plain HTTP, so
-on a non-local interface put a reverse proxy with TLS in front of it.
+disconnects live-update clients that stop reading, caps uploads, target
+expansion, and concurrent scans (`--max-scans`), and uses parameterized SQL
+throughout. Every response carries a Content-Security-Policy that forbids
+framing (`frame-ancestors 'none'`, plus `X-Frame-Options: DENY`) and allows
+only the bundled scripts, along with `X-Content-Type-Options: nosniff` and
+`Referrer-Policy: no-referrer`. It serves plain HTTP, so on a non-local
+interface put a reverse proxy with TLS in front of it.
 
 ## Known Issues
 
 There are no known open security issues. Earlier hardening items (API
 authentication, [#21](https://github.com/sameeralam3127/ipmg/issues/21); bounded
-live-event buffering, [#23](https://github.com/sameeralam3127/ipmg/issues/23))
-are fixed.
+live-event buffering, [#23](https://github.com/sameeralam3127/ipmg/issues/23);
+concurrent scan limits, [#106](https://github.com/sameeralam3127/ipmg/issues/106);
+security headers against clickjacking,
+[#107](https://github.com/sameeralam3127/ipmg/issues/107)) are fixed.
 
 Please do not open a new public issue for anything already listed here. For
 anything not listed, report it privately via the

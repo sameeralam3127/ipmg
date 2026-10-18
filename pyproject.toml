@@ -13,8 +13,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ipmg"
-version = "3.1.0"  # Managed automatically by semantic-release
-description = "IP Management & Ping Monitoring CLI Tool"
+version = "3.2.0"  # Managed automatically by semantic-release
+description = "Network discovery and change detection: ping sweeps, scan history, and reports for what changed on your network"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
@@ -82,7 +82,11 @@ dev = [
     "ruff>=0.4",
     "pre-commit>=3.5.0",
     "python-semantic-release>=10.5.3",
+    # The TestClient's HTTP client. Starlette 1.x wants httpx2 and warns
+    # about httpx; the older Starlette the lowest-deps job resolves to
+    # predates httpx2 and needs httpx.
     "httpx>=0.27",
+    "httpx2>=2.0",
 ]
 
 [project.scripts]
@@ -101,7 +105,11 @@ dev = [
     "ruff>=0.4",
     "pre-commit>=3.5.0",
     "python-semantic-release>=10.5.3",
+    # The TestClient's HTTP client. Starlette 1.x wants httpx2 and warns
+    # about httpx; the older Starlette the lowest-deps job resolves to
+    # predates httpx2 and needs httpx.
     "httpx>=0.27",
+    "httpx2>=2.0",
 ]
 
 
@@ -112,13 +120,22 @@ dev = [
 # Publishing is done by the workflow (pypa/gh-action-pypi-publish), not by
 # semantic-release itself.
 [tool.semantic_release]
-branch = "main"
 version_toml = ["pyproject.toml:project.version"]
 version_variables = ["src/ipmg/__init__.py:__version__"]
 tag_format = "v{version}"
 commit_message = "chore(release): {version}"
 build_command = "python -m build"
 major_on_zero = false
+
+# main releases; v4 releases betas (4.0.0-beta.N) until it merges into main.
+[tool.semantic_release.branches.main]
+match = "^main$"
+prerelease = false
+
+[tool.semantic_release.branches.v4]
+match = "^v4$"
+prerelease = true
+prerelease_token = "beta"
 
 [tool.semantic_release.changelog.default_templates]
 changelog_file = ".github/CHANGELOG.md"
@@ -135,6 +152,7 @@ package-dir = { "" = "src" }
 where = ["src"]
 
 [tool.setuptools.package-data]
+"ipmg" = ["data/*.tsv.gz"]
 "ipmg.web" = ["static/*.html", "static/css/*.css", "static/js/*.js"]
 
 
@@ -145,6 +163,13 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+# A deprecated call in IPMG's own code or tests fails the run, so the next
+# one is fixed when it appears instead of scrolling past in the output.
+filterwarnings = [
+    "error::DeprecationWarning:ipmg",
+    "error::DeprecationWarning:test_",
+    "error::PendingDeprecationWarning:ipmg",
+]
 
 [tool.coverage.run]
 source = ["ipmg"]

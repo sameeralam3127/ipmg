@@ -1,0 +1,83 @@
+name: BSD ping
+
+# The ping(8) flags differ on every BSD and none of them is a GitHub runner,
+# so this boots each one in a VM and probes real addresses through IPMG's own
+# argv. Slow (a VM boot per system), so it only runs when the ping code
+# changes, and on demand.
+on:
+  pull_request:
+    branches: [main, v4]
+    paths:
+      - "src/ipmg/core/ping.py"
+      - ".github/scripts/bsd-ping-smoke.py"
+      - ".github/workflows/bsd.yml"
+  push:
+    branches: [main, v4]
+    paths:
+      - "src/ipmg/core/ping.py"
+      - ".github/scripts/bsd-ping-smoke.py"
+      - ".github/workflows/bsd.yml"
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bsd-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  freebsd:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Probe with FreeBSD ping
+        uses: vmactions/freebsd-vm@c46abacb49f09938ca4e1702d15d836285d694cc # v1.5.9
+        with:
+          usesh: true
+          prepare: pkg install -y python3
+          run: PYTHONPATH=src python3 .github/scripts/bsd-ping-smoke.py
+
+  openbsd:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Probe with OpenBSD ping
+        uses: vmactions/openbsd-vm@5f7b2c933b8846a138361d6843c52af4bef5d945 # v1.4.8
+        with:
+          usesh: true
+          # There is no "python3" package; the %3 branch picks the current one.
+          prepare: pkg_add python%3
+          run: PYTHONPATH=src python3 .github/scripts/bsd-ping-smoke.py
+
+  netbsd:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Probe with NetBSD ping
+        uses: vmactions/netbsd-vm@c8a0d7ddb84619a7a8cc4e652efa7950b3fd9f92 # v1.5.2
+        with:
+          usesh: true
+          prepare: |
+            if [ ! -x /usr/pkg/bin/pkgin ]; then
+              PKG_PATH="https://cdn.netbsd.org/pub/pkgsrc/packages/NetBSD/$(uname -m)/$(uname -r)/All"
+              env PKG_PATH="$PKG_PATH" /usr/sbin/pkg_add pkgin
+            fi
+            /usr/pkg/bin/pkgin update
+            /usr/pkg/bin/pkgin -y install python312
+          run: PYTHONPATH=src /usr/pkg/bin/python3.12 .github/scripts/bsd-ping-smoke.py

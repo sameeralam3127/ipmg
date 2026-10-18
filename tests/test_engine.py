@@ -1,4 +1,5 @@
 import threading
+import time
 
 import pytest
 
@@ -184,3 +185,53 @@ def test_port_probes_share_one_bounded_pool(monkeypatch):
 
     assert peak <= 4
     assert all(result.open_ports == (22,) for result in results)
+
+
+def test_hung_reverse_dns_costs_a_host_only_the_dns_timeout(monkeypatch):
+    released = threading.Event()
+
+    def hung_lookup(ip):
+        released.wait(10)
+        return ("late.example", [], [ip])
+
+    monkeypatch.setattr("ipmg.core.engine.ping_ip", lambda *_a: ("Active", 1.0))
+    monkeypatch.setattr("ipmg.utils.helpers.socket.gethostbyaddr", hung_lookup)
+
+    try:
+        started = time.monotonic()
+        results = execute_scan(
+            ["10.0.0.1", "10.0.0.2"], ScanConfig(resolve=True, threads=2, dns_timeout=0.2)
+        )
+        elapsed = time.monotonic() - started
+    finally:
+        released.set()
+
+    assert {result.hostname for result in results} == {"Unresolvable"}
+    assert elapsed < 3
+
+
+def test_resolve_active_only_skips_hosts_that_did_not_answer(monkeypatch):
+    looked_up = []
+
+    def lookup(ip):
+        looked_up.append(ip)
+        return (f"host-{ip}", [], [ip])
+
+    statuses = {"10.0.0.1": ("Active", 1.0), "10.0.0.2": ("Timeout", None)}
+    monkeypatch.setattr("ipmg.core.engine.ping_ip", lambda ip, *_a: statuses[ip])
+    monkeypatch.setattr("ipmg.utils.helpers.socket.gethostbyaddr", lookup)
+
+    results = execute_scan(
+        list(statuses), ScanConfig(resolve=True, threads=2, resolve_active_only=True)
+    )
+
+    assert looked_up == ["10.0.0.1"]
+    assert {result.ip: result.hostname for result in results} == {
+        "10.0.0.1": "host-10.0.0.1",
+        "10.0.0.2": "",
+    }
+
+
+def test_dns_timeout_is_clamped():
+    assert ScanConfig(dns_timeout=0).clamped().dns_timeout == 0.1
+    assert ScanConfig(dns_timeout=600).clamped().dns_timeout == 60.0

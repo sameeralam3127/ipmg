@@ -348,3 +348,14 @@ tr.click { cursor: pointer; }
   .details-list { grid-template-columns: 1fr; gap: 3px; }
   .details-list dd { margin-bottom: 10px; }
 }
+
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; }
+
+/* The hidden attribute must win over a class that sets display. */
+[hidden] { display: none !important; }
+
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+td.truncate { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+td.actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+td.actions .btn { padding: 4px 10px; }

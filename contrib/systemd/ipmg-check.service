@@ -1,0 +1,39 @@
+# One IPMG scan, then a comparison with the scan before it. The unit fails
+# (and shows as failed in `systemctl --failed` and any unit monitoring) when
+# something changed. Started by ipmg-check.timer.
+#
+# Install and configure: docs/SERVICES.md. Lines marked CHANGE are
+# placeholders for your own paths and targets.
+
+[Unit]
+Description=IPMG check (scan, then fail if anything changed since the last scan)
+Documentation=https://github.com/sameeralam3127/ipmg/blob/main/docs/SERVICES.md
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=ipmg
+Group=ipmg
+StateDirectory=ipmg
+WorkingDirectory=/var/lib/ipmg
+EnvironmentFile=-/etc/ipmg/notify.env
+# CHANGE: the ipmg executable and the target file, on both lines. The diff's
+# --source must name the same target file as the scan's --input.
+ExecStart=/usr/local/bin/ipmg \
+    --input /etc/ipmg/targets.txt \
+    --db /var/lib/ipmg/history.db \
+    --output /var/lib/ipmg/reports/check --formats csv \
+    --keep-reports 96 --keep-scans 2000
+# Exit status 2 when the comparison finds a change: the unit fails.
+ExecStart=/usr/local/bin/ipmg diff \
+    --source /etc/ipmg/targets.txt \
+    --db /var/lib/ipmg/history.db \
+    --fail-on-change
+
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectKernelTunables=true

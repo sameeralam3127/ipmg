@@ -1,0 +1,153 @@
+name: IPMG scan
+description: >-
+  Check that your hosts are reachable: scan IPs, CIDR blocks, ranges, or target
+  files with IPMG, fail the job when hosts are down, and keep the reports.
+author: Sameer Alam
+branding:
+  icon: activity
+  color: blue
+
+inputs:
+  targets:
+    description: >-
+      What to scan: IPs, CIDR blocks, ranges, or target files, separated by spaces
+      or newlines.
+    required: true
+  args:
+    description: >-
+      Extra IPMG flags, such as "--probe icmp,tcp --resolve". Split on whitespace;
+      quoting is not interpreted.
+    required: false
+    default: ""
+  version:
+    description: >-
+      IPMG release to install: "latest", or a version such as 3.2.0. A path (./,
+      ../, or /...) installs that checkout instead, which is how this repository
+      tests the action.
+    required: false
+    default: latest
+  fail-on-down:
+    description: Fail the step when any target is not Active (IPMG's --fail-on-down).
+    required: false
+    default: "false"
+  formats:
+    description: Report formats to write, separated by spaces (xlsx csv json jsonl md).
+    required: false
+    default: csv json md
+  upload-artifact:
+    description: Upload the reports as a workflow artifact, even when the step fails.
+    required: false
+    default: "true"
+  artifact-name:
+    description: Name of the uploaded artifact.
+    required: false
+    default: ipmg-reports
+
+outputs:
+  active:
+    description: Number of targets that answered.
+    value: ${{ steps.scan.outputs.active }}
+  total:
+    description: Number of targets scanned.
+    value: ${{ steps.scan.outputs.total }}
+  report-path:
+    description: Folder holding the reports.
+    value: ${{ steps.scan.outputs.report-path }}
+  exit-code:
+    description: IPMG's exit status (0 ok, 1 error, 3 hosts down with fail-on-down).
+    value: ${{ steps.scan.outputs.exit-code }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up uv
+      uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+
+    - name: Install IPMG
+      shell: bash
+      env:
+        IPMG_VERSION: ${{ inputs.version }}
+      run: |
+        case "$IPMG_VERSION" in
+          ""|latest) spec="ipmg" ;;
+          ./*|../*|/*|.) spec="$IPMG_VERSION" ;;
+          *) spec="ipmg==$IPMG_VERSION" ;;
+        esac
+        uv tool install --quiet --force "$spec"
+        echo "$(uv tool dir --bin)" >> "$GITHUB_PATH"
+
+    - name: Scan
+      id: scan
+      shell: bash
+      env:
+        IPMG_TARGETS: ${{ inputs.targets }}
+        IPMG_ARGS: ${{ inputs.args }}
+        IPMG_FAIL_ON_DOWN: ${{ inputs.fail-on-down }}
+        IPMG_FORMATS: ${{ inputs.formats }}
+        NO_COLOR: "1"
+      run: |
+        # Inputs arrive through the environment, never pasted into the script.
+        # A folder of its own, so a second scan in the job keeps its reports apart.
+        out="$(mktemp -d "$RUNNER_TEMP/ipmg-reports.XXXXXX")"
+        read -r -a targets <<< "$(printf '%s' "$IPMG_TARGETS" | tr '\n' ' ')"
+        read -r -a extra <<< "$IPMG_ARGS"
+        read -r -a formats <<< "$IPMG_FORMATS"
+        flags=()
+        [ "$IPMG_FAIL_ON_DOWN" = "true" ] && flags+=(--fail-on-down)
+        [ "${#formats[@]}" -gt 0 ] && flags+=(--formats "${formats[@]}")
+
+        set +e
+        ipmg --input "${targets[@]}" --output "$out/scan" --json "${flags[@]}" "${extra[@]}" \
+          > "$out/results.json"
+        status=$?
+        set -e
+
+        echo "exit-code=$status" >> "$GITHUB_OUTPUT"
+        echo "report-path=$out" >> "$GITHUB_OUTPUT"
+        uv run --no-project --quiet python - "$out/results.json" "$status" <<'PY'
+        import json, os, sys
+
+        path, status = sys.argv[1], int(sys.argv[2])
+        try:
+            with open(path, encoding="utf-8") as handle:
+                rows = json.load(handle)
+        except (OSError, ValueError):
+            rows = []
+        down = [row for row in rows if row.get("Status") != "Active"]
+        active = len(rows) - len(down)
+        with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
+            handle.write(f"active={active}\ntotal={len(rows)}\n")
+
+        verdict = {0: "passed", 3: "failed: hosts down"}.get(status, f"error (exit {status})")
+        lines = [
+            "## IPMG scan",
+            "",
+            f"**{active} of {len(rows)} targets active** - {verdict}",
+            "",
+        ]
+        if down:
+            lines += ["| Target | Status |", "| --- | --- |"]
+            lines += [f"| `{row.get('IP Address')}` | {row.get('Status')} |" for row in down[:50]]
+            if len(down) > 50:
+                lines += ["", f"...and {len(down) - 50} more in the reports."]
+        with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as handle:
+            handle.write("\n".join(lines) + "\n")
+        PY
+
+    - name: Upload reports
+      if: always() && inputs.upload-artifact == 'true'
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ steps.scan.outputs.report-path }}
+        if-no-files-found: warn
+
+    - name: Report the scan's result
+      shell: bash
+      env:
+        IPMG_STATUS: ${{ steps.scan.outputs.exit-code }}
+      run: |
+        if [ "$IPMG_STATUS" != "0" ]; then
+          echo "::error title=IPMG scan::ipmg exited with status $IPMG_STATUS (see the job summary and the reports)"
+          exit "$IPMG_STATUS"
+        fi
