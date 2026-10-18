@@ -1,36 +1,102 @@
-# IPMG — IP Management & Ping Monitoring Tool
+<p align="center">
+  <img src="https://raw.githubusercontent.com/sameeralam3127/ipmg/main/docs/assets/ipmg-logo.svg" alt="" width="88">
+</p>
 
-**Know what changed on your network since the last scan.**
+<h1 align="center">IPMG</h1>
 
-IPMG scans IPs, CIDR blocks, and ranges in parallel, keeps a history of every
-scan, and tells you what moved between two of them: hosts that went offline or
-appeared, IP addresses, hostnames, and MAC addresses that changed, latency that
-shifted, web services that started failing. Every change carries a severity,
-so only the ones that matter reach Slack, Teams, a webhook, or email, or fail a
-cron job or CI step. Use it from the command line or from IPMG Web, a local
-dashboard that works offline.
+<p align="center">
+  <b>IP Management &amp; Ping Monitoring Tool</b><br>
+  Know what changed on your network since the last scan.
+</p>
+
+<p align="center">
+  <a href="https://pypi.org/project/ipmg/"><img src="https://img.shields.io/pypi/v/ipmg" alt="PyPI"></a>
+  <a href="https://pypi.org/project/ipmg/"><img src="https://img.shields.io/badge/python-3.10%2B-blue" alt="Python Version"></a>
+  <a href="https://github.com/sameeralam3127/ipmg/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
+  <a href="https://github.com/sameeralam3127/ipmg/actions/workflows/publish.yml"><img src="https://github.com/sameeralam3127/ipmg/actions/workflows/publish.yml/badge.svg" alt="Publish"></a>
+</p>
+
+<p align="center">
+  🌐 <a href="https://sameeralam3127.github.io/ipmg/"><b>Website</b></a>
+  &nbsp;·&nbsp;
+  🖥️ <a href="https://sameeralam3127.github.io/ipmg/demo/"><b>Live demo</b></a>
+  &nbsp;·&nbsp;
+  🧰 <a href="https://sameeralam3127.github.io/ipmg/#builder"><b>Command builder</b></a>
+  &nbsp;·&nbsp;
+  📚 <a href="https://github.com/sameeralam3127/ipmg#-documentation"><b>Docs</b></a>
+</p>
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/sameeralam3127/ipmg/main/docs/assets/ipmg-compare.gif" alt="ipmg scans 13 hosts with --stream, printing each one as it answers; a new address is added to the target file; a second scan with --compare reports it as a new host (warning) against the first" width="820">
 </p>
 
-## 🚀 Quick start
+IPMG sweeps IPs, CIDR blocks, and ranges in parallel, remembers every scan, and
+tells you what changed since the last one: hosts that went down or appeared, a
+new MAC address or hostname behind an address, slower replies, a web service
+that started failing. Only the changes that matter reach Slack, Teams, a
+webhook, or email, or fail your cron job or CI step.
 
-**1. Install** with whichever you use (one line is enough):
+## ✨ Features
+
+- ⚡ **Fast, without root.** IPv4 and IPv6, CIDR blocks, ranges, and target
+  files (text, CSV, Excel, JSON), many hosts at a time, using your system's own
+  `ping`.
+- 🔍 **Finds hosts that block ping** with TCP probes (`--probe icmp,tcp`), and
+  checks web services (`--http-check`: status, response time, TLS, certificate
+  expiry).
+- 🏷️ **Names every device** by reverse DNS and, on your LAN, by MAC address
+  and vendor (`--mac`). Wakes them with Wake-on-LAN (`ipmg wake`).
+- 🔔 **Tells you what changed** since the last scan, with a severity for each
+  change, and alerts Slack, Teams, webhooks, or email.
+- 🤖 **Made for automation:** exit codes for cron and CI, a GitHub Action,
+  `--json` for scripts, systemd and launchd templates, Prometheus metrics.
+- 🖥️ **IPMG Web**, a local dashboard: live scans, history, changes, inventory,
+  and scheduled scans.
+- 📊 **Reports** in Excel, CSV, JSON, JSON Lines, and Markdown, written as the
+  scan runs, so an interrupted scan keeps its results.
+
+👉 [How IPMG compares](https://github.com/sameeralam3127/ipmg/blob/main/docs/COMPARISON.md)
+with nmap, fping, and Uptime Kuma.
+
+## 📦 Install
 
 ```bash
-pip install "ipmg[web]"                         # in a virtual environment, Python 3.10+
-pipx install "ipmg[web]"                        # its own environment, Python 3.10+
-uv tool install --python ">=3.10" "ipmg[web]"   # uv fetches Python 3.10+ if you lack it
-curl -sSL https://raw.githubusercontent.com/sameeralam3127/ipmg/main/install.sh | bash   # no Python needed
+# Linux and macOS, no Python needed
+curl -sSL https://raw.githubusercontent.com/sameeralam3127/ipmg/main/install.sh | bash
 ```
 
-`[web]` adds IPMG Web; plain `pip install ipmg` is the command line only.
-Where the system Python is older than 3.10 (RHEL 9, Ubuntu 20.04, SLES 15),
-pip and pipx quietly install an older IPMG, or nothing: use the uv line or the
-installer there.
+```powershell
+# Windows, no administrator rights
+irm https://raw.githubusercontent.com/sameeralam3127/ipmg/main/install.ps1 | iex
+```
 
-**2. Scan:**
+Or from PyPI, with Python 3.10 or newer:
+
+```bash
+# With pip, in a virtual environment
+pip install "ipmg[web]"
+```
+
+```bash
+# With pipx
+pipx install "ipmg[web]"
+```
+
+```bash
+# With uv, which fetches Python 3.10+ if you need it
+uv tool install --python ">=3.10" "ipmg[web]"
+```
+
+Also on **Homebrew** (`brew install sameeralam3127/tap/ipmg`) and **Docker**
+(`docker run --rm ghcr.io/sameeralam3127/ipmg --input 10.0.0.0/24`).
+
+> 💡 `[web]` adds IPMG Web; `pip install ipmg` alone is the command line only.
+> Where the system Python is older than 3.10 (RHEL 9, Ubuntu 20.04, SLES 15),
+> pip and pipx quietly install an older IPMG: use the installer or uv there. The
+> [install guide](https://github.com/sameeralam3127/ipmg/blob/main/docs/INSTALL.md)
+> covers version pinning, upgrading from 3.x, and tab completion.
+
+## 🚀 Quick start
 
 ```bash
 ipmg --discover             # scan the network you are on, right now
@@ -38,77 +104,11 @@ ipmg --discover --compare   # later: scan again and see what changed
 ipmg web --lan              # open the dashboard from any machine on your network
 ```
 
-> **Please read:** only scan networks you are authorized to scan. Unauthorized
-> scanning may violate your organization's policies or the law.
+Every scan is saved to a local history (`~/.ipmg/dashboard.db`), so
+`--compare` always has the previous scan to compare with.
 
-🌐 **Website:** [sameeralam3127.github.io/ipmg](https://sameeralam3127.github.io/ipmg/) ·
-🖥️ **Live demo:** [IPMG Web with sample data](https://sameeralam3127.github.io/ipmg/demo/) ·
-🧰 **Command builder:** [pick what you want, copy the command](https://sameeralam3127.github.io/ipmg/#builder) ·
-📚 **Docs:** [everything else](https://github.com/sameeralam3127/ipmg#documentation)
-
-[![PyPI](https://img.shields.io/pypi/v/ipmg)](https://pypi.org/project/ipmg/)
-[![Python Version](https://img.shields.io/badge/python-3.10%2B-blue)](https://pypi.org/project/ipmg/)
-[![License](https://img.shields.io/badge/license-MIT-green)](https://github.com/sameeralam3127/ipmg/blob/main/LICENSE)
-[![Publish](https://github.com/sameeralam3127/ipmg/actions/workflows/publish.yml/badge.svg)](https://github.com/sameeralam3127/ipmg/actions/workflows/publish.yml)
-
----
-
-## What it does
-
-- **Scans fast, without root.** IPv4 and IPv6, CIDR blocks, ranges, and
-  target files (text, CSV, Excel, JSON), `--threads` hosts at a time, using
-  your system's own `ping`.
-- **Finds hosts that block ping** with TCP probes (`--probe icmp,tcp`), and
-  checks web services (`--http-check`: status, response time, TLS, certificate
-  expiry).
-- **Identifies devices** by reverse DNS name and, on your LAN, by MAC address
-  and vendor (`--mac`). Wakes them with Wake-on-LAN (`ipmg wake`).
-- **Remembers every scan** and reports what changed, with severities and
-  alerts to Slack, Teams, webhooks, or email.
-- **Fits into automation:** exit codes for cron and CI, a GitHub Action,
-  `--json` for scripts, systemd and launchd templates, Prometheus metrics.
-- **IPMG Web**, a local dashboard: live scans, history, changes, inventory,
-  and scheduled scans.
-- **Reports** in Excel, CSV, JSON, JSON Lines, and Markdown, written as the
-  scan runs, so an interrupted scan keeps its results and can be resumed.
-
-[How it compares](https://github.com/sameeralam3127/ipmg/blob/main/docs/COMPARISON.md)
-with nmap, fping, and Uptime Kuma.
-
----
-
-## Install
-
-**Linux and macOS**, on any distribution, with no Python needed:
-
-```bash
-curl -sSL https://raw.githubusercontent.com/sameeralam3127/ipmg/main/install.sh | bash
-```
-
-**Windows** (PowerShell, no administrator rights):
-
-```powershell
-irm https://raw.githubusercontent.com/sameeralam3127/ipmg/main/install.ps1 | iex
-```
-
-**Homebrew:** `brew install sameeralam3127/tap/ipmg` ·
-**pip:** `pip install "ipmg[web]"` ·
-**uv:** `uv tool install --python ">=3.10" "ipmg[web]"` ·
-**pipx:** `pipx install "ipmg[web]"` ·
-**Docker:** `docker run --rm ghcr.io/sameeralam3127/ipmg --input 10.0.0.0/24`
-
-IPMG needs Python 3.10 or newer (the installers bring their own) and the
-system `ping` command. Minimal images, version pinning, upgrading from 3.x,
-tab completion, and the systems CI verifies are in the
-[install guide](https://github.com/sameeralam3127/ipmg/blob/main/docs/INSTALL.md).
-
----
-
-## Your first scan
-
-```bash
-ipmg --input 192.168.1.0/24 --stream        # each host as it answers
-```
+<details>
+<summary>What a scan prints</summary>
 
 ```text
   ipmg X.Y.Z  ·  scan
@@ -127,12 +127,12 @@ ipmg --input 192.168.1.0/24 --stream        # each host as it answers
   Saved    results_20261018_091502.xlsx
 ```
 
-Every scan is stored in a local history (`~/.ipmg/dashboard.db`). Scan again
-with `--compare` to see what changed, or open IPMG Web to browse it.
+</details>
 
----
+> ⚠️ **Only scan networks you are authorized to scan.** Unauthorized scanning
+> may violate your organization's policies or the law.
 
-## Common tasks
+## 🧭 Common tasks
 
 | I want to… | Command |
 | --- | --- |
@@ -152,9 +152,7 @@ with `--compare` to see what changed, or open IPMG Web to browse it.
 | Keep it running after logout and reboots | [systemd and launchd templates](https://github.com/sameeralam3127/ipmg/blob/main/docs/SERVICES.md) |
 | See every option | `ipmg --help`, or the [command reference](https://github.com/sameeralam3127/ipmg/blob/main/docs/COMMANDS.md) |
 
----
-
-## IPMG Web
+## 🖥️ IPMG Web
 
 ```bash
 ipmg web          # this machine: opens http://127.0.0.1:8080 in your browser
@@ -172,12 +170,10 @@ IPMG Web runs). Every request needs the token in that link.
 
 Dashboard, live monitor, history, changes, inventory with Wake-on-LAN, and
 scheduled scans; see the
-[IPMG Web guide](https://github.com/sameeralam3127/ipmg/blob/main/docs/WEB.md).
-Try it first with the [live demo](https://sameeralam3127.github.io/ipmg/demo/).
+[IPMG Web guide](https://github.com/sameeralam3127/ipmg/blob/main/docs/WEB.md),
+or try it first in the [live demo](https://sameeralam3127.github.io/ipmg/demo/).
 
----
-
-## Documentation
+## 📚 Documentation
 
 | Guide | What is in it |
 | --- | --- |
@@ -191,9 +187,7 @@ Try it first with the [live demo](https://sameeralam3127.github.io/ipmg/demo/).
 | [Troubleshooting](https://github.com/sameeralam3127/ipmg/blob/main/docs/TROUBLESHOOTING.md) and [FAQ](https://github.com/sameeralam3127/ipmg/blob/main/docs/FAQ.md) | Install errors, timeouts, slow scans, empty MAC addresses, common questions |
 | [Architecture](https://github.com/sameeralam3127/ipmg/blob/main/docs/ARCHITECTURE.md) | How the code fits together, for contributors |
 
----
-
-## Security
+## 🔒 Security
 
 IPMG runs `ping` as a direct process call with no shell, validates every
 target first, and needs no root. IPMG Web listens on `127.0.0.1` unless you
@@ -203,9 +197,7 @@ requests IPMG makes are the notifications and HTTP checks you ask for. Found a
 vulnerability? See
 [SECURITY.md](https://github.com/sameeralam3127/ipmg/blob/main/.github/SECURITY.md).
 
----
-
-## Contributing
+## 🤝 Contributing
 
 Contributions are welcome.
 [CONTRIBUTING.md](https://github.com/sameeralam3127/ipmg/blob/main/.github/CONTRIBUTING.md)
@@ -215,6 +207,9 @@ releases, and
 explains the code. Everyone taking part is expected to follow the
 [Code of Conduct](https://github.com/sameeralam3127/ipmg/blob/main/.github/CODE_OF_CONDUCT.md).
 
-## License
+If IPMG saves you time, a ⭐ on
+[GitHub](https://github.com/sameeralam3127/ipmg) helps other people find it.
+
+## 📄 License
 
 MIT — free for commercial and personal use.
