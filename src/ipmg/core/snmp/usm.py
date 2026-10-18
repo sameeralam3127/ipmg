@@ -58,12 +58,12 @@ def password_to_key(password: str, protocol: str) -> bytes:
         raise ValueError("an SNMPv3 password cannot be empty")
     repeated = data * (_STRETCH_BYTES // len(data) + 1)
     # A key derivation the RFC fixes, not a choice of hash for new security.
-    return hashlib.new(_hash(protocol), repeated[:_STRETCH_BYTES]).digest()  # nosec B324
+    return hashlib.new(_hash(protocol), repeated[:_STRETCH_BYTES]).digest()
 
 
 def localize_key(key: bytes, engine_id: bytes, protocol: str) -> bytes:
     """RFC 3414 A.2.2: a key that is only valid for one agent's engine ID."""
-    return hashlib.new(_hash(protocol), key + engine_id + key).digest()  # nosec B324
+    return hashlib.new(_hash(protocol), key + engine_id + key).digest()
 
 
 def _hash(protocol: str) -> str:
@@ -100,7 +100,7 @@ def local_keys(
     engine_id: bytes,
     auth_protocol: str,
     auth_password: str,
-    priv_password: str = "",
+    priv_password: str | None = None,
 ) -> LocalKeys:
     """The keys to talk to one engine. The privacy key uses the auth hash (RFC 3826 1.2)."""
     auth_key = localize_key(password_to_key(auth_password, auth_protocol), engine_id, auth_protocol)
