@@ -1,10 +1,5 @@
 # IPMG — IP Management & Ping Monitoring Tool
 
-[![PyPI](https://img.shields.io/pypi/v/ipmg)](https://pypi.org/project/ipmg/)
-![Python Version](https://img.shields.io/badge/python-3.10%2B-blue)
-![License](https://img.shields.io/badge/license-MIT-green)
-[![Publish](https://github.com/sameeralam3127/ipmg/actions/workflows/publish.yml/badge.svg)](https://github.com/sameeralam3127/ipmg/actions/workflows/publish.yml)
-
 **Know what changed on your network since the last scan.**
 
 IPMG scans IPs, CIDR blocks, and ranges in parallel, keeps a history of every
@@ -19,8 +14,25 @@ dashboard that works offline.
   <img src="https://raw.githubusercontent.com/sameeralam3127/ipmg/main/docs/assets/ipmg-compare.gif" alt="ipmg scans 13 hosts with --stream, printing each one as it answers; a new address is added to the target file; a second scan with --compare reports it as a new host (warning) against the first" width="820">
 </p>
 
+## 🚀 Quick start
+
+**1. Install** with whichever you use (one line is enough):
+
 ```bash
-curl -sSL https://raw.githubusercontent.com/sameeralam3127/ipmg/main/install.sh | bash
+pip install "ipmg[web]"                         # in a virtual environment, Python 3.10+
+pipx install "ipmg[web]"                        # its own environment, Python 3.10+
+uv tool install --python ">=3.10" "ipmg[web]"   # uv fetches Python 3.10+ if you lack it
+curl -sSL https://raw.githubusercontent.com/sameeralam3127/ipmg/main/install.sh | bash   # no Python needed
+```
+
+`[web]` adds IPMG Web; plain `pip install ipmg` is the command line only.
+Where the system Python is older than 3.10 (RHEL 9, Ubuntu 20.04, SLES 15),
+pip and pipx quietly install an older IPMG, or nothing: use the uv line or the
+installer there.
+
+**2. Scan:**
+
+```bash
 ipmg --discover             # scan the network you are on, right now
 ipmg --discover --compare   # later: scan again and see what changed
 ipmg web --lan              # open the dashboard from any machine on your network
@@ -29,10 +41,15 @@ ipmg web --lan              # open the dashboard from any machine on your networ
 > **Please read:** only scan networks you are authorized to scan. Unauthorized
 > scanning may violate your organization's policies or the law.
 
-**Website:** [sameeralam3127.github.io/ipmg](https://sameeralam3127.github.io/ipmg/) ·
-**Live demo:** [IPMG Web with sample data](https://sameeralam3127.github.io/ipmg/demo/) ·
-**Command builder:** [pick what you want, copy the command](https://sameeralam3127.github.io/ipmg/#builder) ·
-**Docs:** [everything else](#documentation)
+🌐 **Website:** [sameeralam3127.github.io/ipmg](https://sameeralam3127.github.io/ipmg/) ·
+🖥️ **Live demo:** [IPMG Web with sample data](https://sameeralam3127.github.io/ipmg/demo/) ·
+🧰 **Command builder:** [pick what you want, copy the command](https://sameeralam3127.github.io/ipmg/#builder) ·
+📚 **Docs:** [everything else](https://github.com/sameeralam3127/ipmg#documentation)
+
+[![PyPI](https://img.shields.io/pypi/v/ipmg)](https://pypi.org/project/ipmg/)
+[![Python Version](https://img.shields.io/badge/python-3.10%2B-blue)](https://pypi.org/project/ipmg/)
+[![License](https://img.shields.io/badge/license-MIT-green)](https://github.com/sameeralam3127/ipmg/blob/main/LICENSE)
+[![Publish](https://github.com/sameeralam3127/ipmg/actions/workflows/publish.yml/badge.svg)](https://github.com/sameeralam3127/ipmg/actions/workflows/publish.yml)
 
 ---
 
@@ -75,6 +92,7 @@ irm https://raw.githubusercontent.com/sameeralam3127/ipmg/main/install.ps1 | iex
 ```
 
 **Homebrew:** `brew install sameeralam3127/tap/ipmg` ·
+**pip:** `pip install "ipmg[web]"` ·
 **uv:** `uv tool install --python ">=3.10" "ipmg[web]"` ·
 **pipx:** `pipx install "ipmg[web]"` ·
 **Docker:** `docker run --rm ghcr.io/sameeralam3127/ipmg --input 10.0.0.0/24`
