@@ -17,13 +17,13 @@
 </p>
 
 <p align="center">
-  🌐 <a href="https://sameeralam3127.github.io/ipmg/"><b>Website</b></a>
+  <a href="https://sameeralam3127.github.io/ipmg/"><b>Website</b></a>
   &nbsp;·&nbsp;
-  🖥️ <a href="https://sameeralam3127.github.io/ipmg/demo/"><b>Live demo</b></a>
+  <a href="https://sameeralam3127.github.io/ipmg/demo/"><b>Live demo</b></a>
   &nbsp;·&nbsp;
-  🧰 <a href="https://sameeralam3127.github.io/ipmg/#builder"><b>Command builder</b></a>
+  <a href="https://sameeralam3127.github.io/ipmg/#builder"><b>Command builder</b></a>
   &nbsp;·&nbsp;
-  📚 <a href="https://github.com/sameeralam3127/ipmg#-documentation"><b>Docs</b></a>
+  <a href="https://github.com/sameeralam3127/ipmg#documentation"><b>Docs</b></a>
 </p>
 
 <p align="center">
@@ -36,29 +36,29 @@ new MAC address or hostname behind an address, slower replies, a web service
 that started failing. Only the changes that matter reach Slack, Teams, a
 webhook, or email, or fail your cron job or CI step.
 
-## ✨ Features
+## Features
 
-- ⚡ **Fast, without root.** IPv4 and IPv6, CIDR blocks, ranges, and target
+- **Fast, without root.** IPv4 and IPv6, CIDR blocks, ranges, and target
   files (text, CSV, Excel, JSON), many hosts at a time, using your system's own
   `ping`.
-- 🔍 **Finds hosts that block ping** with TCP probes (`--probe icmp,tcp`), and
+- **Finds hosts that block ping** with TCP probes (`--probe icmp,tcp`), and
   checks web services (`--http-check`: status, response time, TLS, certificate
   expiry).
-- 🏷️ **Names every device** by reverse DNS and, on your LAN, by MAC address
+- **Names every device** by reverse DNS and, on your LAN, by MAC address
   and vendor (`--mac`). Wakes them with Wake-on-LAN (`ipmg wake`).
-- 🔔 **Tells you what changed** since the last scan, with a severity for each
+- **Tells you what changed** since the last scan, with a severity for each
   change, and alerts Slack, Teams, webhooks, or email.
-- 🤖 **Made for automation:** exit codes for cron and CI, a GitHub Action,
+- **Made for automation:** exit codes for cron and CI, a GitHub Action,
   `--json` for scripts, systemd and launchd templates, Prometheus metrics.
-- 🖥️ **IPMG Web**, a local dashboard: live scans, history, changes, inventory,
+- **IPMG Web**, a local dashboard: live scans, history, changes, inventory,
   and scheduled scans.
-- 📊 **Reports** in Excel, CSV, JSON, JSON Lines, and Markdown, written as the
+- **Reports** in Excel, CSV, JSON, JSON Lines, and Markdown, written as the
   scan runs, so an interrupted scan keeps its results.
 
-👉 [How IPMG compares](https://github.com/sameeralam3127/ipmg/blob/main/docs/COMPARISON.md)
+[How IPMG compares](https://github.com/sameeralam3127/ipmg/blob/main/docs/COMPARISON.md)
 with nmap, fping, and Uptime Kuma.
 
-## 📦 Install
+## Install
 
 ```bash
 # Linux and macOS, no Python needed
@@ -74,7 +74,8 @@ Or from PyPI, with Python 3.10 or newer:
 
 ```bash
 # With pip, in a virtual environment
-pip install "ipmg[web]"
+pip install ipmg            # the command line
+pip install "ipmg[web]"     # the command line and IPMG Web, the browser dashboard
 ```
 
 ```bash
@@ -89,16 +90,16 @@ uv tool install --python ">=3.10" "ipmg[web]"
 
 Also on:
 
-- 🍺 **Homebrew:** `brew install sameeralam3127/tap/ipmg`
-- 🐳 **Docker:** `docker run --rm ghcr.io/sameeralam3127/ipmg --input 10.0.0.0/24`
+- **Homebrew:** `brew install sameeralam3127/tap/ipmg`
+- **Docker:** `docker run --rm ghcr.io/sameeralam3127/ipmg --input 10.0.0.0/24`
 
-> 💡 `[web]` adds IPMG Web; `pip install ipmg` alone is the command line only.
+> **Tip:** `[web]` adds IPMG Web; `pip install ipmg` alone is the command line.
 > Where the system Python is older than 3.10 (RHEL 9, Ubuntu 20.04, SLES 15),
 > pip and pipx quietly install an older IPMG: use the installer or uv there. The
 > [install guide](https://github.com/sameeralam3127/ipmg/blob/main/docs/INSTALL.md)
 > covers version pinning, upgrading from 3.x, and tab completion.
 
-## 🚀 Quick start
+## Quick start
 
 ```bash
 ipmg --discover             # scan the network you are on, right now
@@ -131,10 +132,10 @@ Every scan is saved to a local history (`~/.ipmg/dashboard.db`), so
 
 </details>
 
-> ⚠️ **Only scan networks you are authorized to scan.** Unauthorized scanning
+> **Note:** only scan networks you are authorized to scan. Unauthorized scanning
 > may violate your organization's policies or the law.
 
-## 🧭 Common tasks
+## Common tasks
 
 | I want to… | Command |
 | --- | --- |
@@ -155,7 +156,7 @@ Every scan is saved to a local history (`~/.ipmg/dashboard.db`), so
 | Keep it running after logout and reboots | [systemd and launchd templates](https://github.com/sameeralam3127/ipmg/blob/main/docs/SERVICES.md) |
 | See every option | `ipmg --help`, or the [command reference](https://github.com/sameeralam3127/ipmg/blob/main/docs/COMMANDS.md) |
 
-## 🖥️ IPMG Web
+## IPMG Web
 
 ```bash
 ipmg web          # this machine: opens http://127.0.0.1:8080 in your browser
@@ -176,7 +177,7 @@ scheduled scans; see the
 [IPMG Web guide](https://github.com/sameeralam3127/ipmg/blob/main/docs/WEB.md),
 or try it first in the [live demo](https://sameeralam3127.github.io/ipmg/demo/).
 
-## 📚 Documentation
+## Documentation
 
 | Guide | What is in it |
 | --- | --- |
@@ -191,7 +192,7 @@ or try it first in the [live demo](https://sameeralam3127.github.io/ipmg/demo/).
 | [Troubleshooting](https://github.com/sameeralam3127/ipmg/blob/main/docs/TROUBLESHOOTING.md) and [FAQ](https://github.com/sameeralam3127/ipmg/blob/main/docs/FAQ.md) | Install errors, timeouts, slow scans, empty MAC addresses, common questions |
 | [Architecture](https://github.com/sameeralam3127/ipmg/blob/main/docs/ARCHITECTURE.md) | How the code fits together, for contributors |
 
-## 🔒 Security
+## Security
 
 IPMG runs `ping` as a direct process call with no shell, validates every
 target first, and needs no root. IPMG Web listens on `127.0.0.1` unless you
@@ -201,7 +202,7 @@ requests IPMG makes are the notifications and HTTP checks you ask for. Found a
 vulnerability? See
 [SECURITY.md](https://github.com/sameeralam3127/ipmg/blob/main/.github/SECURITY.md).
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome.
 [CONTRIBUTING.md](https://github.com/sameeralam3127/ipmg/blob/main/.github/CONTRIBUTING.md)
@@ -211,9 +212,9 @@ releases, and
 explains the code. Everyone taking part is expected to follow the
 [Code of Conduct](https://github.com/sameeralam3127/ipmg/blob/main/.github/CODE_OF_CONDUCT.md).
 
-If IPMG saves you time, a ⭐ on
+If IPMG saves you time, a star on
 [GitHub](https://github.com/sameeralam3127/ipmg) helps other people find it.
 
-## 📄 License
+## License
 
 MIT — free for commercial and personal use.
