@@ -223,14 +223,20 @@ if [[ -n "$IPMG_VERSION" ]]; then
   TARGET="${PACKAGE}[web]==${IPMG_VERSION}"
 fi
 
+# IPMG 4 needs Python 3.10 or newer. Asked for explicitly, uv uses a system
+# Python that new enough or downloads one; left to itself on RHEL 9 or
+# Ubuntu 20.04 it would pick the system's 3.9 or 3.8 and quietly resolve an
+# older IPMG release that still supports it.
+PYTHON_REQUEST=">=3.10"
+
 log "Installing ${TARGET} from PyPI..."
-if ! retry uv tool install --upgrade "$TARGET"; then
+if ! retry uv tool install --python "$PYTHON_REQUEST" --upgrade "$TARGET"; then
   warn "Upgrade failed; retrying with a clean reinstall (this recovers from a previous
 install of '${PACKAGE}' from a different source, e.g. an older Git-based install)."
-  if ! retry uv tool install --force "$TARGET"; then
+  if ! retry uv tool install --python "$PYTHON_REQUEST" --force "$TARGET"; then
     error "Could not install '${TARGET}'.
 Try it by hand to see the full error:
-  uv tool install --force ${TARGET}"
+  uv tool install --python '${PYTHON_REQUEST}' --force ${TARGET}"
   fi
 fi
 

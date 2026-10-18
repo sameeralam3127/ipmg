@@ -118,12 +118,15 @@ if ($Version) {
 }
 
 Write-Step "Installing $target from PyPI..."
-$ok = Invoke-WithRetry { uv tool install --upgrade $target }
+# IPMG 4 needs Python 3.10 or newer: uv uses one that is installed, or
+# downloads one, instead of resolving an older IPMG for an older Python.
+$pythonRequest = '>=3.10'
+$ok = Invoke-WithRetry { uv tool install --python $pythonRequest --upgrade $target }
 if (-not $ok) {
     Write-Warn "Upgrade failed; retrying with a clean reinstall (this recovers from an earlier install of '$Package' from a different source)."
-    $ok = Invoke-WithRetry { uv tool install --force $target }
+    $ok = Invoke-WithRetry { uv tool install --python $pythonRequest --force $target }
     if (-not $ok) {
-        throw "Could not install '$target'. Try it by hand to see the full error:`n  uv tool install --force $target"
+        throw "Could not install '$target'. Try it by hand to see the full error:`n  uv tool install --python '$pythonRequest' --force $target"
     }
 }
 

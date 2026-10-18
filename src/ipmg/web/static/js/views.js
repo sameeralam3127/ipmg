@@ -1,7 +1,7 @@
 // Page views for the IPMG dashboard. Each view renders into the <main> node.
 
-import { api, onEvent } from "./api.js?v=20261017.1";
-import { STATUS_COLORS, latencyTrend, statusDonut } from "./charts.js?v=20261017.1";
+import { api, onEvent } from "./api.js?v=20261018.1";
+import { STATUS_COLORS, latencyTrend, statusDonut } from "./charts.js?v=20261018.1";
 
 const REPORT_FORMATS = ["xlsx", "csv", "json", "md"];
 
@@ -64,6 +64,13 @@ function scanStatePill(state) {
   const pill = h("span", { class: "pill" }, state);
   pill.style.setProperty("--pill-color", SCAN_STATE_COLORS[state] || "var(--muted)");
   return pill;
+}
+
+// "YYYY-MM-DD HH:MM:SS" in local time, as the server stores checked_at.
+function localTimestamp(date = new Date()) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ` +
+    `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
 function fmtLatency(latency) {
@@ -449,7 +456,8 @@ export async function monitorView(root, scanId) {
     if (event.type === "result") {
       completed = event.completed;
       counts[event.result.status] = (counts[event.result.status] || 0) + 1;
-      rows.unshift(event.result);
+      // Live events carry no time; stamp it as the stored rows show it.
+      rows.unshift({ ...event.result, checked_at: localTimestamp() });
       redraw();
     } else if (event.type === "scan_finished") {
       setFinished(event.status, event.duration_s);
