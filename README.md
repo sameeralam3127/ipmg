@@ -87,8 +87,10 @@ pipx install "ipmg[web]"
 uv tool install --python ">=3.10" "ipmg[web]"
 ```
 
-Also on **Homebrew** (`brew install sameeralam3127/tap/ipmg`) and **Docker**
-(`docker run --rm ghcr.io/sameeralam3127/ipmg --input 10.0.0.0/24`).
+Also on:
+
+- 🍺 **Homebrew:** `brew install sameeralam3127/tap/ipmg`
+- 🐳 **Docker:** `docker run --rm ghcr.io/sameeralam3127/ipmg --input 10.0.0.0/24`
 
 > 💡 `[web]` adds IPMG Web; `pip install ipmg` alone is the command line only.
 > Where the system Python is older than 3.10 (RHEL 9, Ubuntu 20.04, SLES 15),
