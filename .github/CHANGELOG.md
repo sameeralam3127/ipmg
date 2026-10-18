@@ -2,6 +2,59 @@
 
 <!-- version list -->
 
+## v4.1.0 (2026-10-18)
+
+### Bug Fixes
+
+- **snmp**: No empty-string default for the privacy passphrase
+  ([#130](https://github.com/sameeralam3127/ipmg/pull/130),
+  [`b22c482`](https://github.com/sameeralam3127/ipmg/commit/b22c482e5b85a6d74c7f080c1b89597bfe32a3cb))
+
+### Continuous Integration
+
+- Mypy is a release gate ([#130](https://github.com/sameeralam3127/ipmg/pull/130),
+  [`b22c482`](https://github.com/sameeralam3127/ipmg/commit/b22c482e5b85a6d74c7f080c1b89597bfe32a3cb))
+
+### Documentation
+
+- A README in the style of popular projects
+  ([#128](https://github.com/sameeralam3127/ipmg/pull/128),
+  [`1960a96`](https://github.com/sameeralam3127/ipmg/commit/1960a96367fd058fb24460dfcbb0bebecf15a22e))
+
+- Homebrew and Docker on a line each ([#128](https://github.com/sameeralam3127/ipmg/pull/128),
+  [`1960a96`](https://github.com/sameeralam3127/ipmg/commit/1960a96367fd058fb24460dfcbb0bebecf15a22e))
+
+- No emoji in the README, and pip install ipmg for the command line
+  ([#135](https://github.com/sameeralam3127/ipmg/pull/135),
+  [`594bcd0`](https://github.com/sameeralam3127/ipmg/commit/594bcd05c602d46f49af556cb544f4ad4b294203))
+
+- Pip, pipx, and uv in the README quick start; emoji links with the badges
+  ([#127](https://github.com/sameeralam3127/ipmg/pull/127),
+  [`f7ac506`](https://github.com/sameeralam3127/ipmg/commit/f7ac5062089379c89c5ddbfc15bf30cec8a9664b))
+
+### Features
+
+- SNMP polling (--snmp); mypy release gate; modern type hints; CodeQL fixes
+  ([#130](https://github.com/sameeralam3127/ipmg/pull/130),
+  [`b22c482`](https://github.com/sameeralam3127/ipmg/commit/b22c482e5b85a6d74c7f080c1b89597bfe32a3cb))
+
+- SNMP polling of switches and routers (--snmp)
+  ([#130](https://github.com/sameeralam3127/ipmg/pull/130),
+  [`b22c482`](https://github.com/sameeralam3127/ipmg/commit/b22c482e5b85a6d74c7f080c1b89597bfe32a3cb))
+
+### Refactoring
+
+- Modern type hints, with ruff's pyupgrade rules on
+  ([#130](https://github.com/sameeralam3127/ipmg/pull/130),
+  [`b22c482`](https://github.com/sameeralam3127/ipmg/commit/b22c482e5b85a6d74c7f080c1b89597bfe32a3cb))
+
+### Testing
+
+- Resolve the three CodeQL alerts in the tests
+  ([#130](https://github.com/sameeralam3127/ipmg/pull/130),
+  [`b22c482`](https://github.com/sameeralam3127/ipmg/commit/b22c482e5b85a6d74c7f080c1b89597bfe32a3cb))
+
+
 ## v4.0.0 (2026-10-18)
 
 ### Bug Fixes
