@@ -15,6 +15,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 
+from rich.align import AlignMethod
 from rich.text import Text
 
 from ipmg.core.engine import HostResult, ResultCallback, ScanConfig
@@ -57,7 +58,7 @@ class StreamOptions:
         )
 
 
-def _cell(value: str, width: int, style: str, justify: str = "left") -> Text:
+def _cell(value: str, width: int, style: str, justify: AlignMethod = "left") -> Text:
     """One fixed-width column: truncated when long, padded to the full width."""
     text = Text(value, style=style, no_wrap=True)
     text.truncate(width - COLUMN_GAP, overflow="ellipsis")
@@ -68,9 +69,9 @@ def _cell(value: str, width: int, style: str, justify: str = "left") -> Text:
     return text
 
 
-def _columns(config: ScanConfig) -> list[tuple[str, int, str]]:
+def _columns(config: ScanConfig) -> list[tuple[str, int, AlignMethod]]:
     """The columns this scan's configuration actually produces values for."""
-    columns = [
+    columns: list[tuple[str, int, AlignMethod]] = [
         ("Status", STATUS_WIDTH, "left"),
         ("Host", IP_WIDTH, "left"),
         ("Latency", LATENCY_WIDTH, "right"),

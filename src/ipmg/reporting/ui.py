@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 
+from rich.console import JustifyMethod
 from rich.padding import Padding
 from rich.progress import (
     BarColumn,
@@ -187,7 +188,7 @@ def bar(fraction: float, width: int = BAR_WIDTH, style: str = "ipmg.bar") -> Tex
 
 def table(
     *columns: str,
-    justify: Sequence[str] | None = None,
+    justify: Sequence[JustifyMethod] | None = None,
     min_widths: Sequence[int | None] | None = None,
 ) -> Table:
     """A borderless table with dim headers; pass '' for unlabelled columns.

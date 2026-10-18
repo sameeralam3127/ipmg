@@ -57,7 +57,7 @@ def _value(text: str, names: dict, low: int, high: int, field: str) -> int:
 
 def _field(text: str, low: int, high: int, field: str, names: dict | None = None) -> frozenset[int]:
     names = names or {}
-    values = set()
+    values: set[int] = set()
     for part in text.split(","):
         part = part.strip()
         if not part:

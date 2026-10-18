@@ -509,7 +509,7 @@ def _elapsed(frame: ReportTable) -> float:
     durations = []
     for value in frame.column("Scan Duration (s)"):
         try:
-            durations.append(float(value))  # type: ignore[arg-type]
+            durations.append(float(value))
         except (TypeError, ValueError):
             continue
     durations = [value for value in durations if not math.isnan(value)]

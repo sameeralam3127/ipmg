@@ -172,8 +172,9 @@ def _probe_host(
         # The probe just made the OS resolve the host's MAC, if it is on a local link.
         mac, vendor = mac_and_vendor(neighbours, ip, time.perf_counter())
 
-    resolve = cache is not None and (status == "Active" or not config.resolve_active_only)
-    hostname = cache.resolve(ip) if resolve else ""
+    hostname = ""
+    if cache is not None and (status == "Active" or not config.resolve_active_only):
+        hostname = cache.resolve(ip)
     open_ports: tuple[int, ...] = ()
     if config.scan_ports and status == "Active":
         open_ports = tuple(

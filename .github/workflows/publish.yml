@@ -82,6 +82,11 @@ jobs:
           ipmg --version
           ipmg --input 127.0.0.1 --no-history --formats csv --output smoke
 
+      # A release gate (#97): a type error stops the release like a failing test.
+      - name: Type-check
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+        run: mypy
+
       - name: Build package
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
         run: python -m build

@@ -78,6 +78,7 @@ from ipmg.web.schemas import (
     ScheduleRequest,
     Stats,
     UploadResult,
+    ValidationIssue,
     WakeRequest,
     WakeSent,
     websocket_event_schemas,
@@ -246,7 +247,9 @@ def _errors(*codes: int, **described: str) -> dict[int | str, dict[str, Any]]:
 DELETE_RUNNING_ERROR = "Scan is still running. Cancel it first, then delete it."
 
 
-def _file_response(media_types: Mapping[str, str], description: str) -> dict[int, dict[str, Any]]:
+def _file_response(
+    media_types: Mapping[str, str], description: str
+) -> dict[int | str, dict[str, Any]]:
     """OpenAPI entry for a 200 response that is a file download."""
     binary = {"schema": {"type": "string", "format": "binary"}}
     return {200: {"description": description, "content": {m: binary for m in media_types.values()}}}
@@ -772,18 +775,17 @@ def _register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(RequestValidationError)
     async def validation_error(_request: Request, exc: RequestValidationError) -> Response:
         issues = [
-            {
-                "loc": list(error.get("loc", ())),
-                "msg": error.get("msg", ""),
-                "type": error.get("type", ""),
-            }
+            ValidationIssue(
+                loc=list(error.get("loc", ())),
+                msg=error.get("msg", ""),
+                type=error.get("type", ""),
+            )
             for error in exc.errors()
         ]
-        first = issues[0] if issues else None
         summary = "Invalid request"
-        if first:
-            where = ".".join(str(part) for part in first["loc"])
-            summary = f"Invalid request: {where}: {first['msg']}"
+        if issues:
+            where = ".".join(str(part) for part in issues[0].loc)
+            summary = f"Invalid request: {where}: {issues[0].msg}"
         body = ErrorResponse(detail=summary, errors=issues)
         return JSONResponse(body.model_dump(), status_code=422)
 

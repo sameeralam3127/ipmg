@@ -146,7 +146,8 @@ def prune_reports(
     for base in dict.fromkeys(bases):
         for files in report_files(base, formats).values():
             for path in files[: max(len(files) - keep, 0)]:
-                if protect and _REPORT_FILE.match(path.name)["timestamp"] == protect:
+                match = _REPORT_FILE.match(path.name)
+                if protect and match and match["timestamp"] == protect:
                     continue
                 try:
                     path.unlink()

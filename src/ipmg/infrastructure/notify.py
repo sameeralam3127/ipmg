@@ -339,6 +339,7 @@ def send_email(settings: SmtpSettings, message: EmailMessage) -> None:
             "loopback; use starttls or ssl instead."
         )
     context = ssl.create_default_context()
+    client: smtplib.SMTP
     if settings.security == "ssl":
         client = smtplib.SMTP_SSL(
             settings.host, settings.port, timeout=SEND_TIMEOUT_S, context=context

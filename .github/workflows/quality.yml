@@ -114,8 +114,8 @@ jobs:
         run: uv run --no-sync pytest -q -p no:cacheprovider
 
   types:
-    # mypy becomes a release gate in v4 (#97). Until then this only records
-    # the baseline: it reports the error count and never fails the build.
+    # mypy is a release gate (#97): any type error fails the pull request
+    # here, and the release in publish.yml.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -134,11 +134,5 @@ jobs:
       - name: Install IPMG and mypy
         run: uv pip install --system -e ".[web]" mypy
 
-      - name: Type-check (non-blocking)
-        run: |
-          mypy src/ --ignore-missing-imports | tee mypy.txt || true
-          {
-            echo "## mypy baseline"
-            echo
-            echo "\`$(tail -1 mypy.txt)\`"
-          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Type-check
+        run: mypy

@@ -231,9 +231,10 @@ def _one_value(action: argparse.Action, key: str, value: Any, path: Path) -> Any
     if custom_type and isinstance(value, (int, float)) and not isinstance(value, bool):
         value = str(value)
 
-    if action.type is not None and isinstance(value, str):
+    converter = action.type
+    if callable(converter) and isinstance(value, str):
         try:
-            value = action.type(value)
+            value = converter(value)
         except (argparse.ArgumentTypeError, TypeError, ValueError) as exc:
             raise ConfigError(f"{where}: {exc}") from exc
 

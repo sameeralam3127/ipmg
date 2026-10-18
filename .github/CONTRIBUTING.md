@@ -107,6 +107,15 @@ UPDATE_API_SNAPSHOT=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest tests/test_api_con
 Review the snapshot diff before committing: `/api/v1` may only gain endpoints
 and fields, never lose or change them (see [docs/API.md](../docs/API.md#versioning-and-stability)).
 
+### Types
+
+`mypy` is a release gate: a type error fails the pull request and stops the
+release, like a failing test. It is in the `dev` extra:
+
+```bash
+mypy            # checks src/, configured in pyproject.toml
+```
+
 CI also runs a quick end-to-end scan against your own machine. It is worth
 running before you open a pull request:
 
@@ -121,7 +130,7 @@ missing:
 
 ```bash
 uv tool install tox --with tox-uv   # once
-tox -e lint,lowest,coverage         # lint and lowest deps (Quality), coverage (Publish)
+tox -e lint,types,lowest,coverage   # lint, types, lowest deps (Quality), coverage (Publish)
 tox -e py310                        # the tests on one Python version
 tox -p                              # everything, in parallel
 ```
