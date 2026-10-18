@@ -1,6 +1,7 @@
 import io
 import json
 import time
+from html.parser import HTMLParser
 
 import openpyxl
 import pytest
@@ -615,29 +616,55 @@ def test_csp_never_repeats_a_malformed_host_header(client):
     assert "connect-src 'self';" in policy
 
 
+def csp_directives(policy):
+    """A Content-Security-Policy as {directive: set of sources}."""
+    parsed = {}
+    for directive in filter(str.strip, policy.split(";")):
+        name, *sources = directive.split()
+        parsed[name] = set(sources)
+    return parsed
+
+
+class _StartTags(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.tags = []
+
+    def handle_starttag(self, tag, attrs):
+        self.tags.append((tag, dict(attrs)))
+
+
+def start_tags(html):
+    """(tag, attributes) for every start tag, names lower-cased by the parser."""
+    parser = _StartTags()
+    parser.feed(html)
+    parser.close()
+    return parser.tags
+
+
 @pytest.mark.parametrize("path", ["/docs", "/redoc"])
 def test_api_docs_get_their_own_policy_for_the_cdn(client, path):
     response = client.get(path)
 
     assert response.status_code == 200
-    policy = response.headers["content-security-policy"]
-    assert "https://cdn.jsdelivr.net" in policy
-    assert "frame-ancestors 'none'" in policy
+    directives = csp_directives(response.headers["content-security-policy"])
+    assert {"https://cdn.jsdelivr.net"} <= directives["script-src"]
+    assert {"https://cdn.jsdelivr.net"} <= directives["style-src"]
+    assert directives["frame-ancestors"] == {"'none'"}
     assert response.headers["x-frame-options"] == "DENY"
 
 
 def test_frontend_has_no_inline_scripts_or_styles():
     # The strict policy blocks both; a change that adds one would break the
     # dashboard in every browser.
-    import re
-
     from ipmg.web.app import STATIC_DIR
 
-    html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
-    assert not re.search(r"<script(?![^>]*\bsrc=)[^>]*>", html)
-    assert "<style" not in html
-    assert not re.search(r"\sstyle=", html)
-    assert not re.search(r"\son[a-z]+=", html)
+    tags = start_tags((STATIC_DIR / "index.html").read_text(encoding="utf-8"))
+    assert tags
+    assert all("src" in attrs for tag, attrs in tags if tag == "script")
+    assert not [tag for tag, _attrs in tags if tag == "style"]
+    assert not [tag for tag, attrs in tags if "style" in attrs]
+    assert not [(tag, name) for tag, attrs in tags for name in attrs if name.startswith("on")]
     for script in (STATIC_DIR / "js").glob("*.js"):
         source = script.read_text(encoding="utf-8")
         assert 'setAttribute("style"' not in source, script.name
