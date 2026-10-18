@@ -353,6 +353,7 @@ function shellQuote(value) {
 function describeTarget(target) {
   if (/\.(xlsx|xls|csv)$/i.test(target)) return "Read hosts from the “IP Address” column of this spreadsheet, which must already exist.";
   if (/\.(txt|list)$/i.test(target)) return "Read one IP, CIDR block, or range per line from this file, which must already exist.";
+  if (/\.json$/i.test(target)) return "Read the targets from this JSON file, which must already exist (an IPMG JSON report works too).";
   if (target.includes("/")) return "Scan every host in this CIDR block.";
   if (target.includes("-")) return "Scan every address in this range.";
   return "Scan this single host.";
@@ -368,7 +369,7 @@ function decimalIn(value, fallback, { min = 0, max = 1e9 } = {}) {
   return String(value).trim() !== "" && Number.isFinite(number) && number >= min && number <= max ? number : fallback;
 }
 
-const FORMAT_NAMES = { xlsx: "Excel", csv: "CSV", json: "JSON", md: "Markdown" };
+const FORMAT_NAMES = { xlsx: "Excel", csv: "CSV", json: "JSON", jsonl: "JSON Lines", md: "Markdown" };
 const DEFAULT_PORTS = "21,22,25,53,80,443,445,1433,3306,3389,5432";
 const listPhrase = (items) => (items.length > 1 ? `${items.slice(0, -1).join(", ")} and ${items.at(-1)}` : items[0]);
 const formatPhrase = (formats) => listPhrase(formats.map((format) => FORMAT_NAMES[format]));
@@ -434,6 +435,13 @@ const BUILDERS = {
       if (ttl !== 300) line.flag("--dns-cache-ttl", ttl === 0 ? "Don't cache names; look each one up again." : `Cache looked-up names for ${ttl} seconds.`, ttl);
     }
 
+    if (form.on("scan-tcpProbe")) {
+      line.flag("--probe", "Ping first; for a host that doesn't answer, try a TCP connection to the ports below. A refused connection still counts as up.", "icmp,tcp");
+    }
+    if (form.on("scan-mac")) {
+      line.flag("--mac", "Add each responding host's MAC address and vendor (hosts on this machine's network only).");
+    }
+
     if (form.on("scan-scanPorts")) {
       line.flag("--scan-ports", "Check TCP ports on every host that answers the ping.");
       const { ports, error } = parsePorts(form.value("scan-ports"));
@@ -471,7 +479,7 @@ const BUILDERS = {
     if (!defaultFormat) line.flag("--formats", `Write the report as ${formatPhrase(formats)}.`, formats.join(" "));
     const prefix = form.value("scan-output") || "results";
     if (prefix !== "results") {
-      const folder = prefix.includes("/") ? " The folder must already exist." : "";
+      const folder = prefix.includes("/") ? " The folder is created if it doesn't exist." : "";
       line.flag("--output", `Name the report files ${prefix}_<timestamp>.<format>.${folder}`, shellQuote(prefix));
     }
 
@@ -484,7 +492,14 @@ const BUILDERS = {
     if (count !== 1) line.flag("--count", `Send ${count} pings to each host.`, count);
     if (interval > 0) line.flag("--interval", `Repeat the whole scan every ${interval} minute${interval === 1 ? "" : "s"}, until Ctrl+C.`, interval);
 
-    if (form.on("scan-failOnDown")) line.flag("--fail-on-down", "Exit with code 3 if any host is down, so cron or monitoring can react.");
+    const urls = form.value("scan-http").split(/\s+/).filter(Boolean);
+    if (urls.length) {
+      const valid = urls.filter((url) => /^https?:\/\/\S+$/i.test(url));
+      if (valid.length) line.flag("--http-check", `Request ${valid.length === 1 ? "this URL" : "these URLs"} and record the status, response time, and why it failed.`, valid.map(shellQuote).join(" "));
+      if (valid.length < urls.length) line.warn("HTTP checks need URLs starting with http:// or https://; the others were left out.");
+    }
+
+    if (form.on("scan-failOnDown")) line.flag("--fail-on-down", "Exit with code 3 if any host is down (or an HTTP check failed), so cron or monitoring can react.");
     const minActive = decimalIn(form.value("scan-minActive"), null, { min: 0, max: 100 });
     if (minActive !== null) line.flag("--min-active", `Exit with code 3 if fewer than ${minActive}% of the hosts answer.`, minActive);
 
@@ -533,14 +548,18 @@ const BUILDERS = {
 
   web(form, line) {
     const port = integerIn(form.value("web-port"), 8080, { max: 65535 });
-    if (form.value("web-host") === "0.0.0.0") {
-      line.flag("--host", "Listen on every network interface, not only this machine.", "0.0.0.0");
-      line.warn("Every request needs the access token from the link IPMG Web prints, but it travels over plain HTTP. On a network you don't trust, prefer an SSH tunnel or a reverse proxy with TLS.");
+    const openFirewall = form.on("web-openFirewall");
+    const lan = openFirewall || form.value("web-host") === "lan";
+    if (openFirewall) {
+      line.flag("--open-firewall", "Open the port in firewalld or ufw while IPMG Web runs, and close it when it stops. Run it with sudo; it implies --lan.");
+    } else if (lan) {
+      line.flag("--lan", "Let other machines open IPMG Web: it prints the link with this machine's address, and the command that opens the port if a firewall blocks it.");
     }
+    if (lan) line.warn("Every request needs the access token from the printed link, but it travels over plain HTTP. On a network you don't trust, prefer an SSH tunnel or a reverse proxy with TLS.");
     if (port !== 8080) line.flag("--port", `Serve on port ${port}.`, port);
     if (form.on("web-noBrowser")) line.flag("--no-browser", "Don't open a browser, for servers and SSH sessions.");
     addCommon(form, line, "web");
-    line.info(`Then open http://127.0.0.1:${port} in a browser on this machine.`, "then");
+    line.info(lan ? "Then share the link it prints next to “from other machines”." : `Then open the link it prints (http://127.0.0.1:${port}/#token=…) in a browser on this machine.`, "then");
   },
 };
 

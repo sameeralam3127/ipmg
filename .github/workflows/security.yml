@@ -3,9 +3,9 @@ name: Security
 # No paths-ignore here: the secret scan must cover every file, docs included.
 on:
   push:
-    branches: [main]
+    branches: [main, v4]
   pull_request:
-    branches: [main]
+    branches: [main, v4]
   # Weekly, so a newly disclosed CVE in a dependency shows up without
   # waiting for the next push.
   schedule:

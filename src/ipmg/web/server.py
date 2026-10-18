@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import ipaddress
 import os
 import re
 import secrets
@@ -16,26 +15,13 @@ import uvicorn
 
 from ipmg.infrastructure.database import DEFAULT_DB_PATH, Database
 from ipmg.reporting import ui
+from ipmg.web import network
 from ipmg.web.app import create_app
 from ipmg.web.manager import DEFAULT_MAX_SCANS
 
 
-def _display_host(host: str) -> str:
-    try:
-        if ipaddress.ip_address(host).is_unspecified:
-            return "127.0.0.1"
-    except ValueError:
-        pass
-    return host
-
-
 def _is_loopback(host: str) -> bool:
-    if host == "localhost":
-        return True
-    try:
-        return ipaddress.ip_address(host).is_loopback
-    except ValueError:
-        return False
+    return network.is_loopback(host)
 
 
 #: Characters that survive a URL fragment and a WebSocket subprotocol unescaped.
@@ -65,6 +51,56 @@ def _has_display() -> bool:
     return True
 
 
+def _open_firewall(firewall: network.Firewall, port: int) -> bool:
+    """Open the port for --open-firewall; True if IPMG Web now owns a rule to remove."""
+    if not firewall.can_manage:
+        ui.warn(f"--open-firewall cannot change the {firewall.name}; see the step below.")
+    elif not network.is_admin():
+        ui.warn("--open-firewall needs root: run IPMG Web with sudo, or open the port as below.")
+    elif network.open_port(firewall):
+        ui.field("Firewall", f"opened {port}/tcp in {firewall.name} until IPMG Web stops")
+        return True
+    else:
+        ui.warn(f"Could not open {port}/tcp in {firewall.name}; open it as below.")
+    return False
+
+
+def _explain_firewall(firewall: network.Firewall, port: int) -> None:
+    """Say whether the firewall lets other machines in, and how to let them."""
+    if firewall.blocks is False:
+        ui.field("Firewall", f"{firewall.name} allows {port}/tcp")
+        return
+    if firewall.blocks:
+        headline = f"{firewall.name} blocks {port}/tcp, so other machines cannot connect yet."
+    else:
+        headline = f"{firewall.name} is on and may block {port}/tcp."
+    ui.field("Firewall", headline)
+    if firewall.open_commands:
+        ui.field("", "Allow it with:")
+        for command in firewall.open_commands:
+            ui.field("", f"  {command}", wrap=False)
+        if firewall.can_manage:
+            ui.field("", "or restart with --open-firewall to open it only while IPMG Web runs.")
+    if firewall.note:
+        ui.field("", firewall.note)
+
+
+def _print_firewall(port: int, open_firewall: bool) -> Optional[network.Firewall]:
+    """Say what stands between other machines and IPMG Web, and open it on request.
+
+    Returns the firewall whose rule IPMG Web added, so it can be removed again.
+    """
+    firewall = network.detect_firewall(port)
+    if firewall is None:
+        if open_firewall:
+            ui.note("--open-firewall: no firewall found that needs opening.")
+        return None
+    if open_firewall and firewall.blocks is not False and _open_firewall(firewall, port):
+        return firewall
+    _explain_firewall(firewall, port)
+    return None
+
+
 def run_dashboard(
     host: str = "127.0.0.1",
     port: int = 8080,
@@ -72,21 +108,25 @@ def run_dashboard(
     db_path: Optional[str] = None,
     metrics_sources: Optional[int] = None,
     max_scans: int = DEFAULT_MAX_SCANS,
+    open_firewall: bool = False,
 ) -> None:
     database = Database(Path(db_path) if db_path else DEFAULT_DB_PATH)
     token = _access_token()
     app = create_app(database, token, metrics_sources=metrics_sources, max_scans=max_scans)
-    # The token goes in the fragment, which browsers never send to the server,
-    # so it stays out of access logs and proxies.
-    url = f"http://{_display_host(host)}:{port}/#token={token}"
+    urls = network.browse_urls(host, port, token)
+    url = urls[0][0]
+    local = _is_loopback(host)
 
     ui.blank()
-    ui.fields(
-        [
-            ("Open", url),
-            ("History", database.path),
-        ]
-    )
+    for index, (link, audience) in enumerate(urls):
+        label = "Open" if index == 0 else ""
+        ui.field(label, f"{link}  ({audience})" if audience else link, wrap=False)
+    ui.field("History", database.path, wrap=False)
+
+    opened: Optional[network.Firewall] = None
+    if not local and not network.in_container():
+        opened = _print_firewall(port, open_firewall)
+
     ui.blank()
     ui.note("Press CTRL+C to stop.")
 
@@ -98,20 +138,27 @@ def run_dashboard(
 
     ui.note("The link carries this session's access token; the API refuses requests without it.")
     if metrics_sources is not None:
+        base = url.split("/#", 1)[0]
         ui.note(
-            f"Prometheus metrics at http://{_display_host(host)}:{port}/metrics "
+            f"Prometheus metrics at {base}/metrics "
             "(send the token as a Bearer credential; pin it with IPMG_WEB_TOKEN)."
         )
-    if _is_loopback(host):
+    if local:
         ui.note(
-            f"Remote access: ssh -L {port}:127.0.0.1:{port} user@this-host, then open the link."
+            "Open it from other machines: ipmg web --lan (it prints the link and any "
+            f"firewall step), or ssh -L {port}:127.0.0.1:{port} user@this-host."
         )
     else:
         ui.note(
-            "Listening beyond this machine over plain HTTP: anyone who can see the traffic "
-            "can read the token. Prefer an SSH tunnel, or a reverse proxy with TLS (see .github/SECURITY.md)."
+            "Listening on the network over plain HTTP: anyone who can see the traffic can "
+            "read the token. Use it on networks you trust, or put a reverse proxy with TLS in "
+            "front (see .github/SECURITY.md)."
         )
 
     ui.blank()
 
-    uvicorn.run(app, host=host, port=port, log_level="warning")
+    try:
+        uvicorn.run(app, host=host, port=port, log_level="warning")
+    finally:
+        if opened is not None and network.close_port(opened):
+            ui.note(f"Closed {port}/tcp in {opened.name} again.")

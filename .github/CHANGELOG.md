@@ -2,6 +2,206 @@
 
 <!-- version list -->
 
+## v4.0.0-beta.1 (2026-10-18)
+
+### Bug Fixes
+
+- Removed unnecessary vulnerability ignore flag. Fixes #48
+  ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+- TCP refusals and MAC lookups on Windows ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+- Windows TCP refusals and MAC lookups, and link the architecture overview
+  ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+- Windows unreachable hosts, "Status changed" label, and README presentation
+  ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+- **diff**: Label failure-mode moves "Status changed"
+  ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+- **notify**: Refuse cleartext SMTP auth with --smtp-security none on remote hosts
+  ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+- **ping**: Stop reporting Windows "Destination host unreachable" as Active
+  ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+- **ping**: Use each BSD's own reply-timeout flag
+  ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+- **report**: Write XLSX in write-only mode so large scans save in linear time
+  ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+- **scan**: Keep an --interval monitor running through a failed pass
+  ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+- **web**: Give the IPMG Web demo the real change types
+  ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+- **web**: Limit concurrent scans with --max-scans
+  ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+- **web**: Recover scans left running by a stopped IPMG Web
+  ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+- **web**: Refuse to delete a scan while it is still running
+  ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+- **web**: Send security headers against clickjacking and content sniffing
+  ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+### Build System
+
+- Require Python 3.10 or newer
+  ([`302f4b4`](https://github.com/sameeralam3127/ipmg/commit/302f4b4a66c7187f16df652f54f50481ff4cabd6))
+
+- **deps**: Update tomli requirement ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+### Chores
+
+- Issue forms and a pull request template ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+- Merge 3.2.0 into v4 and release 4.0.0 betas from v4
+  ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+- **release**: Drop the orphaned 3.1.3 changelog entry
+  ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+### Code Style
+
+- **tests**: Apply black to test_notify.py ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+### Continuous Integration
+
+- Dependabot and Security workflow improvements. Fixes #48.
+  ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+- Native arm64 Docker builds, a build cache, uv installs, and a real dependency audit
+  ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+- Queue main runs instead of cancelling an in-flight release
+  ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+- Revised dependabot and security workflows according to code review. Fixes #48
+  ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+- Test install.sh on every distribution it claims to support
+  ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+### Documentation
+
+- Add comprehensive architecture overview for contributors
+  ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+- Architecture overview for contributors ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+- Compare IPMG with nmap, fping, and Uptime Kuma, with sources
+  ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+- Replace pinned example versions with X.Y.Z and update the PyPI summary
+  ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+- Show change detection in the README visuals
+  ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+- **readme**: Add requirements and platform support
+  ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+- **readme**: Lead with change detection ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+- **v4**: Add the v4 development plan and notice
+  ([`c50cb5b`](https://github.com/sameeralam3127/ipmg/commit/c50cb5b2b61a9ea5559c29d76c1cae0e70b570bb))
+
+### Features
+
+- GitHub Action to run an IPMG scan in CI ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+- Systemd and launchd service templates for scheduled scans
+  ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+- Wake-on-LAN with ipmg wake and an inventory Wake button
+  ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+- **cli**: Shell completion for bash, zsh, fish, and PowerShell
+  ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+- **history**: Retention for scan history and report files
+  ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+- **scan**: Bound reverse DNS lookups with --dns-timeout
+  ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+- **scan**: HTTP(S) checks with status code and response time
+  ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+- **scan**: MAC address and vendor lookup with --mac
+  ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+- **scan**: TCP-connect probing for hosts that block ICMP
+  ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+- **web**: Scheduled recurring scans in IPMG Web
+  ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+### Performance Improvements
+
+- **web**: Batch scan result writes and run SQLite in WAL mode
+  ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+### Testing
+
+- Check XLSX write scaling by ratio, not a wall-clock limit
+  ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+- Use httpx2 for the TestClient and fail on first-party deprecations
+  ([#125](https://github.com/sameeralam3127/ipmg/pull/125),
+  [`2ae2723`](https://github.com/sameeralam3127/ipmg/commit/2ae2723199001691b1b6db61c0e5214cdb21fcc6))
+
+
 ## v3.2.0 (2026-10-18)
 
 ### Bug Fixes

@@ -49,7 +49,7 @@ The API binds to `127.0.0.1` by default. The token keeps other users on
 the machine and web pages you visit from driving it, but it travels over
 plain HTTP. To reach the API from another machine, use an SSH tunnel or a
 reverse proxy with TLS rather than exposing the port directly (see
-[Security](../README.md#security)).
+[SECURITY.md](../.github/SECURITY.md)).
 
 The token is a single shared secret for the whole API. There are no
 per-user accounts or permissions yet.

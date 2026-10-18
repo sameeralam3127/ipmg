@@ -6,12 +6,12 @@ name: Installer (install.sh)
 # every change to it and weekly, since distributions and PyPI change under it.
 on:
   pull_request:
-    branches: [main]
+    branches: [main, v4]
     paths:
       - "install.sh"
       - ".github/workflows/install-sh.yml"
   push:
-    branches: [main]
+    branches: [main, v4]
     paths:
       - "install.sh"
       - ".github/workflows/install-sh.yml"

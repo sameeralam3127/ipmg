@@ -2,9 +2,9 @@ name: Publish
 
 on:
   push:
-    branches: [main]
+    branches: [main, v4]
   pull_request:
-    branches: [main]
+    branches: [main, v4]
     # A docs-only PR cannot break the package, so it skips the 8-job matrix.
     paths-ignore:
       - "**.md"
@@ -34,7 +34,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
         include:
           - os: macos-latest
             python-version: "3.12"
@@ -130,7 +130,8 @@ jobs:
 
   release:
     needs: [test, core-install]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # main cuts releases; v4 cuts 4.0.0 betas (the branch groups in pyproject.toml).
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/v4')
     runs-on: ubuntu-latest
     environment: pypi
 
@@ -311,7 +312,8 @@ jobs:
           tags: |
             type=semver,pattern={{version}},value=${{ needs.release.outputs.version }}
             type=semver,pattern={{major}}.{{minor}},value=${{ needs.release.outputs.version }}
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ !contains(needs.release.outputs.version, '-') }}
+            type=raw,value=beta,enable=${{ contains(needs.release.outputs.version, '-beta') }}
 
       - name: Tag both platforms as one image
         working-directory: ${{ runner.temp }}/digests

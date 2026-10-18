@@ -5,14 +5,14 @@ name: Action
 # that never answers must fail and still upload its reports.
 on:
   pull_request:
-    branches: [main]
+    branches: [main, v4]
     paths:
       - "action.yml"
       - ".github/workflows/action.yml"
       - "src/**"
       - "pyproject.toml"
   push:
-    branches: [main]
+    branches: [main, v4]
     paths:
       - "action.yml"
       - ".github/workflows/action.yml"

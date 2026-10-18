@@ -20,7 +20,7 @@ See also the [FAQ](FAQ.md).
 Your distribution blocks installs into the system Python (Ubuntu 23.04+,
 Debian 12+, Fedora 38+). Use the one-line installer, `uv tool install ipmg`, or
 `pipx install ipmg` — see
-[Installing with pip](../README.md#installing-with-pip).
+[Installing with pip](INSTALL.md#installing-with-pip).
 
 ### `command not found: ipmg` right after installing
 
@@ -51,7 +51,7 @@ you can let it do the work: add `--with-deps`. On Alpine, run it with `bash`
 
 IPMG installed fine, but your image has no ping. Install it with the command
 for your distribution — see
-[The one thing IPMG needs](../README.md#the-one-thing-ipmg-needs-from-your-system).
+[The one thing IPMG needs](INSTALL.md#the-one-thing-ipmg-needs-from-your-system).
 
 ---
 
@@ -133,3 +133,35 @@ Check the extension is one IPMG reads (`.xlsx`, `.xls`, `.csv`, `.txt`,
 ### The IPMG Web port is already in use
 
 Pick another port: `ipmg web --port 9000`.
+
+### Another machine cannot open IPMG Web
+
+By default IPMG Web listens on `127.0.0.1`, which only the machine it runs on
+can reach. Start it with `--lan`:
+
+```bash
+ipmg web --lan
+```
+
+and open the link it prints next to "from other machines", which has this
+machine's address and the access token. If the page still does not load, the
+firewall is in the way: IPMG Web names it and prints the command that opens
+the port, such as `sudo firewall-cmd --add-port=8080/tcp` on RHEL or
+`sudo ufw allow 8080/tcp` on Ubuntu, or run `sudo ipmg web --open-firewall` to
+open it only while IPMG Web runs. Check what it listens on with
+`ss -ltnp | grep 8080`: `0.0.0.0:8080` means every interface. More in the
+[IPMG Web guide](WEB.md#opening-it-from-other-machines).
+
+### The page says the access token is missing or wrong
+
+The token changes every time IPMG Web starts, so a link or bookmark from an
+earlier run stops working. Use the link it printed this time, or pin a token
+with `export IPMG_WEB_TOKEN=...` before starting it.
+
+### `pip install ipmg` installed 3.2.0, not 4.x
+
+IPMG 4 needs Python 3.10 or newer, and on an older Python pip quietly picks
+the last release that supports it. RHEL 9 (3.9), RHEL 8 and SLES 15 (3.6), and
+Ubuntu 20.04 (3.8) are the usual cases. Use the one-line installer, or
+`uv tool install --python ">=3.10" "ipmg[web]"`, or a newer Python from your
+distribution ([details](INSTALL.md#python-310-or-newer)).

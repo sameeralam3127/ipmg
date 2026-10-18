@@ -39,7 +39,7 @@ Lines marked `CHANGE` in the templates hold paths you will want to adjust:
 | Placeholder | Meaning | Find yours with |
 | --- | --- | --- |
 | `/usr/local/bin/ipmg`, `/Users/YOU/.local/bin/ipmg` | The `ipmg` executable | `command -v ipmg` |
-| `/etc/ipmg/targets.txt`, `/Users/YOU/ipmg/targets.txt` | What to scan: a file of IPs, CIDR blocks, and ranges ([format](COMMANDS.md#target-files)) | |
+| `/etc/ipmg/targets.txt`, `/Users/YOU/ipmg/targets.txt` | What to scan: a file of IPs, CIDR blocks, and ranges ([format](COMMANDS.md#choosing-targets)) | |
 | `/var/lib/ipmg/history.db` (`--db`) | Scan history: what change detection compares against | |
 | `/var/lib/ipmg/reports/scan` (`--output`) | Report folder and file prefix; the folder is created if missing | |
 

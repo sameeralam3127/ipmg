@@ -13,9 +13,11 @@ system-wide to `/usr/local/bin` on purpose.
 
 ### Do I need a specific Python version installed?
 
-No. The one-line installer brings its own Python, which is why it works on
-RHEL 8 (system Python 3.6) and on openSUSE images with no Python at all. If you
-install with pip instead, you need Python 3.9 or newer.
+No. The one-line installers bring their own Python, which is why they work on
+RHEL 8 and 9 (system Python 3.6 and 3.9) and on openSUSE images with no Python
+at all. If you install with pip instead, you need Python 3.10 or newer; on an
+older Python pip quietly installs 3.2.0, the last release that supports it
+([details](INSTALL.md#python-310-or-newer)).
 
 ### Does it change anything on the hosts it scans?
 
@@ -52,3 +54,9 @@ Up to 65,536 hosts per scan. Anything larger is rejected before the scan starts.
 ### Does IPMG Web need internet access?
 
 No. Everything it serves is bundled with the package.
+
+### Can my team open IPMG Web from their machines?
+
+Yes: `ipmg web --lan` prints the link to share and checks the firewall
+([details](WEB.md#opening-it-from-other-machines)). The link carries the
+access token, so share it only with people who should see your scans.

@@ -571,16 +571,33 @@ def build_web_parser() -> argparse.ArgumentParser:
         "ipmg web",
         description="Start IPMG Web, the local browser UI.",
     )
-    parser.add_argument(
+    where = parser.add_mutually_exclusive_group()
+    where.add_argument(
         "--host",
-        default="127.0.0.1",
-        help="Interface to bind (default: 127.0.0.1, local only).",
+        default=None,
+        help="Interface to bind (default: 127.0.0.1, this machine only).",
+    )
+    where.add_argument(
+        "--lan",
+        action="store_true",
+        help=(
+            "Let other machines open IPMG Web: listen on every interface (as --host "
+            "0.0.0.0) and print the link with this machine's network address."
+        ),
     )
     parser.add_argument(
         "--port",
         type=int,
         default=8080,
         help="Port to listen on (default: 8080).",
+    )
+    parser.add_argument(
+        "--open-firewall",
+        action="store_true",
+        help=(
+            "Open the port in firewalld or ufw while IPMG Web runs, and close it again "
+            "when it stops (needs root; implies --lan)."
+        ),
     )
     parser.add_argument(
         "--no-browser",

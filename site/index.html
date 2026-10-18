@@ -59,18 +59,18 @@
             <span data-release-label>Open source · MIT licensed</span>
           </a>
           <h1>Know which hosts are up — <span class="accent-text">and what changed</span> since last time.</h1>
-          <p class="lede">IPMG pings hosts in parallel, resolves their names, remembers every scan, and tells you what moved. Run it from the terminal or from IPMG Web, a private browser UI on your own machine.</p>
+          <p class="lede">IPMG scans hosts in parallel, finds the ones that block ping, checks web services, identifies devices by name and MAC address, remembers every scan, and tells you what moved. Run it from the terminal, or from IPMG Web, a private dashboard your whole team can open.</p>
           <div class="cta-row">
             <a class="btn primary" href="#install">Install IPMG</a>
             <a class="btn" href="demo/">Try the live demo <span aria-hidden="true">→</span></a>
           </div>
           <div class="copy-line">
             <span class="prompt" aria-hidden="true">$</span>
-            <code>uv tool install ipmg</code>
-            <button class="copy-btn" type="button" data-copy="uv tool install ipmg">Copy</button>
+            <code>uv tool install "ipmg[web]"</code>
+            <button class="copy-btn" type="button" data-copy='uv tool install --python "&gt;=3.10" "ipmg[web]"'>Copy</button>
           </div>
           <ul class="hero-meta">
-            <li>Python 3.9 – 3.14</li>
+            <li>Python 3.10 – 3.14</li>
             <li>Linux · macOS · Windows</li>
             <li>No root required</li>
           </ul>
@@ -92,8 +92,8 @@
     <!-- ----------------------------------------------------------- stats -->
     <section class="wrap stats reveal" aria-label="IPMG at a glance">
       <div class="stat"><strong data-count="65536">65,536</strong><span>hosts in a single scan</span></div>
-      <div class="stat"><strong data-count="4">4</strong><span>report formats</span></div>
-      <div class="stat"><strong data-count="8">8</strong><span>kinds of change detected</span></div>
+      <div class="stat"><strong data-count="5">5</strong><span>report formats</span></div>
+      <div class="stat"><strong data-count="12">12</strong><span>kinds of change detected</span></div>
       <div class="stat"><strong data-count="0">0</strong><span>CDN assets — works offline</span></div>
     </section>
 
@@ -123,18 +123,33 @@
           </article>
           <article class="feature reveal">
             <div class="icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></svg></div>
-            <h3>See listening services</h3>
-            <p><code>--scan-ports</code> checks SSH, HTTP, HTTPS, RDP, SMB, databases, and more on every host that answers — or the ports you choose.</p>
+            <h3>Find hosts that block ping</h3>
+            <p><code>--probe icmp,tcp</code> tries a TCP connection when ping gets no answer, and <code>--scan-ports</code> lists the services listening on every host.</p>
           </article>
           <article class="feature reveal">
             <div class="icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></svg></div>
             <h3>Reports people can read</h3>
-            <p>Excel, CSV, JSON, or Markdown, one row per host. Spreadsheet formulas in exported values are neutralized.</p>
+            <p>Excel, CSV, JSON, JSON Lines, or Markdown, written while the scan runs, so an interrupted scan keeps its results and can be resumed.</p>
           </article>
           <article class="feature reveal">
             <div class="icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg></div>
-            <h3>IPMG Web, private and local</h3>
-            <p><code>ipmg web</code> serves live monitoring, history, and inventory on <code>127.0.0.1</code> — fully offline, nothing uploaded.</p>
+            <h3>IPMG Web for the whole team</h3>
+            <p><code>ipmg web --lan</code> prints the link to share and the firewall step. Live scans, history, changes, inventory, and scheduled scans, fully offline.</p>
+          </article>
+          <article class="feature reveal">
+            <div class="icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg></div>
+            <h3>Check web services</h3>
+            <p><code>--http-check</code> records status, response time, redirects, TLS errors, and certificate expiry, and alerts when a check starts failing.</p>
+          </article>
+          <article class="feature reveal">
+            <div class="icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="2"/><path d="M8 10h.01M12 10h.01M16 10h.01M8 14h8"/></svg></div>
+            <h3>Know every device</h3>
+            <p><code>--mac</code> adds each host's MAC address and vendor on your LAN, spots devices that moved IP, and <code>ipmg wake</code> wakes them.</p>
+          </article>
+          <article class="feature reveal">
+            <div class="icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 8v4l3 2"/><circle cx="12" cy="12" r="9"/></svg></div>
+            <h3>Automate it</h3>
+            <p>Slack, Teams, webhook, and email alerts, exit codes for cron and CI, a GitHub Action, systemd and launchd templates, and Prometheus metrics.</p>
           </article>
         </div>
       </div>
@@ -146,7 +161,7 @@
         <div class="section-head reveal">
           <p class="kicker">Install</p>
           <h2>Up and running in under a minute</h2>
-          <p>The installer brings its own Python through <a href="https://docs.astral.sh/uv/" rel="noopener">uv</a>, so your system Python doesn't matter — it works on RHEL 8 and on images with no Python at all.</p>
+          <p>The installer brings its own Python through <a href="https://docs.astral.sh/uv/" rel="noopener">uv</a>, so your system Python doesn't matter — it works on RHEL 8 and 9 and on images with no Python at all.</p>
           <p class="note">IPMG uses your system's <code>ping</code>. Minimal Linux images may need it: <code>sudo apt-get install -y iputils-ping</code> (or <code>dnf</code>, <code>zypper</code>, <code>apk</code>).</p>
         </div>
 
@@ -176,10 +191,10 @@
 
           <div class="tab-panel" role="tabpanel" id="panel-tool" aria-labelledby="tab-tool" hidden>
             <div class="code-block">
-              <pre><code id="cmd-tool">uv tool install ipmg     # or: pipx install ipmg</code></pre>
-              <button class="copy-btn" type="button" data-copy="uv tool install ipmg">Copy</button>
+              <pre><code id="cmd-tool">uv tool install --python "&gt;=3.10" "ipmg[web]"     # or: pipx install "ipmg[web]"</code></pre>
+              <button class="copy-btn" type="button" data-copy='uv tool install --python "&gt;=3.10" "ipmg[web]"'>Copy</button>
             </div>
-            <p>Installs IPMG as an isolated application. Upgrade later with <code>uv tool upgrade ipmg</code>.</p>
+            <p>Installs IPMG as an isolated application. <code>--python "&gt;=3.10"</code> lets uv fetch a new enough Python where the system's is older, as on RHEL 9.</p>
           </div>
 
           <div class="tab-panel" role="tabpanel" id="panel-pip" aria-labelledby="tab-pip" hidden>
@@ -188,7 +203,7 @@
 ~/.venvs/ipmg/bin/pip install ipmg</code></pre>
               <button class="copy-btn" type="button" data-copy-from="#cmd-pip">Copy</button>
             </div>
-            <p>Use a virtual environment: Ubuntu 23.04+, Debian 12+, and Fedora 38+ block <code>pip</code> installs into the system Python.</p>
+            <p>Use a virtual environment and Python 3.10 or newer: Ubuntu 23.04+, Debian 12+, and Fedora 38+ block <code>pip</code> installs into the system Python, and on an older Python pip quietly installs IPMG 3.</p>
           </div>
 
           <div class="verify">
@@ -247,6 +262,8 @@
                 <div class="toggles">
                   <label class="toggle"><input type="checkbox" name="scan-resolve"><span>Hostnames <small>reverse DNS</small></span></label>
                   <label class="toggle"><input type="checkbox" name="scan-scanPorts"><span>Open ports <small>TCP services</small></span></label>
+                  <label class="toggle"><input type="checkbox" name="scan-tcpProbe"><span>Hosts that block ping <small>try TCP too</small></span></label>
+                  <label class="toggle"><input type="checkbox" name="scan-mac"><span>MAC &amp; vendor <small>local network</small></span></label>
                   <label class="toggle"><input type="checkbox" name="scan-stream" checked><span>Live results <small>hosts that answer</small></span></label>
                   <label class="toggle"><input type="checkbox" name="scan-streamAll"><span>Every result live <small>including timeouts</small></span></label>
                   <label class="toggle"><input type="checkbox" name="scan-compare"><span>Changes <small>vs. previous scan</small></span></label>
@@ -282,6 +299,7 @@
                   <label class="chip check"><input type="checkbox" name="scan-formats" value="xlsx" checked><span>Excel</span></label>
                   <label class="chip check"><input type="checkbox" name="scan-formats" value="csv"><span>CSV</span></label>
                   <label class="chip check"><input type="checkbox" name="scan-formats" value="json"><span>JSON</span></label>
+                  <label class="chip check"><input type="checkbox" name="scan-formats" value="jsonl"><span>JSON Lines</span></label>
                   <label class="chip check"><input type="checkbox" name="scan-formats" value="md"><span>Markdown</span></label>
                 </div>
                 <label class="field" for="scan-output">
@@ -307,6 +325,7 @@
                   <label class="field" for="scan-refresh"><span>Progress redraw (s) <small class="field-hint">when live</small></span><input id="scan-refresh" name="scan-refresh" type="number" min="0.05" max="5" step="0.05" value="0.25"></label>
                   <label class="field" for="scan-minActive"><span>Fail below active (%) <small class="field-hint">exit code 3</small></span><input id="scan-minActive" name="scan-minActive" type="number" min="0" max="100" step="1" placeholder="off"></label>
                   <label class="toggle"><input type="checkbox" name="scan-failOnDown"><span>Fail on down <small>exit code 3 for cron</small></span></label>
+                  <label class="field span-2" for="scan-http"><span>HTTP checks <small class="field-hint">URLs, separated by spaces</small></span><input id="scan-http" name="scan-http" type="text" placeholder="https://intranet.example.com/" autocomplete="off" spellcheck="false" maxlength="500"></label>
                   <label class="field span-2" for="scan-db"><span>History database <small class="field-hint">empty = ~/.ipmg/dashboard.db</small></span><input id="scan-db" name="scan-db" type="text" placeholder="~/.ipmg/dashboard.db" autocomplete="off" spellcheck="false" maxlength="300"></label>
                   <label class="toggle span-2"><input type="checkbox" name="scan-verbose"><span>Debug logging <small>--verbose</small></span></label>
                 </div>
@@ -381,13 +400,14 @@
                 <legend>Where it listens</legend>
                 <div class="segmented">
                   <label><input type="radio" name="web-host" value="127.0.0.1" checked><span>This machine only</span></label>
-                  <label><input type="radio" name="web-host" value="0.0.0.0"><span>Whole network</span></label>
+                  <label><input type="radio" name="web-host" value="lan"><span>Whole network</span></label>
                 </div>
                 <div class="numbers two spaced">
                   <label class="field" for="web-port"><span>Port</span><input id="web-port" name="web-port" type="number" min="1" max="65535" value="8080"></label>
                 </div>
                 <div class="toggles spaced">
                   <label class="toggle span-2"><input type="checkbox" name="web-noBrowser"><span>Don't open a browser <small>for servers and SSH sessions</small></span></label>
+                  <label class="toggle span-2"><input type="checkbox" name="web-openFirewall"><span>Open the firewall <small>while it runs · Linux, needs sudo</small></span></label>
                 </div>
               </fieldset>
 
@@ -431,20 +451,24 @@ ipmg diff --fail-on-change   # exit 2 for cron or CI</code></pre>
 
         <div class="changes-card reveal">
           <div class="filter" role="group" aria-label="Filter by severity">
-            <button type="button" class="chip" data-severity-filter="all" aria-pressed="true">All <span>8</span></button>
-            <button type="button" class="chip sev-critical" data-severity-filter="critical" aria-pressed="false">Critical <span>1</span></button>
-            <button type="button" class="chip sev-warning" data-severity-filter="warning" aria-pressed="false">Warning <span>4</span></button>
-            <button type="button" class="chip sev-info" data-severity-filter="info" aria-pressed="false">Info <span>3</span></button>
+            <button type="button" class="chip" data-severity-filter="all" aria-pressed="true">All <span>12</span></button>
+            <button type="button" class="chip sev-critical" data-severity-filter="critical" aria-pressed="false">Critical <span>2</span></button>
+            <button type="button" class="chip sev-warning" data-severity-filter="warning" aria-pressed="false">Warning <span>6</span></button>
+            <button type="button" class="chip sev-info" data-severity-filter="info" aria-pressed="false">Info <span>4</span></button>
           </div>
           <ul class="change-list">
             <li data-severity="critical"><span class="sev critical">critical</span><div><strong>Host offline</strong><p>Reachable in the baseline, not reachable now</p></div></li>
+            <li data-severity="critical"><span class="sev critical">critical</span><div><strong>HTTP check failing</strong><p>A checked URL that passed now fails</p></div></li>
             <li data-severity="warning"><span class="sev warning">warning</span><div><strong>New host</strong><p>An IP address the baseline never saw</p></div></li>
             <li data-severity="warning"><span class="sev warning">warning</span><div><strong>Host removed</strong><p>An IP the current scan no longer covers</p></div></li>
-            <li data-severity="warning"><span class="sev warning">warning</span><div><strong>IP address changed</strong><p>A known hostname moved to a different IP</p></div></li>
+            <li data-severity="warning"><span class="sev warning">warning</span><div><strong>IP address changed</strong><p>A known hostname or MAC address moved to a different IP</p></div></li>
+            <li data-severity="warning"><span class="sev warning">warning</span><div><strong>MAC address changed</strong><p>A different device answers at the same IP</p></div></li>
+            <li data-severity="warning"><span class="sev warning">warning</span><div><strong>HTTP status changed</strong><p>A checked URL answers differently</p></div></li>
             <li data-severity="warning"><span class="sev warning">warning</span><div><strong>Status changed</strong><p>Status moved between failure modes, e.g. Timeout → Unreachable</p></div></li>
             <li data-severity="info"><span class="sev info">info</span><div><strong>Host back online</strong><p>Recovered since the baseline</p></div></li>
             <li data-severity="info"><span class="sev info">info</span><div><strong>Hostname changed</strong><p>Same IP, different PTR record</p></div></li>
             <li data-severity="info"><span class="sev info">info</span><div><strong>Latency changed</strong><p>Moved past both thresholds (5 ms and 25% by default)</p></div></li>
+            <li data-severity="info"><span class="sev info">info</span><div><strong>HTTP check recovered</strong><p>A failing check passes again</p></div></li>
           </ul>
         </div>
       </div>
@@ -456,10 +480,10 @@ ipmg diff --fail-on-change   # exit 2 for cron or CI</code></pre>
         <div class="section-head center reveal">
           <p class="kicker">IPMG Web</p>
           <h2>Prefer clicking? Same engine, in your browser.</h2>
-          <p><code>ipmg web</code> starts a private server on <code>127.0.0.1:8080</code> with live progress over WebSockets, scan history, change reports, and a host inventory. The demo below runs entirely in your browser with sample data.</p>
+          <p><code>ipmg web</code> starts a private server with live progress, scan history, change reports, a host inventory with Wake-on-LAN, and scheduled scans. <code>ipmg web --lan</code> lets your team open it: it prints the link with this machine's address and tells you if the firewall is in the way. The demo below runs entirely in your browser with sample data.</p>
           <div class="cta-row center">
             <a class="btn primary" href="demo/">Open the full demo</a>
-            <a class="btn" href="https://github.com/sameeralam3127/ipmg#ipmg-web" rel="noopener">IPMG Web docs</a>
+            <a class="btn" href="https://github.com/sameeralam3127/ipmg/blob/main/docs/WEB.md" rel="noopener">IPMG Web guide</a>
           </div>
         </div>
         <div class="browser reveal">
@@ -478,7 +502,7 @@ ipmg diff --fail-on-change   # exit 2 for cron or CI</code></pre>
         <div class="section-head reveal">
           <p class="kicker">Releases</p>
           <h2>Shipped recently</h2>
-          <p>Every merge to <code>main</code> is tested on six Python versions and three operating systems, then released automatically to PyPI.</p>
+          <p>Every merge to <code>main</code> is tested on five Python versions, three operating systems, and nine Linux distributions, then released automatically to PyPI and as a Docker image.</p>
         </div>
         <div class="release-grid" data-releases aria-live="polite">
           <article class="release skeleton" aria-hidden="true"><span></span><span></span><span></span></article>
@@ -512,15 +536,15 @@ ipmg diff --fail-on-change   # exit 2 for cron or CI</code></pre>
           </details>
           <details>
             <summary>Can I run it on a schedule?</summary>
-            <p><code>--interval 5</code> repeats a scan every five minutes. For unattended runs, use cron or a systemd timer: <code>--fail-on-down</code> or <code>--min-active 90</code> exits with code 3 when hosts are down, and <code>ipmg diff --fail-on-change</code> exits with code 2 when anything changed.</p>
+            <p>Yes: create a schedule in IPMG Web, run <code>--interval 5</code> to repeat a scan every five minutes, or use the <a href="https://github.com/sameeralam3127/ipmg/blob/main/docs/SERVICES.md" rel="noopener">systemd and launchd templates</a>. For cron and CI, <code>--fail-on-down</code> exits with code 3 when hosts are down, and <code>ipmg diff --fail-on-change</code> exits with code 2 when anything changed.</p>
           </details>
           <details>
             <summary>Every host comes back as Timeout. Why?</summary>
-            <p>Something is dropping ICMP — a host firewall, a VPN, or a cloud security group. Try <code>ping</code> by hand against one address: if that fails too, it's the network, not IPMG.</p>
+            <p>Something is dropping ICMP — a host firewall, a VPN, or a cloud security group. Add <code>--probe icmp,tcp</code> so hosts that block ping are found by a TCP connection instead.</p>
           </details>
           <details>
-            <summary>Is IPMG Web safe to expose?</summary>
-            <p>It binds to <code>127.0.0.1</code> and has no authentication by design. To reach it from another machine, use an SSH tunnel, or put an authenticating reverse proxy in front of it.</p>
+            <summary>Can my team open IPMG Web?</summary>
+            <p>Yes: <code>ipmg web --lan</code> prints the link to share. Every request needs the access token in that link, and every response carries a strict Content-Security-Policy. It speaks plain HTTP, so on a network you don't trust use an SSH tunnel or a reverse proxy with TLS.</p>
           </details>
         </div>
       </div>

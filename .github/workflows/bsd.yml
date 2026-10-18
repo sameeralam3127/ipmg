@@ -6,13 +6,13 @@ name: BSD ping
 # changes, and on demand.
 on:
   pull_request:
-    branches: [main]
+    branches: [main, v4]
     paths:
       - "src/ipmg/core/ping.py"
       - ".github/scripts/bsd-ping-smoke.py"
       - ".github/workflows/bsd.yml"
   push:
-    branches: [main]
+    branches: [main, v4]
     paths:
       - "src/ipmg/core/ping.py"
       - ".github/scripts/bsd-ping-smoke.py"

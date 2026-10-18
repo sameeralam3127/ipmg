@@ -4,7 +4,7 @@ name: Docker
 # Publishing to GHCR happens in publish.yml, only when a release is cut.
 on:
   pull_request:
-    branches: [main]
+    branches: [main, v4]
     paths:
       - Dockerfile
       - .dockerignore
@@ -14,7 +14,7 @@ on:
       - .github/workflows/docker.yml
       - .github/scripts/docker-smoke.sh
   push:
-    branches: [main]
+    branches: [main, v4]
     paths:
       - Dockerfile
       - .dockerignore
