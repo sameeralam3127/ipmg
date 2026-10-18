@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import sys
-from typing import Callable, Dict, List, Optional
+from collections.abc import Callable
 
 from ipmg.cli import completion, config
 from ipmg.cli.parser import (
@@ -52,7 +52,7 @@ EXIT_INTERRUPTED = 130
 log = logging.getLogger(__name__)
 
 
-def _scan_command(argv: List[str]) -> int:
+def _scan_command(argv: list[str]) -> int:
     parser = build_parser()
     # Before parsing: the file supplies the defaults, so anything on the
     # command line still overrides it.
@@ -69,7 +69,7 @@ def _scan_command(argv: List[str]) -> int:
     return EXIT_OK
 
 
-def _probe_kinds(args) -> List[str]:
+def _probe_kinds(args) -> list[str]:
     """What a scan will send, for the authorization notice."""
     kinds = []
     if getattr(args, "http_check", None) and not (args.input or args.discover):
@@ -84,7 +84,7 @@ def _probe_kinds(args) -> List[str]:
     return kinds
 
 
-def _web_command(argv: List[str]) -> int:
+def _web_command(argv: list[str]) -> int:
     args = build_web_parser().parse_args(argv)
     configure_logging(args.verbose)
     ui.header("web")
@@ -121,7 +121,7 @@ def _format_bytes(size: int) -> str:
     return f"{value:.1f} GB"  # pragma: no cover - the loop always returns
 
 
-def _prune_command(argv: List[str]) -> int:
+def _prune_command(argv: list[str]) -> int:
     parser = build_prune_parser()
     args = parser.parse_args(argv)
     if args.keep is None and args.older_than is None:
@@ -165,7 +165,7 @@ def _prune_command(argv: List[str]) -> int:
     return EXIT_OK
 
 
-def _history_command(argv: List[str]) -> int:
+def _history_command(argv: list[str]) -> int:
     if argv and argv[0] == "prune":
         return _prune_command(argv[1:])
     args = build_history_parser().parse_args(argv)
@@ -177,7 +177,7 @@ def _history_command(argv: List[str]) -> int:
     return EXIT_OK
 
 
-def _diff_command(argv: List[str]) -> int:
+def _diff_command(argv: list[str]) -> int:
     args = build_diff_parser().parse_args(argv)
     configure_logging(args.verbose)
     ui.header("diff")
@@ -211,7 +211,7 @@ def _diff_command(argv: List[str]) -> int:
     return EXIT_OK
 
 
-def _wake_command(argv: List[str]) -> int:
+def _wake_command(argv: list[str]) -> int:
     args = build_wake_parser().parse_args(argv)
     configure_logging(args.verbose)
     ui.header("wake")
@@ -228,14 +228,14 @@ def _wake_command(argv: List[str]) -> int:
     return EXIT_OK
 
 
-def _completion_command(argv: List[str]) -> int:
+def _completion_command(argv: list[str]) -> int:
     args = build_completion_parser().parse_args(argv)
     # Only the script on stdout, no banner: it is eval'd or saved to a file.
     sys.stdout.write(completion.script(args.shell))
     return EXIT_OK
 
 
-_COMMANDS: Dict[str, Callable[[List[str]], int]] = {
+_COMMANDS: dict[str, Callable[[list[str]], int]] = {
     "web": _web_command,
     "history": _history_command,
     "diff": _diff_command,
@@ -246,12 +246,12 @@ _COMMANDS: Dict[str, Callable[[List[str]], int]] = {
 
 #: Flag spellings of a command. Reaching for "--web" before "web" is the
 #: obvious guess, and refusing it teaches nothing.
-_COMMAND_FLAGS: Dict[str, Callable[[List[str]], int]] = {
+_COMMAND_FLAGS: dict[str, Callable[[list[str]], int]] = {
     "--web": _web_command,
 }
 
 
-def _dispatch(argv: List[str]):
+def _dispatch(argv: list[str]):
     """Pick the handler for this command line, and the arguments it keeps."""
     if argv and argv[0] in _COMMANDS:
         return _COMMANDS[argv[0]], argv[1:]
@@ -265,7 +265,7 @@ def _dispatch(argv: List[str]):
     return _scan_command, argv
 
 
-def run(argv: Optional[List[str]] = None) -> int:
+def run(argv: list[str] | None = None) -> int:
     """Entry point: returns the process exit code."""
     argv = list(sys.argv[1:] if argv is None else argv)
     handler, handler_argv = _dispatch(argv)

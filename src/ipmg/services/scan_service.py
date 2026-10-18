@@ -6,10 +6,10 @@ import logging
 import math
 import os
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Sequence, Tuple
 
 from ipmg.core.diff import DiffOptions
 from ipmg.core.discovery import discover_targets
@@ -74,7 +74,7 @@ HTTP_ONLY_SOURCE = "http-checks"
 class ScanOutcome:
     """Everything one scan pass produced."""
 
-    results: List[HostResult]
+    results: list[HostResult]
     frame: ReportTable
     batch_timestamp: datetime
     duration_s: float
@@ -84,7 +84,7 @@ class ScanOutcome:
     #: Report file name prefix; a resumed scan keeps the one it started with.
     output: str
     #: ``--http-check`` results, in the order the URLs were given.
-    http_results: List[HttpCheckResult] = field(default_factory=list)
+    http_results: list[HttpCheckResult] = field(default_factory=list)
     #: Whether this pass probed hosts at all; a run of only HTTP checks does not.
     scanned_hosts: bool = True
 
@@ -96,13 +96,13 @@ class HistoryOptions:
     enabled: bool = True
     compare: bool = False
     any_source: bool = False
-    db_path: Optional[str] = None
-    export_formats: Tuple[str, ...] = ()
+    db_path: str | None = None
+    export_formats: tuple[str, ...] = ()
     export_base: str = "changes"
     diff: DiffOptions = field(default_factory=DiffOptions)
     notify: NotifyOptions = field(default_factory=NotifyOptions)
     #: After storing a scan, keep only this many of its source's scans.
-    keep_scans: Optional[int] = None
+    keep_scans: int | None = None
 
 
 def _history_options(args) -> HistoryOptions:
@@ -133,7 +133,7 @@ def _incremental_options(args) -> IncrementalOptions:
     ).clamped()
 
 
-def _load_resume(args) -> Optional[PartialReport]:
+def _load_resume(args) -> PartialReport | None:
     """The partial report ``--resume`` points at, or the newest one for ``--output``."""
     target = getattr(args, "resume", None)
     if target is None:
@@ -159,7 +159,7 @@ def machine_output(args) -> MachineOutput:
     )
 
 
-def _report_formats(args, machine: MachineOutput) -> List[str]:
+def _report_formats(args, machine: MachineOutput) -> list[str]:
     """Which report files this scan should write.
 
     An explicit ``--formats`` always stands. Without one a scan writes xlsx,
@@ -200,7 +200,7 @@ def _config_from_args(args) -> ScanConfig:
     ).clamped()
 
 
-def http_check_urls(args) -> List[str]:
+def http_check_urls(args) -> list[str]:
     return [url for url in (getattr(args, "http_check", None) or []) if url.strip()]
 
 
@@ -261,11 +261,11 @@ def _ensure_input_file(args) -> None:
 
 
 def _print_configuration(
-    sources: List[str],
+    sources: list[str],
     targets: int,
     config: ScanConfig,
     urls: Sequence[str] = (),
-    http: Optional[HttpCheckOptions] = None,
+    http: HttpCheckOptions | None = None,
 ) -> None:
     ping_word = "ping" if config.count == 1 else "pings"
     ui.blank()
@@ -306,12 +306,12 @@ def _print_configuration(
 
 
 def _scan_with_progress(
-    ip_list: List[str],
+    ip_list: list[str],
     config: ScanConfig,
     stream: StreamOptions,
-    report: Optional[IncrementalReport] = None,
-    machine: Optional[MachineStream] = None,
-) -> List[HostResult]:
+    report: IncrementalReport | None = None,
+    machine: MachineStream | None = None,
+) -> list[HostResult]:
     # The incremental report and the stdout stream take the same record(result)
     # call, so one callback can feed both.
     writers = [writer for writer in (report, machine) if writer is not None]
@@ -336,10 +336,10 @@ def _open_report(
     output: str,
     timestamp: str,
     batch_timestamp: datetime,
-    previous: List[HostResult],
+    previous: list[HostResult],
     previous_elapsed_s: float,
-    columns: Tuple[str, ...],
-) -> Optional[IncrementalReport]:
+    columns: tuple[str, ...],
+) -> IncrementalReport | None:
     """Start writing this pass's report, unless incremental writing is off."""
     if not incremental.enabled or not args.formats:
         return None
@@ -374,12 +374,12 @@ def _announce_partial(report: IncrementalReport) -> None:
 
 
 def _run_pass(
-    ip_list: List[str],
+    ip_list: list[str],
     config: ScanConfig,
     stream: StreamOptions,
-    report: Optional[IncrementalReport],
-    machine: Optional[MachineStream] = None,
-) -> List[HostResult]:
+    report: IncrementalReport | None,
+    machine: MachineStream | None = None,
+) -> list[HostResult]:
     """Scan every host, keeping the partial report if the pass is cut short."""
     if report is None:
         return _scan_with_progress(ip_list, config, stream, machine=machine)
@@ -400,7 +400,7 @@ def _run_single_pass(
     stream: StreamOptions,
     incremental: IncrementalOptions,
     machine: MachineOutput,
-    resume: Optional[PartialReport] = None,
+    resume: PartialReport | None = None,
 ) -> ScanOutcome:
     batch_timestamp = (resume and resume.batch_timestamp) or current_timestamp()
     timestamp = resume.timestamp if resume else timestamp_str()
@@ -443,7 +443,7 @@ def _run_single_pass(
     results = previous
     if scanned_hosts:
         results = previous + _run_pass(remaining, config, stream, report, machine_stream)
-    http_results: List[HttpCheckResult] = []
+    http_results: list[HttpCheckResult] = []
     if urls:
         # Within --threads, like the host probes, and after them, so the two
         # never compete for the same budget.
@@ -492,7 +492,7 @@ def _store_and_compare(
     options: HistoryOptions,
     config: ScanConfig,
     outcome: ScanOutcome,
-) -> Optional[int]:
+) -> int | None:
     if not options.enabled:
         if options.compare:
             ui.blank()
@@ -535,7 +535,7 @@ def _prune_history(history: HistoryService, keep: int, source: str) -> None:
         ui.note(f"Removed {ui.plural(deleted, 'older scan')} of {source} (--keep-scans {keep}).")
 
 
-def _prune_reports(args, outcome: "ScanOutcome") -> None:
+def _prune_reports(args, outcome: ScanOutcome) -> None:
     keep = getattr(args, "keep_reports", None)
     if not keep:
         return
@@ -555,8 +555,8 @@ def _scan_pass(
     machine: MachineOutput,
     history_options: HistoryOptions,
     health: HealthPolicy,
-    resume: Optional[PartialReport],
-) -> Optional[str]:
+    resume: PartialReport | None,
+) -> str | None:
     """Scan once, write the reports and history, and say why it failed --fail-on-down."""
     outcome = _run_single_pass(args, config, stream, incremental, machine, resume)
 

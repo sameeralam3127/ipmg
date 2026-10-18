@@ -20,9 +20,9 @@ import re
 import socket
 import ssl
 import time
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Iterable, List, Optional, Sequence, Tuple
 from urllib.parse import urljoin, urlsplit
 
 from ipmg import __version__
@@ -46,7 +46,7 @@ FAILURE_PROTOCOL = "protocol"
 FAILURE_REDIRECTS = "redirects"
 
 
-def parse_expect(text: str) -> Tuple[Tuple[int, int], ...]:
+def parse_expect(text: str) -> tuple[tuple[int, int], ...]:
     """``200-399``, ``200,204``, or ``200-299,401``: the status codes that count as success."""
     ranges = []
     for part in str(text).split(","):
@@ -65,7 +65,7 @@ def parse_expect(text: str) -> Tuple[Tuple[int, int], ...]:
     return tuple(ranges)
 
 
-def format_expect(ranges: Sequence[Tuple[int, int]]) -> str:
+def format_expect(ranges: Sequence[tuple[int, int]]) -> str:
     return ",".join(str(low) if low == high else f"{low}-{high}" for low, high in ranges)
 
 
@@ -73,11 +73,11 @@ def format_expect(ranges: Sequence[Tuple[int, int]]) -> str:
 class HttpCheckOptions:
     timeout_s: float = DEFAULT_HTTP_TIMEOUT_S
     method: str = "GET"
-    expect: Tuple[Tuple[int, int], ...] = ((200, 399),)
+    expect: tuple[tuple[int, int], ...] = ((200, 399),)
     follow_redirects: bool = True
     verify_tls: bool = True
 
-    def clamped(self) -> "HttpCheckOptions":
+    def clamped(self) -> HttpCheckOptions:
         return HttpCheckOptions(
             timeout_s=min(max(float(self.timeout_s), 0.1), 120.0),
             method=self.method.upper() if self.method.upper() in HTTP_METHODS else "GET",
@@ -96,8 +96,8 @@ class HttpCheckResult:
 
     url: str
     ok: bool
-    status_code: Optional[int] = None
-    response_ms: Optional[float] = None
+    status_code: int | None = None
+    response_ms: float | None = None
     #: Where redirects ended; the URL itself when there were none.
     final_url: str = ""
     #: One of the ``FAILURE_*`` kinds, or "" when the check passed.
@@ -133,7 +133,7 @@ def _tls_context(verify: bool) -> ssl.SSLContext:
     return context
 
 
-def _cert_expiry(sock: Optional[socket.socket]) -> str:
+def _cert_expiry(sock: socket.socket | None) -> str:
     if not isinstance(sock, ssl.SSLSocket):
         return ""
     cert = sock.getpeercert() or {}
@@ -147,7 +147,7 @@ def _cert_expiry(sock: Optional[socket.socket]) -> str:
     return datetime.fromtimestamp(seconds, tz=timezone.utc).date().isoformat()
 
 
-def _request_once(url: str, options: HttpCheckOptions, timeout_s: float) -> Tuple[int, str, str]:
+def _request_once(url: str, options: HttpCheckOptions, timeout_s: float) -> tuple[int, str, str]:
     """One request: (status, Location header, certificate expiry)."""
     parts = urlsplit(url)
     if parts.scheme not in ("http", "https") or not parts.hostname:
@@ -195,7 +195,7 @@ class _Progress:
     """Where a check has got to, so a failure can say how far it went."""
 
     url: str
-    status: Optional[int] = None
+    status: int | None = None
     expires: str = ""
 
 
@@ -204,7 +204,7 @@ def _follow(progress: _Progress, options: HttpCheckOptions, deadline: float) -> 
     for _hop in range(MAX_REDIRECTS + 1):
         remaining = deadline - time.perf_counter()
         if remaining <= 0:
-            raise socket.timeout("timed out")
+            raise TimeoutError("timed out")
         progress.status, location, progress.expires = _request_once(
             progress.url, options, remaining
         )
@@ -214,7 +214,7 @@ def _follow(progress: _Progress, options: HttpCheckOptions, deadline: float) -> 
     raise _Failed(FAILURE_REDIRECTS, f"more than {MAX_REDIRECTS} redirects")
 
 
-def _classify(exc: Exception, options: HttpCheckOptions) -> Tuple[str, str]:
+def _classify(exc: Exception, options: HttpCheckOptions) -> tuple[str, str]:
     """The failure kind and message for an exception a request raised."""
     if isinstance(exc, _Failed):
         return exc.failure, str(exc)
@@ -230,7 +230,7 @@ def _classify(exc: Exception, options: HttpCheckOptions) -> Tuple[str, str]:
     return FAILURE_CONNECT, _describe(exc)
 
 
-def check_url(url: str, options: Optional[HttpCheckOptions] = None) -> HttpCheckResult:
+def check_url(url: str, options: HttpCheckOptions | None = None) -> HttpCheckResult:
     """Request ``url`` and say how it went. Never raises: a failure is a result."""
     options = (options or HttpCheckOptions()).clamped()
     url = url.strip()
@@ -262,9 +262,9 @@ def check_url(url: str, options: Optional[HttpCheckOptions] = None) -> HttpCheck
 
 def run_http_checks(
     urls: Iterable[str],
-    options: Optional[HttpCheckOptions] = None,
+    options: HttpCheckOptions | None = None,
     max_workers: int = 50,
-) -> List[HttpCheckResult]:
+) -> list[HttpCheckResult]:
     """Check every URL concurrently (at most ``max_workers`` at once), in the order given."""
     urls = list(dict.fromkeys(url.strip() for url in urls if url and url.strip()))
     if not urls:

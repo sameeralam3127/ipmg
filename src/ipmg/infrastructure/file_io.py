@@ -8,9 +8,10 @@ import json
 import math
 import os
 from collections import Counter
+from collections.abc import Iterable, Sequence
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterable, List, Sequence
+from typing import Any
 
 from ipmg.core.ping import validate_ip
 from ipmg.exceptions import FileIOError
@@ -481,7 +482,7 @@ def _json_value(value: Any) -> Any:
 
 
 def _render_json(table: ReportTable) -> bytes:
-    records: List[dict] = [
+    records: list[dict] = [
         {column: _json_value(row.get(column)) for column in table.columns} for row in table.rows
     ]
     # Compact, ASCII-only, and with "/" escaped: byte for byte the old format.

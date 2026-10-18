@@ -14,10 +14,11 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+from collections.abc import Iterable, Sequence
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any
 
 from ipmg.core.diff import HostSnapshot, HttpSnapshot, ScanRef, ip_sort_key
 from ipmg.core.engine import HostResult
@@ -170,7 +171,7 @@ class Database:
 
     # ------------------------------------------------------------- scans
 
-    def create_scan(self, source: str, total: int, config: Dict[str, Any]) -> int:
+    def create_scan(self, source: str, total: int, config: dict[str, Any]) -> int:
         with self._session() as conn:
             cursor = conn.execute(
                 "INSERT INTO scans (started_at, source, total, config) VALUES (?, ?, ?, ?)",
@@ -238,7 +239,7 @@ class Database:
         self,
         source: str,
         results: Sequence[HostResult],
-        config: Dict[str, Any],
+        config: dict[str, Any],
         duration_s: float,
         status: str = "complete",
         http_checks: Sequence[Any] = (),
@@ -280,7 +281,7 @@ class Database:
             )
         return scan_id
 
-    def get_http_checks(self, scan_id: int) -> List[Dict[str, Any]]:
+    def get_http_checks(self, scan_id: int) -> list[dict[str, Any]]:
         """A scan's ``--http-check`` results, in the order they were checked."""
         with self._session() as conn:
             rows = conn.execute(
@@ -290,7 +291,7 @@ class Database:
             ).fetchall()
         return [{**dict(row), "ok": bool(row["ok"])} for row in rows]
 
-    def http_snapshot(self, scan_id: int) -> List[HttpSnapshot]:
+    def http_snapshot(self, scan_id: int) -> list[HttpSnapshot]:
         return [
             HttpSnapshot(
                 url=row["url"],
@@ -301,7 +302,7 @@ class Database:
             for row in self.get_http_checks(scan_id)
         ]
 
-    def interrupt_scans(self, error: str, scan_ids: Optional[Sequence[int]] = None) -> int:
+    def interrupt_scans(self, error: str, scan_ids: Sequence[int] | None = None) -> int:
         """Mark ``running`` scans as interrupted; all of them unless ``scan_ids`` is given.
 
         Returns how many were marked. Only rows still ``running`` change, so a
@@ -317,7 +318,7 @@ class Database:
                 for scan_id in scan_ids
             )
 
-    def get_scan(self, scan_id: int) -> Optional[Dict[str, Any]]:
+    def get_scan(self, scan_id: int) -> dict[str, Any] | None:
         with self._session() as conn:
             row = conn.execute("SELECT * FROM scans WHERE id = ?", (scan_id,)).fetchone()
             if row is None:
@@ -327,9 +328,9 @@ class Database:
             scan["avg_latency"] = self._avg_latency(conn, scan_id)
             return scan
 
-    def list_scans(self, limit: int = 50, source: Optional[str] = None) -> List[Dict[str, Any]]:
+    def list_scans(self, limit: int = 50, source: str | None = None) -> list[dict[str, Any]]:
         query = "SELECT * FROM scans"
-        params: List[Any] = []
+        params: list[Any] = []
         if source:
             query += " WHERE source = ?"
             params.append(source)
@@ -351,10 +352,10 @@ class Database:
             cursor = conn.execute("DELETE FROM scans WHERE id = ?", (scan_id,))
             return cursor.rowcount > 0
 
-    def scan_rows(self, source: Optional[str] = None) -> List[Dict[str, Any]]:
+    def scan_rows(self, source: str | None = None) -> list[dict[str, Any]]:
         """Every stored scan's own row (no aggregates), newest first."""
         query = "SELECT id, started_at, source, status, completed FROM scans"
-        params: List[Any] = []
+        params: list[Any] = []
         if source:
             query += " WHERE source = ?"
             params.append(source)
@@ -388,10 +389,10 @@ class Database:
 
     # ----------------------------------------------------------- history
 
-    def previous_scan_id(self, scan_id: int, source: Optional[str] = None) -> Optional[int]:
+    def previous_scan_id(self, scan_id: int, source: str | None = None) -> int | None:
         """Newest comparable scan recorded before ``scan_id``."""
         query = _PREVIOUS_SCAN_SQL
-        params: List[Any] = [scan_id, *COMPARABLE_STATUSES]
+        params: list[Any] = [scan_id, *COMPARABLE_STATUSES]
         if source:
             query += " AND source = ?"
             params.append(source)
@@ -401,10 +402,10 @@ class Database:
             row = conn.execute(query, params).fetchone()
         return int(row["id"]) if row else None
 
-    def latest_scan_ids(self, limit: int = 2, source: Optional[str] = None) -> List[int]:
+    def latest_scan_ids(self, limit: int = 2, source: str | None = None) -> list[int]:
         """IDs of the most recent comparable scans, newest first."""
         query = _LATEST_SCANS_SQL
-        params: List[Any] = list(COMPARABLE_STATUSES)
+        params: list[Any] = list(COMPARABLE_STATUSES)
         if source:
             query += " AND source = ?"
             params.append(source)
@@ -414,7 +415,7 @@ class Database:
         with self._session() as conn:
             return [int(row["id"]) for row in conn.execute(query, params).fetchall()]
 
-    def snapshot(self, scan_id: int) -> List[HostSnapshot]:
+    def snapshot(self, scan_id: int) -> list[HostSnapshot]:
         """Every host recorded by a scan, as comparison-ready snapshots."""
         with self._session() as conn:
             rows = conn.execute(
@@ -433,7 +434,7 @@ class Database:
             for row in rows
         ]
 
-    def scan_ref(self, scan_id: int) -> Optional[ScanRef]:
+    def scan_ref(self, scan_id: int) -> ScanRef | None:
         """Identifying metadata for a scan, or ``None`` when it does not exist."""
         with self._session() as conn:
             row = conn.execute(
@@ -453,14 +454,14 @@ class Database:
     def get_results(
         self,
         scan_id: int,
-        status: Optional[str] = None,
-        search: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+        status: str | None = None,
+        search: str | None = None,
+    ) -> list[dict[str, Any]]:
         query = (
             "SELECT ip, status, latency, hostname, open_ports, checked_at, method, mac, vendor "
             "FROM results WHERE scan_id = ?"
         )
-        params: List[Any] = [scan_id]
+        params: list[Any] = [scan_id]
         if status:
             query += " AND status = ?"
             params.append(status)
@@ -476,7 +477,7 @@ class Database:
         with self._session() as conn:
             return [dict(row) for row in conn.execute(query, params).fetchall()]
 
-    def latest_completed_scans(self, limit: int) -> Tuple[List[Dict[str, Any]], int]:
+    def latest_completed_scans(self, limit: int) -> tuple[list[dict[str, Any]], int]:
         """The newest completed scan of each source, most recent source first.
 
         Returns at most ``limit`` scans, each with a ``completed_count`` of the
@@ -494,7 +495,7 @@ class Database:
 
     # ------------------------------------------------------- aggregates
 
-    def overview(self) -> Dict[str, Any]:
+    def overview(self) -> dict[str, Any]:
         with self._session() as conn:
             scan_count = conn.execute("SELECT COUNT(*) FROM scans").fetchone()[0]
             host_count = conn.execute("SELECT COUNT(DISTINCT ip) FROM results").fetchone()[0]
@@ -530,7 +531,7 @@ class Database:
                 "trend": [dict(row) for row in reversed(trend_rows)],
             }
 
-    def inventory(self) -> List[Dict[str, Any]]:
+    def inventory(self) -> list[dict[str, Any]]:
         query = (
             "SELECT r.ip, "
             "  (SELECT r2.hostname FROM results r2 "
@@ -563,10 +564,10 @@ class Database:
         self,
         name: str,
         targets: str,
-        config: Dict[str, Any],
-        interval_minutes: Optional[int],
-        cron: Optional[str],
-        next_run_at: Optional[str],
+        config: dict[str, Any],
+        interval_minutes: int | None,
+        cron: str | None,
+        next_run_at: str | None,
         paused: bool = False,
     ) -> int:
         with self._session() as conn:
@@ -586,17 +587,17 @@ class Database:
             )
             return int(cursor.lastrowid)
 
-    def list_schedules(self) -> List[Dict[str, Any]]:
+    def list_schedules(self) -> list[dict[str, Any]]:
         with self._session() as conn:
             rows = conn.execute(_SCHEDULE_SQL + " ORDER BY sc.id").fetchall()
         return [self._schedule_dict(row) for row in rows]
 
-    def get_schedule(self, schedule_id: int) -> Optional[Dict[str, Any]]:
+    def get_schedule(self, schedule_id: int) -> dict[str, Any] | None:
         with self._session() as conn:
             row = conn.execute(_SCHEDULE_SQL + " WHERE sc.id = ?", (schedule_id,)).fetchone()
         return self._schedule_dict(row) if row is not None else None
 
-    def due_schedules(self, now: str) -> List[Dict[str, Any]]:
+    def due_schedules(self, now: str) -> list[dict[str, Any]]:
         """Schedules that are not paused and whose next run is at or before ``now``."""
         with self._session() as conn:
             rows = conn.execute(
@@ -606,9 +607,7 @@ class Database:
             ).fetchall()
         return [self._schedule_dict(row) for row in rows]
 
-    def set_schedule_paused(
-        self, schedule_id: int, paused: bool, next_run_at: Optional[str]
-    ) -> bool:
+    def set_schedule_paused(self, schedule_id: int, paused: bool, next_run_at: str | None) -> bool:
         with self._session() as conn:
             cursor = conn.execute(
                 "UPDATE schedules SET paused = ?, next_run_at = ? WHERE id = ?",
@@ -617,7 +616,7 @@ class Database:
             return cursor.rowcount > 0
 
     def record_schedule_run(
-        self, schedule_id: int, ran_at: str, scan_id: int, next_run_at: Optional[str]
+        self, schedule_id: int, ran_at: str, scan_id: int, next_run_at: str | None
     ) -> None:
         with self._session() as conn:
             conn.execute(
@@ -627,7 +626,7 @@ class Database:
             )
 
     def record_schedule_skip(
-        self, schedule_id: int, skipped_at: str, reason: str, next_run_at: Optional[str]
+        self, schedule_id: int, skipped_at: str, reason: str, next_run_at: str | None
     ) -> None:
         with self._session() as conn:
             conn.execute(
@@ -645,20 +644,20 @@ class Database:
     # ------------------------------------------------------------ helpers
 
     @staticmethod
-    def _schedule_dict(row: sqlite3.Row) -> Dict[str, Any]:
+    def _schedule_dict(row: sqlite3.Row) -> dict[str, Any]:
         schedule = dict(row)
         schedule["config"] = json.loads(schedule.get("config") or "{}")
         schedule["paused"] = bool(schedule["paused"])
         return schedule
 
     @staticmethod
-    def _scan_dict(row: sqlite3.Row) -> Dict[str, Any]:
+    def _scan_dict(row: sqlite3.Row) -> dict[str, Any]:
         scan = dict(row)
         scan["config"] = json.loads(scan.get("config") or "{}")
         return scan
 
     @staticmethod
-    def _status_counts(conn: sqlite3.Connection, scan_id: int) -> Dict[str, int]:
+    def _status_counts(conn: sqlite3.Connection, scan_id: int) -> dict[str, int]:
         rows = conn.execute(
             "SELECT status, COUNT(*) AS count FROM results WHERE scan_id = ? GROUP BY status",
             (scan_id,),
@@ -666,7 +665,7 @@ class Database:
         return {row["status"]: row["count"] for row in rows}
 
     @staticmethod
-    def _avg_latency(conn: sqlite3.Connection, scan_id: int) -> Optional[float]:
+    def _avg_latency(conn: sqlite3.Connection, scan_id: int) -> float | None:
         value = conn.execute(
             "SELECT AVG(latency) FROM results WHERE scan_id = ? AND status = 'Active'",
             (scan_id,),

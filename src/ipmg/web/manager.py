@@ -7,7 +7,7 @@ import logging
 import threading
 import time
 from dataclasses import asdict
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 from ipmg.core.engine import HostResult, ScanConfig, execute_scan
 from ipmg.web.db import Database
@@ -48,7 +48,7 @@ class ResultWriter:
     def __init__(self, db: Database, scan_id: int) -> None:
         self._db = db
         self._scan_id = scan_id
-        self._pending: List[HostResult] = []
+        self._pending: list[HostResult] = []
         self._lock = threading.Lock()
         # Held across each write, so batches are stored in arrival order.
         self._write_lock = threading.Lock()
@@ -122,10 +122,10 @@ class ScanManager:
     def __init__(self, db: Database, max_scans: int = DEFAULT_MAX_SCANS) -> None:
         self._db = db
         self.max_scans = max(max_scans, 1)
-        self._loop: Optional[asyncio.AbstractEventLoop] = None
-        self._subscribers: Set[asyncio.Queue] = set()
-        self._stops: Dict[int, threading.Event] = {}
-        self._threads: Dict[int, threading.Thread] = {}
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._subscribers: set[asyncio.Queue] = set()
+        self._stops: dict[int, threading.Event] = {}
+        self._threads: dict[int, threading.Thread] = {}
         self._lock = threading.Lock()
         # Held from the limit check until the new scan is registered, so two
         # requests arriving together cannot both take the last slot.
@@ -146,7 +146,7 @@ class ScanManager:
         with self._lock:
             self._subscribers.discard(queue)
 
-    def _broadcast(self, event: Dict[str, Any]) -> None:
+    def _broadcast(self, event: dict[str, Any]) -> None:
         loop = self._loop
         if loop is None or loop.is_closed():
             return
@@ -155,7 +155,7 @@ class ScanManager:
         for queue in queues:
             loop.call_soon_threadsafe(self._offer, queue, event)
 
-    def _offer(self, queue: asyncio.Queue, event: Dict[str, Any]) -> None:
+    def _offer(self, queue: asyncio.Queue, event: dict[str, Any]) -> None:
         """Queue an event for one subscriber; runs on the event loop."""
         with self._lock:
             if queue not in self._subscribers:
@@ -171,7 +171,7 @@ class ScanManager:
 
     # -------------------------------------------------------------- scans
 
-    def start_scan(self, ips: List[str], config: ScanConfig, source: str) -> int:
+    def start_scan(self, ips: list[str], config: ScanConfig, source: str) -> int:
         """Start a scan in the background and return its id.
 
         Raises :class:`ScanLimitError`, before anything is stored, when
@@ -244,7 +244,7 @@ class ScanManager:
     def _run(
         self,
         scan_id: int,
-        ips: List[str],
+        ips: list[str],
         config: ScanConfig,
         stop: threading.Event,
     ) -> None:

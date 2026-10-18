@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import concurrent.futures
 import time
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
-from typing import Callable, Iterable, List, Optional, Tuple
 
 from ipmg.core.neighbours import NeighbourCache, mac_and_vendor
 from ipmg.core.ping import ping_ip, validate_ip
@@ -35,7 +35,7 @@ class ScanConfig:
     resolve: bool = False
     dns_cache_ttl: int = 300
     scan_ports: bool = False
-    ports: Tuple[int, ...] = DEFAULT_PORTS
+    ports: tuple[int, ...] = DEFAULT_PORTS
     port_timeout: float = 1.0
     dns_timeout: float = DEFAULT_DNS_TIMEOUT_S
     #: Skip the PTR lookup for hosts that did not answer.
@@ -49,7 +49,7 @@ class ScanConfig:
     def uses_tcp_probe(self) -> bool:
         return "tcp" in self.probe.split(",")
 
-    def clamped(self) -> "ScanConfig":
+    def clamped(self) -> ScanConfig:
         return ScanConfig(
             timeout=clamp_int(self.timeout, 1, 60),
             count=clamp_int(self.count, 1, 10),
@@ -70,9 +70,9 @@ class ScanConfig:
 class HostResult:
     ip: str
     status: str
-    latency: Optional[float]
+    latency: float | None
     hostname: str = ""
-    open_ports: Tuple[int, ...] = field(default_factory=tuple)
+    open_ports: tuple[int, ...] = field(default_factory=tuple)
     #: Which probe found the host ("icmp" or "tcp"); set only when a scan
     #: uses TCP probing, and only for hosts that answered.
     method: str = ""
@@ -87,9 +87,9 @@ ResultCallback = Callable[[HostResult, int, int], None]
 def execute_scan(
     ip_list: Iterable[str],
     config: ScanConfig,
-    on_result: Optional[ResultCallback] = None,
-    should_stop: Optional[Callable[[], bool]] = None,
-) -> List[HostResult]:
+    on_result: ResultCallback | None = None,
+    should_stop: Callable[[], bool] | None = None,
+) -> list[HostResult]:
     """Ping every target concurrently and return one result per host.
 
     ``on_result`` is invoked from the calling thread as each host finishes,
@@ -106,9 +106,9 @@ def execute_scan(
         else None
     )
     neighbours = NeighbourCache() if config.mac_lookup else None
-    results: List[HostResult] = []
+    results: list[HostResult] = []
 
-    port_executor: Optional[concurrent.futures.ThreadPoolExecutor] = None
+    port_executor: concurrent.futures.ThreadPoolExecutor | None = None
     if (config.scan_ports or config.uses_tcp_probe) and config.ports:
         port_executor = concurrent.futures.ThreadPoolExecutor(
             max_workers=min(MAX_PORT_PROBE_WORKERS, config.threads * len(config.ports)),
@@ -156,9 +156,9 @@ def execute_scan(
 def _probe_host(
     ip: str,
     config: ScanConfig,
-    cache: Optional[HostnameCache],
-    port_executor: Optional[concurrent.futures.Executor],
-    neighbours: Optional[NeighbourCache] = None,
+    cache: HostnameCache | None,
+    port_executor: concurrent.futures.Executor | None,
+    neighbours: NeighbourCache | None = None,
 ) -> HostResult:
     """Probe one host, then resolve its name and MAC, and probe its ports.
 
@@ -174,7 +174,7 @@ def _probe_host(
 
     resolve = cache is not None and (status == "Active" or not config.resolve_active_only)
     hostname = cache.resolve(ip) if resolve else ""
-    open_ports: Tuple[int, ...] = ()
+    open_ports: tuple[int, ...] = ()
     if config.scan_ports and status == "Active":
         open_ports = tuple(
             scan_ports(ip, config.ports, config.port_timeout, executor=port_executor)
@@ -195,8 +195,8 @@ def _probe_host(
 def _reachability(
     ip: str,
     config: ScanConfig,
-    port_executor: Optional[concurrent.futures.Executor],
-) -> Tuple[str, Optional[float], str]:
+    port_executor: concurrent.futures.Executor | None,
+) -> tuple[str, float | None, str]:
     """Status, latency, and the method that found the host, per ``config.probe``."""
     methods = config.probe.split(",")
     # Only a scan that can use more than one method says which one answered.

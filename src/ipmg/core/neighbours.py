@@ -22,8 +22,8 @@ import platform
 import re
 import threading
 import time
+from collections.abc import Callable
 from importlib import resources
-from typing import Callable, Dict, Optional, Tuple
 
 from ipmg.core import discovery
 
@@ -72,9 +72,9 @@ def _key(ip: str, zone: str = "") -> str:
     return ip
 
 
-def parse_ip_neigh(output: str) -> Dict[str, str]:
+def parse_ip_neigh(output: str) -> dict[str, str]:
     """Linux ``ip neigh show``: ``10.0.0.1 dev eth0 lladdr 52:54:00:12:34:56 REACHABLE``."""
-    table: Dict[str, str] = {}
+    table: dict[str, str] = {}
     for line in output.splitlines():
         fields = line.split()
         if len(fields) < 4 or "lladdr" not in fields or fields[-1].lower() in _DEAD_STATES:
@@ -86,9 +86,9 @@ def parse_ip_neigh(output: str) -> Dict[str, str]:
     return table
 
 
-def parse_proc_arp(text: str) -> Dict[str, str]:
+def parse_proc_arp(text: str) -> dict[str, str]:
     """Linux ``/proc/net/arp``, for systems without ``ip``; flags 0x0 is incomplete."""
-    table: Dict[str, str] = {}
+    table: dict[str, str] = {}
     for line in text.splitlines()[1:]:
         fields = line.split()
         if len(fields) < 4 or fields[2] == "0x0":
@@ -102,9 +102,9 @@ def parse_proc_arp(text: str) -> Dict[str, str]:
 _BSD_ARP = re.compile(r"\((?P<ip>[0-9.]+)\) at (?P<mac>\S+)(?: on (?P<dev>\S+))?")
 
 
-def parse_arp_an(output: str) -> Dict[str, str]:
+def parse_arp_an(output: str) -> dict[str, str]:
     """macOS/BSD ``arp -an``: ``? (10.0.0.1) at 52:54:0:12:34:56 on en0 ifscope [ethernet]``."""
-    table: Dict[str, str] = {}
+    table: dict[str, str] = {}
     for line in output.splitlines():
         match = _BSD_ARP.search(line)
         if match is None:
@@ -115,9 +115,9 @@ def parse_arp_an(output: str) -> Dict[str, str]:
     return table
 
 
-def parse_ndp_an(output: str) -> Dict[str, str]:
+def parse_ndp_an(output: str) -> dict[str, str]:
     """macOS/BSD ``ndp -an``: ``fe80::1%en0  aa:bb:cc:dd:ee:ff  en0  23h59m  S R``."""
-    table: Dict[str, str] = {}
+    table: dict[str, str] = {}
     for line in output.splitlines():
         fields = line.split()
         if len(fields) < 3 or ":" not in fields[0]:
@@ -132,9 +132,9 @@ _WINDOWS_ARP = re.compile(r"^\s*(?P<ip>[0-9.]+)\s+(?P<mac>[0-9a-fA-F-]{17})\s+\S
 _WINDOWS_INTERFACE = re.compile(r"^\S.*?\s(\d+):")
 
 
-def parse_windows_arp(output: str) -> Dict[str, str]:
+def parse_windows_arp(output: str) -> dict[str, str]:
     """``arp -a``: ``  10.0.0.1           52-54-00-12-34-56     dynamic``."""
-    table: Dict[str, str] = {}
+    table: dict[str, str] = {}
     for line in output.splitlines():
         match = _WINDOWS_ARP.match(line)
         if match is None:
@@ -145,9 +145,9 @@ def parse_windows_arp(output: str) -> Dict[str, str]:
     return table
 
 
-def parse_windows_neighbors(output: str) -> Dict[str, str]:
+def parse_windows_neighbors(output: str) -> dict[str, str]:
     """``netsh interface ipv6 show neighbors``, one table per ``Interface 12: ...``."""
-    table: Dict[str, str] = {}
+    table: dict[str, str] = {}
     zone = ""
     for line in output.splitlines():
         header = _WINDOWS_INTERFACE.match(line)
@@ -175,7 +175,7 @@ def _read_proc_arp() -> str:
         return ""
 
 
-def read_neighbour_table(system: Optional[str] = None) -> Dict[str, str]:
+def read_neighbour_table(system: str | None = None) -> dict[str, str]:
     """The OS neighbour table as IP -> MAC, for IPv4 and IPv6."""
     system = (system or platform.system()).lower()
     if system == "linux":
@@ -207,17 +207,17 @@ class NeighbourCache:
 
     def __init__(
         self,
-        reader: Optional[Callable[[], Dict[str, str]]] = None,
+        reader: Callable[[], dict[str, str]] | None = None,
         min_interval_s: float = 0.25,
     ) -> None:
         self._reader = reader or read_neighbour_table
         self._min_interval_s = min_interval_s
-        self._table: Dict[str, str] = {}
+        self._table: dict[str, str] = {}
         self._read_at = float("-inf")
         self._reading = False
         self._condition = threading.Condition()
 
-    def lookup(self, ip: str, answered_at: Optional[float] = None) -> str:
+    def lookup(self, ip: str, answered_at: float | None = None) -> str:
         """The MAC of ``ip``, or "" when the table has none for it."""
         answered_at = time.perf_counter() if answered_at is None else answered_at
         with self._condition:
@@ -251,15 +251,15 @@ class NeighbourCache:
 
 # ----------------------------------------------------------------- vendors
 
-_vendors: Optional[Dict[str, str]] = None
+_vendors: dict[str, str] | None = None
 _vendors_lock = threading.Lock()
 
 
-def _load_vendors() -> Dict[str, str]:
+def _load_vendors() -> dict[str, str]:
     global _vendors
     with _vendors_lock:
         if _vendors is None:
-            vendors: Dict[str, str] = {}
+            vendors: dict[str, str] = {}
             try:
                 data = resources.files("ipmg").joinpath("data/oui.tsv.gz").read_bytes()
                 for line in gzip.decompress(data).decode("utf-8").splitlines():
@@ -293,6 +293,6 @@ def vendor_for(mac: str) -> str:
     return ""
 
 
-def mac_and_vendor(cache: NeighbourCache, ip: str, answered_at: float) -> Tuple[str, str]:
+def mac_and_vendor(cache: NeighbourCache, ip: str, answered_at: float) -> tuple[str, str]:
     mac = cache.lookup(ip, answered_at)
     return mac, (vendor_for(mac) if mac else "")

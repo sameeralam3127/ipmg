@@ -22,8 +22,8 @@ from __future__ import annotations
 import json
 import sys
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Dict, Optional, Sequence, Tuple
 
 from ipmg.core.engine import HostResult
 from ipmg.infrastructure.incremental import jsonl_record, result_row
@@ -56,12 +56,12 @@ class MachineStream:
     def __init__(
         self,
         batch_timestamp: object,
-        previous: Optional[Sequence[HostResult]] = None,
+        previous: Sequence[HostResult] | None = None,
         previous_elapsed_s: float = 0.0,
         columns: Sequence[str] = tuple(RESULT_COLUMNS),
     ) -> None:
         self._batch_timestamp = batch_timestamp
-        self._columns: Tuple[str, ...] = tuple(columns)
+        self._columns: tuple[str, ...] = tuple(columns)
         self._started_at = time.monotonic() - previous_elapsed_s
         for result in previous or ():
             self._write(result_row(result, batch_timestamp, previous_elapsed_s, self._columns))
@@ -71,7 +71,7 @@ class MachineStream:
         self._write(result_row(result, self._batch_timestamp, elapsed_s, self._columns))
 
     @staticmethod
-    def _write(row: Dict[str, object]) -> None:
+    def _write(row: dict[str, object]) -> None:
         # Flushed per host: whoever is reading the pipe should see a result as
         # soon as it lands, not when the buffer happens to fill.
         sys.stdout.write(jsonl_record(row))

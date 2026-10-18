@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from collections import Counter
-from typing import Any, Dict, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 from rich.text import Text
 
@@ -125,13 +126,13 @@ def _short_timestamp(value: Any) -> str:
     return text[:16] if len(text) == 19 and text[13] == ":" else text
 
 
-def _active_rate(scan: Dict[str, Any]) -> str:
+def _active_rate(scan: dict[str, Any]) -> str:
     total = scan.get("total") or 0
     active = (scan.get("status_counts") or {}).get("Active", 0)
     return ui.format_percent((active / total) * 100) if total else "-"
 
 
-def print_scan_history(scans: Sequence[Dict[str, Any]]) -> None:
+def print_scan_history(scans: Sequence[dict[str, Any]]) -> None:
     """Render stored scans, newest first."""
     ui.blank()
     ui.heading("Scan history")

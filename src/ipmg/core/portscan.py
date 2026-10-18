@@ -6,10 +6,10 @@ import concurrent.futures
 import errno
 import socket
 import time
-from typing import Iterable, List, Optional, Tuple
+from collections.abc import Iterable
 
 #: Common services worth a quick TCP connect once a host is known to be up.
-DEFAULT_PORTS: Tuple[int, ...] = (21, 22, 25, 53, 80, 443, 445, 1433, 3306, 3389, 5432)
+DEFAULT_PORTS: tuple[int, ...] = (21, 22, 25, 53, 80, 443, 445, 1433, 3306, 3389, 5432)
 
 PORT_SERVICES = {
     21: "FTP",
@@ -56,7 +56,7 @@ UNREACHABLE = "unreachable"
 FAILED = "error"
 
 
-def connect(ip: str, port: int, timeout: float) -> Tuple[str, Optional[float]]:
+def connect(ip: str, port: int, timeout: float) -> tuple[str, float | None]:
     """Try one TCP connection; returns the outcome and, if it answered, the time in ms.
 
     An accepted connection and a refused one (a TCP reset) both mean the
@@ -72,7 +72,7 @@ def connect(ip: str, port: int, timeout: float) -> Tuple[str, Optional[float]]:
             started = time.perf_counter()
             code = sock.connect_ex(address)
             elapsed_ms = round((time.perf_counter() - started) * 1000, 3)
-    except socket.timeout:
+    except TimeoutError:
         return TIMED_OUT, None
     except OSError:
         return FAILED, None
@@ -96,8 +96,8 @@ def tcp_probe(
     ip: str,
     ports: Iterable[int],
     timeout: float = 1.0,
-    executor: Optional[concurrent.futures.Executor] = None,
-) -> Tuple[str, Optional[float]]:
+    executor: concurrent.futures.Executor | None = None,
+) -> tuple[str, float | None]:
     """Whether ``ip`` answers a TCP connection on any of ``ports``.
 
     Returns ``("Active", ms)`` as soon as one port accepts or refuses a
@@ -130,16 +130,16 @@ def encode_ports(ports: Iterable[int]) -> str:
     return ",".join(str(port) for port in ports)
 
 
-def decode_ports(value: str) -> Tuple[int, ...]:
+def decode_ports(value: str) -> tuple[int, ...]:
     """Inverse of :func:`encode_ports`."""
     if not value:
         return ()
     return tuple(int(part) for part in value.split(",") if part.strip())
 
 
-def parse_port_list(value: str) -> Tuple[int, ...]:
+def parse_port_list(value: str) -> tuple[int, ...]:
     """Parse a comma-separated port list (e.g. ``"22,80,443"``), validating each entry."""
-    ports: List[int] = []
+    ports: list[int] = []
     for part in value.split(","):
         part = part.strip()
         if not part:
@@ -157,8 +157,8 @@ def scan_ports(
     ip: str,
     ports: Iterable[int],
     timeout: float = 1.0,
-    executor: Optional[concurrent.futures.Executor] = None,
-) -> List[int]:
+    executor: concurrent.futures.Executor | None = None,
+) -> list[int]:
     """Probe ``ports`` on ``ip`` concurrently; return the ones that accepted a connection.
 
     Pass ``executor`` to share one bounded pool across many hosts; otherwise a

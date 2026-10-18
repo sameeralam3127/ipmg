@@ -8,9 +8,10 @@ the console, so it can be reused by the CLI, the web API and the tests alike.
 from __future__ import annotations
 
 import ipaddress
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
+from typing import Any
 
 #: Statuses that mean the host answered the probe.
 REACHABLE_STATUSES = frozenset({"Active"})
@@ -48,7 +49,7 @@ class Severity(str, Enum):
     INFO = "info"
 
 
-_SEVERITY_BY_TYPE: Dict[ChangeType, Severity] = {
+_SEVERITY_BY_TYPE: dict[ChangeType, Severity] = {
     ChangeType.HOST_OFFLINE: Severity.CRITICAL,
     ChangeType.IP_CHANGED: Severity.WARNING,
     ChangeType.NEW_HOST: Severity.WARNING,
@@ -73,7 +74,7 @@ def meets_severity(severity: Severity, minimum: Severity) -> bool:
 
 _TYPE_RANK = {change_type: index for index, change_type in enumerate(ChangeType)}
 
-CHANGE_LABELS: Dict[ChangeType, str] = {
+CHANGE_LABELS: dict[ChangeType, str] = {
     ChangeType.NEW_HOST: "New host",
     ChangeType.HOST_REMOVED: "Host removed",
     ChangeType.HOST_OFFLINE: "Host offline",
@@ -97,7 +98,7 @@ class HostSnapshot:
 
     ip: str
     status: str
-    latency: Optional[float] = None
+    latency: float | None = None
     hostname: str = ""
     #: Known only for scans run with ``--mac``.
     mac: str = ""
@@ -113,7 +114,7 @@ class HttpSnapshot:
 
     url: str
     ok: bool
-    status_code: Optional[int] = None
+    status_code: int | None = None
     failure: str = ""
 
     @property
@@ -128,7 +129,7 @@ class HttpSnapshot:
 class ScanRef:
     """Identifying metadata for one side of a comparison."""
 
-    id: Optional[int] = None
+    id: int | None = None
     label: str = ""
     started_at: str = ""
     source: str = ""
@@ -143,7 +144,7 @@ class ScanRef:
             parts.append(self.source)
         return f" {separator} ".join(part for part in parts if part)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "label": self.label or self.display(),
@@ -164,7 +165,7 @@ class DiffOptions:
     latency_pct: float = 25.0
     include_unresolved_hostnames: bool = False
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "latency_abs_ms": self.latency_abs_ms,
             "latency_pct": self.latency_pct,
@@ -179,9 +180,9 @@ class HostChange:
     type: ChangeType
     ip: str
     hostname: str = ""
-    previous: Optional[str] = None
-    current: Optional[str] = None
-    delta: Optional[float] = None
+    previous: str | None = None
+    current: str | None = None
+    delta: float | None = None
 
     @property
     def severity(self) -> Severity:
@@ -200,7 +201,7 @@ class HostChange:
             return f"{self.label}: was {self.previous}"
         return f"{self.label}: {self.previous} -> {self.current}"
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "type": self.type.value,
             "label": self.label,
@@ -220,7 +221,7 @@ class ScanDiff:
 
     baseline: ScanRef
     current: ScanRef
-    changes: Tuple[HostChange, ...] = ()
+    changes: tuple[HostChange, ...] = ()
     baseline_hosts: int = 0
     current_hosts: int = 0
     compared_hosts: int = 0
@@ -231,15 +232,15 @@ class ScanDiff:
         return bool(self.changes)
 
     @property
-    def counts(self) -> Dict[str, int]:
-        counts: Dict[str, int] = {}
+    def counts(self) -> dict[str, int]:
+        counts: dict[str, int] = {}
         for change in self.changes:
             counts[change.type.value] = counts.get(change.type.value, 0) + 1
         return counts
 
     @property
-    def severity_counts(self) -> Dict[str, int]:
-        counts: Dict[str, int] = {}
+    def severity_counts(self) -> dict[str, int]:
+        counts: dict[str, int] = {}
         for change in self.changes:
             counts[change.severity.value] = counts.get(change.severity.value, 0) + 1
         return counts
@@ -258,10 +259,10 @@ class ScanDiff:
         }
         return max(self.compared_hosts - len(changed_in_both), 0)
 
-    def of_type(self, change_type: ChangeType) -> List[HostChange]:
+    def of_type(self, change_type: ChangeType) -> list[HostChange]:
         return [change for change in self.changes if change.type is change_type]
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "baseline": self.baseline.to_dict(),
             "current": self.current.to_dict(),
@@ -283,14 +284,14 @@ class ScanDiff:
 # --------------------------------------------------------------------- helpers
 
 
-def _index_by_ip(snapshots: Iterable[HostSnapshot]) -> Dict[str, HostSnapshot]:
+def _index_by_ip(snapshots: Iterable[HostSnapshot]) -> dict[str, HostSnapshot]:
     """Map IP -> snapshot, keeping the last observation for duplicate IPs."""
     return {snapshot.ip: snapshot for snapshot in snapshots}
 
 
-def _index_by_hostname(snapshots: Mapping[str, HostSnapshot]) -> Dict[str, Set[str]]:
+def _index_by_hostname(snapshots: Mapping[str, HostSnapshot]) -> dict[str, set[str]]:
     """Map hostname -> set of IPs that resolved to it."""
-    index: Dict[str, Set[str]] = {}
+    index: dict[str, set[str]] = {}
     for snapshot in snapshots.values():
         hostname = (snapshot.hostname or "").strip().lower()
         if not hostname or hostname == "unresolvable":
@@ -299,9 +300,9 @@ def _index_by_hostname(snapshots: Mapping[str, HostSnapshot]) -> Dict[str, Set[s
     return index
 
 
-def _index_by_mac(snapshots: Mapping[str, HostSnapshot]) -> Dict[str, Set[str]]:
+def _index_by_mac(snapshots: Mapping[str, HostSnapshot]) -> dict[str, set[str]]:
     """Map MAC -> set of IPs it answered at. A device keeps its MAC when DHCP moves it."""
-    index: Dict[str, Set[str]] = {}
+    index: dict[str, set[str]] = {}
     for snapshot in snapshots.values():
         mac = (snapshot.mac or "").strip().upper()
         if mac:
@@ -309,7 +310,7 @@ def _index_by_mac(snapshots: Mapping[str, HostSnapshot]) -> Dict[str, Set[str]]:
     return index
 
 
-def ip_sort_key(value: str) -> Tuple[int, int, int, str]:
+def ip_sort_key(value: str) -> tuple[int, int, int, str]:
     """Sort key: IPv4 in numeric order, then IPv6, then anything unparsable.
 
     The family comes before the number, or ``::1`` (the integer 1) would sort
@@ -322,7 +323,7 @@ def ip_sort_key(value: str) -> Tuple[int, int, int, str]:
     return (0, address.version, int(address), value)
 
 
-def _sort_changes(changes: Sequence[HostChange]) -> Tuple[HostChange, ...]:
+def _sort_changes(changes: Sequence[HostChange]) -> tuple[HostChange, ...]:
     return tuple(
         sorted(
             changes,
@@ -341,7 +342,7 @@ def _latency_change(
     before: HostSnapshot,
     after: HostSnapshot,
     options: DiffOptions,
-) -> Optional[HostChange]:
+) -> HostChange | None:
     if before.latency is None or after.latency is None:
         return None
     if not (before.reachable and after.reachable):
@@ -364,18 +365,18 @@ def _latency_change(
 
 
 def _detect_ip_moves(
-    baseline_hostnames: Mapping[str, Set[str]],
-    current_hostnames: Mapping[str, Set[str]],
+    baseline_hostnames: Mapping[str, set[str]],
+    current_hostnames: Mapping[str, set[str]],
     current_by_ip: Mapping[str, HostSnapshot],
-) -> Tuple[List[HostChange], Set[str], Set[str]]:
+) -> tuple[list[HostChange], set[str], set[str]]:
     """Find hostnames that moved to a different IP.
 
     Returns the changes plus the sets of IPs that should therefore *not* be
     reported as brand new or removed hosts — they are the two ends of a move.
     """
-    changes: List[HostChange] = []
-    moved_to: Set[str] = set()
-    moved_from: Set[str] = set()
+    changes: list[HostChange] = []
+    moved_to: set[str] = set()
+    moved_from: set[str] = set()
 
     for hostname, current_ips in current_hostnames.items():
         baseline_ips = baseline_hostnames.get(hostname)
@@ -410,8 +411,8 @@ def _compare_common_host(
     before: HostSnapshot,
     after: HostSnapshot,
     options: DiffOptions,
-) -> List[HostChange]:
-    changes: List[HostChange] = []
+) -> list[HostChange]:
+    changes: list[HostChange] = []
     hostname = after.hostname or before.hostname
 
     if before.status != after.status:
@@ -467,11 +468,11 @@ def _compare_common_host(
 
 def _compare_http(
     baseline: Iterable[HttpSnapshot], current: Iterable[HttpSnapshot]
-) -> List[HostChange]:
+) -> list[HostChange]:
     """Changes in URLs both scans checked. A URL only one of them checked says
     nothing about the service, so it is not reported."""
     before = {check.url: check for check in baseline}
-    changes: List[HostChange] = []
+    changes: list[HostChange] = []
     for after in current:
         previous = before.get(after.url)
         if previous is None:
@@ -496,9 +497,9 @@ def _compare_http(
 def compare_snapshots(
     baseline: Iterable[HostSnapshot],
     current: Iterable[HostSnapshot],
-    options: Optional[DiffOptions] = None,
-    baseline_ref: Optional[ScanRef] = None,
-    current_ref: Optional[ScanRef] = None,
+    options: DiffOptions | None = None,
+    baseline_ref: ScanRef | None = None,
+    current_ref: ScanRef | None = None,
     baseline_http: Iterable[HttpSnapshot] = (),
     current_http: Iterable[HttpSnapshot] = (),
 ) -> ScanDiff:
@@ -520,7 +521,7 @@ def compare_snapshots(
     ip_changes += [change for change in mac_changes if change.ip not in moved_to]
     moved_to |= mac_to
     moved_from |= mac_from
-    changes: List[HostChange] = list(ip_changes)
+    changes: list[HostChange] = list(ip_changes)
 
     for ip in after_by_ip.keys() - before_by_ip.keys():
         if ip in moved_to:

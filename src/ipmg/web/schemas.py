@@ -9,7 +9,7 @@ generated schema with the committed snapshot so a change is never accidental.
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Dict, List, Literal, Optional, Union
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, TypeAdapter
 
@@ -22,7 +22,7 @@ class ApiModel(BaseModel):
 
 
 class ValidationIssue(ApiModel):
-    loc: List[Union[str, int]] = Field(description="Where the problem is, e.g. ['body', 'threads']")
+    loc: list[str | int] = Field(description="Where the problem is, e.g. ['body', 'threads']")
     msg: str = Field(description="Human-readable message")
     type: str = Field(description="Machine-readable error type")
 
@@ -31,7 +31,7 @@ class ErrorResponse(ApiModel):
     """The body of every 4xx/5xx response from ``/api/v1``."""
 
     detail: str = Field(description="Human-readable description of the problem")
-    errors: Optional[List[ValidationIssue]] = Field(
+    errors: list[ValidationIssue] | None = Field(
         default=None, description="Per-field problems; only present on 422 responses"
     )
 
@@ -68,7 +68,7 @@ class ScanSettings(BaseModel):
         "or TCP only for hosts that did not answer the ping",
     )
 
-    def scan_settings(self) -> Dict[str, Any]:
+    def scan_settings(self) -> dict[str, Any]:
         """These settings alone, as a ScanConfig takes them."""
         return {name: getattr(self, name) for name in ScanSettings.model_fields}
 
@@ -76,12 +76,12 @@ class ScanSettings(BaseModel):
 class ScanRequest(ScanSettings):
     """Start a scan. Provide ``targets`` text or an ``ips`` list."""
 
-    targets: Optional[str] = Field(
+    targets: str | None = Field(
         default=None,
         description="Free-form target text: IPs, CIDR ranges, and hostnames, "
         "separated by newlines, commas, or spaces",
     )
-    ips: Optional[List[str]] = Field(
+    ips: list[str] | None = Field(
         default=None, description="Pre-parsed target list; takes precedence over 'targets'"
     )
     source: str = Field(default="manual", description="Label stored with the scan")
@@ -102,8 +102,8 @@ class ScanRecord(ApiModel):
 
     id: int
     started_at: str = Field(description="Local time, 'YYYY-MM-DD HH:MM:SS'")
-    finished_at: Optional[str] = Field(description="Null while the scan is running")
-    duration_s: Optional[float] = Field(description="Wall-clock seconds; null until finished")
+    finished_at: str | None = Field(description="Null while the scan is running")
+    duration_s: float | None = Field(description="Wall-clock seconds; null until finished")
     source: str = Field(description="Where the targets came from, e.g. 'manual' or a filename")
     total: int = Field(description="Number of targets")
     completed: int = Field(description="Targets checked so far")
@@ -111,17 +111,15 @@ class ScanRecord(ApiModel):
         description="'running', 'complete', 'cancelled', 'failed', or 'interrupted' "
         "(IPMG Web stopped before the scan finished)"
     )
-    config: Dict[str, Any] = Field(description="Scan settings used (timeout, count, threads, ...)")
-    error: Optional[str] = Field(
-        description="Failure reason when status is 'failed' or 'interrupted'"
-    )
+    config: dict[str, Any] = Field(description="Scan settings used (timeout, count, threads, ...)")
+    error: str | None = Field(description="Failure reason when status is 'failed' or 'interrupted'")
 
 
 class ScanSummary(ScanRecord):
     """A stored scan with aggregate results."""
 
-    status_counts: Dict[str, int] = Field(description="Hosts per result status, e.g. {'Active': 3}")
-    avg_latency: Optional[float] = Field(description="Mean latency of active hosts in ms")
+    status_counts: dict[str, int] = Field(description="Hosts per result status, e.g. {'Active': 3}")
+    avg_latency: float | None = Field(description="Mean latency of active hosts in ms")
 
 
 class HostResultRow(ApiModel):
@@ -129,7 +127,7 @@ class HostResultRow(ApiModel):
 
     ip: str
     status: str = Field(description="'Active', 'Inactive', 'Timeout', or 'Error'")
-    latency: Optional[float] = Field(description="Round-trip time in ms; null if no reply")
+    latency: float | None = Field(description="Round-trip time in ms; null if no reply")
     hostname: str = Field(description="Resolved hostname; empty when not resolved")
     open_ports: str = Field(description="Comma-separated open TCP ports; empty when none")
     checked_at: str = Field(description="Local time the result was stored")
@@ -147,8 +145,8 @@ class HttpCheckRow(ApiModel):
 
     url: str
     ok: bool = Field(description="Whether the status was one the check expected")
-    status_code: Optional[int] = Field(description="Final HTTP status; null if none came back")
-    response_ms: Optional[float] = Field(description="Time to the final response, in ms")
+    status_code: int | None = Field(description="Final HTTP status; null if none came back")
+    response_ms: float | None = Field(description="Time to the final response, in ms")
     final_url: str = Field(description="Where redirects ended; the URL itself without any")
     failure: str = Field(
         description="Why it failed: dns, connect, tls, timeout, status, protocol, redirects, "
@@ -167,27 +165,27 @@ class TrendPoint(ApiModel):
     started_at: str
     total: int
     active: int = Field(description="Hosts that replied")
-    avg_latency: Optional[float] = Field(description="Mean latency of active hosts in ms")
+    avg_latency: float | None = Field(description="Mean latency of active hosts in ms")
 
 
 class Stats(ApiModel):
     scan_count: int
     host_count: int = Field(description="Distinct IPs ever scanned")
-    latest_scan: Optional[ScanSummary] = Field(description="Newest scan that is not running")
-    running_scans: List[ScanRecord]
-    trend: List[TrendPoint] = Field(description="Up to 15 most recent complete scans, oldest first")
+    latest_scan: ScanSummary | None = Field(description="Newest scan that is not running")
+    running_scans: list[ScanRecord]
+    trend: list[TrendPoint] = Field(description="Up to 15 most recent complete scans, oldest first")
 
 
 class Asset(ApiModel):
     """A host aggregated across every scan that saw it."""
 
     ip: str
-    hostname: Optional[str] = Field(description="Most recent non-empty hostname")
+    hostname: str | None = Field(description="Most recent non-empty hostname")
     status: str = Field(description="Status in the most recent scan")
-    mac: Optional[str] = Field(default=None, description="Most recent MAC address seen")
-    vendor: Optional[str] = Field(default=None, description="Vendor of that MAC address")
-    avg_latency: Optional[float] = Field(description="Mean latency when active, in ms")
-    last_seen: Optional[str] = Field(description="Last time the host was active")
+    mac: str | None = Field(default=None, description="Most recent MAC address seen")
+    vendor: str | None = Field(default=None, description="Vendor of that MAC address")
+    avg_latency: float | None = Field(description="Mean latency when active, in ms")
+    last_seen: str | None = Field(description="Last time the host was active")
     last_checked: str
     last_scan_id: int
     scan_count: int
@@ -205,10 +203,10 @@ class ScheduleRequest(ScanSettings):
         description="Unique name; the scans are stored under the source 'schedule:<name>'",
     )
     targets: str = Field(description="Target text, as for a scan; parsed again for every run")
-    interval_minutes: Optional[int] = Field(
+    interval_minutes: int | None = Field(
         default=None, ge=1, le=10080, description="Run every N minutes (1 minute to 1 week)"
     )
-    cron: Optional[str] = Field(
+    cron: str | None = Field(
         default=None,
         description="Or a five-field cron expression in the server's local time, "
         "such as '*/15 * * * *' or '@daily'",
@@ -217,7 +215,7 @@ class ScheduleRequest(ScanSettings):
 
 
 class SchedulePatch(BaseModel):
-    paused: Optional[bool] = Field(default=None, description="Pause or resume the schedule")
+    paused: bool | None = Field(default=None, description="Pause or resume the schedule")
 
 
 class Schedule(ApiModel):
@@ -227,17 +225,17 @@ class Schedule(ApiModel):
     name: str
     source: str = Field(description="History source of its scans: 'schedule:<name>'")
     targets: str
-    interval_minutes: Optional[int]
-    cron: Optional[str]
+    interval_minutes: int | None
+    cron: str | None
     paused: bool
-    config: Dict[str, Any] = Field(description="Scan settings each run uses")
+    config: dict[str, Any] = Field(description="Scan settings each run uses")
     created_at: str
-    next_run_at: Optional[str] = Field(description="Local time of the next run; null if paused")
-    last_run_at: Optional[str]
-    last_scan_id: Optional[int]
-    last_status: Optional[str] = Field(description="Status of the last scan it started")
-    last_skipped_at: Optional[str] = Field(description="When a run was last skipped")
-    last_skip_reason: Optional[str] = Field(
+    next_run_at: str | None = Field(description="Local time of the next run; null if paused")
+    last_run_at: str | None
+    last_scan_id: int | None
+    last_status: str | None = Field(description="Status of the last scan it started")
+    last_skipped_at: str | None = Field(description="When a run was last skipped")
+    last_skip_reason: str | None = Field(
         description="Why: the previous run was still going, --max-scans was reached, ..."
     )
 
@@ -261,16 +259,16 @@ class WakeSent(ApiModel):
 
 
 class UploadResult(ApiModel):
-    filename: Optional[str]
+    filename: str | None
     count: int = Field(description="Number of targets parsed")
-    targets: List[str]
+    targets: list[str]
 
 
 # ----------------------------------------------------------------------- diff
 
 
 class ScanRefModel(ApiModel):
-    id: Optional[int]
+    id: int | None
     label: str
     started_at: str
     source: str
@@ -289,8 +287,8 @@ class DiffSummary(ApiModel):
     changed_hosts: int
     unchanged_hosts: int
     total_changes: int
-    counts: Dict[str, int] = Field(description="Changes per change type")
-    severity_counts: Dict[str, int] = Field(description="Changes per severity")
+    counts: dict[str, int] = Field(description="Changes per change type")
+    severity_counts: dict[str, int] = Field(description="Changes per severity")
 
 
 class HostChangeModel(ApiModel):
@@ -303,9 +301,9 @@ class HostChangeModel(ApiModel):
     severity: str = Field(description="'critical', 'warning', or 'info'")
     ip: str = Field(description="The host's IP; for http_* changes, the checked URL")
     hostname: str
-    previous: Optional[str]
-    current: Optional[str]
-    delta: Optional[float] = Field(description="Latency change in ms, for latency_changed")
+    previous: str | None
+    current: str | None
+    delta: float | None = Field(description="Latency change in ms, for latency_changed")
     description: str
 
 
@@ -314,7 +312,7 @@ class ScanDiffModel(ApiModel):
     current: ScanRefModel
     options: DiffOptionsModel
     summary: DiffSummary
-    changes: List[HostChangeModel]
+    changes: list[HostChangeModel]
 
 
 # ------------------------------------------------------------ WebSocket events
@@ -323,9 +321,9 @@ class ScanDiffModel(ApiModel):
 class HostResultModel(ApiModel):
     ip: str
     status: str = Field(description="'Active', 'Inactive', 'Timeout', or 'Error'")
-    latency: Optional[float] = Field(description="Round-trip time in ms; null if no reply")
+    latency: float | None = Field(description="Round-trip time in ms; null if no reply")
     hostname: str
-    open_ports: List[int] = Field(description="Open TCP ports, when port scanning was on")
+    open_ports: list[int] = Field(description="Open TCP ports, when port scanning was on")
     method: str = Field(default="", description="Which probe found the host, as in results")
     mac: str = Field(default="", description="MAC address, with mac_lookup")
     vendor: str = Field(default="", description="Vendor of the MAC address's prefix")
@@ -353,14 +351,14 @@ class ScanFinishedEvent(ApiModel):
 
 
 WebSocketEvent = Annotated[
-    Union[ScanStartedEvent, ResultEvent, ScanFinishedEvent],
+    ScanStartedEvent | ResultEvent | ScanFinishedEvent,
     Field(discriminator="type"),
 ]
 
 WEBSOCKET_EVENT_MODELS = (ScanStartedEvent, ResultEvent, ScanFinishedEvent)
 
 
-def websocket_event_schemas(ref_template: str) -> Dict[str, Any]:
+def websocket_event_schemas(ref_template: str) -> dict[str, Any]:
     """JSON schemas for the WebSocket events, keyed by name, for ``/openapi.json``."""
     schema = TypeAdapter(WebSocketEvent).json_schema(ref_template=ref_template)
     definitions = schema.pop("$defs", {})

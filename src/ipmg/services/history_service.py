@@ -7,10 +7,11 @@ share one implementation of "what changed since the last scan?".
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import asdict
 from datetime import timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any
 
 from ipmg.core.diff import DiffOptions, ScanDiff, ScanRef, compare_snapshots
 from ipmg.core.engine import HostResult, ScanConfig
@@ -26,7 +27,7 @@ class HistoryService:
         self._db = database
 
     @classmethod
-    def open(cls, db_path: Optional[str] = None) -> "HistoryService":
+    def open(cls, db_path: str | None = None) -> HistoryService:
         try:
             return cls(Database(Path(db_path) if db_path else DEFAULT_DB_PATH))
         except OSError as exc:
@@ -57,16 +58,16 @@ class HistoryService:
 
     # ------------------------------------------------------------ listing
 
-    def list_scans(self, limit: int = 20, source: Optional[str] = None) -> List[Dict[str, Any]]:
+    def list_scans(self, limit: int = 20, source: str | None = None) -> list[dict[str, Any]]:
         return self._db.list_scans(limit=max(1, limit), source=source)
 
     # ----------------------------------------------------------- retention
 
     def plan_prune(
         self,
-        keep: Optional[int] = None,
-        older_than: Optional[timedelta] = None,
-        source: Optional[str] = None,
+        keep: int | None = None,
+        older_than: timedelta | None = None,
+        source: str | None = None,
     ) -> PrunePlan:
         """The scans a retention policy would delete, without deleting anything."""
         return plan_prune(self._db.scan_rows(source), keep=keep, older_than=older_than)
@@ -81,7 +82,7 @@ class HistoryService:
         self,
         baseline_id: int,
         target_id: int,
-        options: Optional[DiffOptions] = None,
+        options: DiffOptions | None = None,
     ) -> ScanDiff:
         """Compare two stored scans by id."""
         baseline_ref = self._require_ref(baseline_id)
@@ -100,8 +101,8 @@ class HistoryService:
     def compare_with_previous(
         self,
         scan_id: int,
-        source: Optional[str] = None,
-        options: Optional[DiffOptions] = None,
+        source: str | None = None,
+        options: DiffOptions | None = None,
     ) -> ScanDiff:
         """Compare a scan against the newest comparable scan before it."""
         self._require_ref(scan_id)
@@ -115,8 +116,8 @@ class HistoryService:
 
     def compare_latest(
         self,
-        source: Optional[str] = None,
-        options: Optional[DiffOptions] = None,
+        source: str | None = None,
+        options: DiffOptions | None = None,
     ) -> ScanDiff:
         """Compare the two most recent stored scans."""
         recent = self._db.latest_scan_ids(limit=2, source=source)

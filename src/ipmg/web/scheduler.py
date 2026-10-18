@@ -18,8 +18,9 @@ from __future__ import annotations
 import dataclasses
 import logging
 import threading
+from collections.abc import Callable
 from datetime import datetime, timedelta
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
 from ipmg.core.cron import next_interval_run, parse_cron
 from ipmg.core.engine import ScanConfig
@@ -54,14 +55,14 @@ def format_time(moment: datetime) -> str:
     return moment.isoformat(sep=" ", timespec="seconds")
 
 
-def first_run(interval_minutes: Optional[int], cron: Optional[str], now: datetime) -> datetime:
+def first_run(interval_minutes: int | None, cron: str | None, now: datetime) -> datetime:
     """When a new (or resumed) schedule runs first: an interval one at once, a cron one on time."""
     if cron:
         return parse_cron(cron).next_after(now)
     return now
 
 
-def next_run(schedule: Dict[str, Any], now: datetime) -> datetime:
+def next_run(schedule: dict[str, Any], now: datetime) -> datetime:
     """The schedule's next slot after ``now``."""
     if schedule.get("cron"):
         return parse_cron(schedule["cron"]).next_after(now)
@@ -72,7 +73,7 @@ def next_run(schedule: Dict[str, Any], now: datetime) -> datetime:
     return slot
 
 
-def scan_config(settings: Dict[str, Any]) -> ScanConfig:
+def scan_config(settings: dict[str, Any]) -> ScanConfig:
     known = {key: value for key, value in settings.items() if key in _CONFIG_FIELDS}
     if "ports" in known:
         known["ports"] = tuple(known["ports"])
@@ -94,7 +95,7 @@ class Scheduler:
         self._clock = clock
         self._tick_s = tick_s
         self._stop = threading.Event()
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
         # One schedule start at a time, so a tick and "Run now" cannot both
         # see the previous run as finished and start two.
         self._lock = threading.Lock()
@@ -123,7 +124,7 @@ class Scheduler:
 
     # ------------------------------------------------------------- running
 
-    def tick(self) -> List[int]:
+    def tick(self) -> list[int]:
         """Start every due schedule; returns the ids of the scans started."""
         now = self._clock()
         started = []
@@ -133,7 +134,7 @@ class Scheduler:
                 started.append(scan_id)
         return started
 
-    def run_now(self, schedule_id: int) -> Dict[str, Any]:
+    def run_now(self, schedule_id: int) -> dict[str, Any]:
         """Start a schedule's scan at once, outside its timetable.
 
         Raises KeyError for an unknown schedule, and ScheduleBusyError,
@@ -151,7 +152,7 @@ class Scheduler:
             )
         return {"id": scan_id, "total": total}
 
-    def _start(self, schedule: Dict[str, Any]):
+    def _start(self, schedule: dict[str, Any]):
         last = schedule.get("last_scan_id")
         if last is not None and self._manager.is_running(int(last)):
             raise ScheduleBusyError(f"The previous run (scan #{last}) is still running.")
@@ -161,7 +162,7 @@ class Scheduler:
         )
         return scan_id, len(ips)
 
-    def _run_due(self, schedule: Dict[str, Any], now: datetime) -> Optional[int]:
+    def _run_due(self, schedule: dict[str, Any], now: datetime) -> int | None:
         upcoming = format_time(next_run(schedule, now))
         with self._lock:
             try:

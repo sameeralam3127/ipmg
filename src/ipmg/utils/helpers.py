@@ -6,7 +6,6 @@ import sys
 import threading
 import time
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple
 
 from rich.console import Console
 from rich.logging import RichHandler
@@ -76,13 +75,13 @@ class _LookupPool:
 
     def __init__(self, max_workers: int) -> None:
         self._max_workers = max(max_workers, 1)
-        self._queue: "queue.Queue[Optional[Tuple[str, concurrent.futures.Future]]]" = queue.Queue()
-        self._threads: List[threading.Thread] = []
+        self._queue: queue.Queue[tuple[str, concurrent.futures.Future] | None] = queue.Queue()
+        self._threads: list[threading.Thread] = []
         self._lock = threading.Lock()
         self._closed = False
 
     def submit(self, ip: str) -> "concurrent.futures.Future[str]":
-        future: "concurrent.futures.Future[str]" = concurrent.futures.Future()
+        future: concurrent.futures.Future[str] = concurrent.futures.Future()
         with self._lock:
             if self._closed:
                 raise RuntimeError("lookup pool is closed")
@@ -141,13 +140,13 @@ class HostnameCache:
     def __init__(
         self,
         ttl_seconds: int = 300,
-        timeout_s: Optional[float] = None,
+        timeout_s: float | None = None,
         max_workers: int = 32,
     ) -> None:
         self.ttl_seconds = max(ttl_seconds, 0)
         self.timeout_s = timeout_s
-        self._cache: Dict[str, Tuple[float, str]] = {}
-        self._in_flight: Dict[str, threading.Event] = {}
+        self._cache: dict[str, tuple[float, str]] = {}
+        self._in_flight: dict[str, threading.Event] = {}
         self._lock = threading.Lock()
         self._pool = _LookupPool(max_workers) if timeout_s is not None else None
 
@@ -235,7 +234,7 @@ def timestamp_str() -> str:
     return current_timestamp().strftime("%Y%m%d_%H%M%S")
 
 
-def clamp_int(value: int, minimum: Optional[int], maximum: Optional[int]) -> int:
+def clamp_int(value: int, minimum: int | None, maximum: int | None) -> int:
     if minimum is not None:
         value = max(value, minimum)
 

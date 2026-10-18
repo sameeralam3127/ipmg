@@ -189,8 +189,9 @@ line-length = 100
 target-version = "py310"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "C90"]
-ignore = ["E501"]
+select = ["E", "F", "W", "I", "C90", "UP"]
+# UP038 (isinstance(x, A | B)) is slower than a tuple and deprecated in ruff.
+ignore = ["E501", "UP038"]
 
 [tool.ruff.lint.isort]
 combine-as-imports = true

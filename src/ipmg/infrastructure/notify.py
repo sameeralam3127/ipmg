@@ -16,9 +16,10 @@ import smtplib
 import socket
 import ssl
 import urllib.request
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from email.message import EmailMessage
-from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any
 from urllib.parse import urlsplit
 
 from ipmg import __version__
@@ -63,7 +64,7 @@ class SmtpSettings:
     port: int
     security: str
     sender: str
-    recipients: Tuple[str, ...]
+    recipients: tuple[str, ...]
     username: str = ""
     password: str = ""
 
@@ -75,7 +76,7 @@ class NotifyOptions:
     webhook_url: str = ""
     slack_url: str = ""
     teams_url: str = ""
-    email: Optional[SmtpSettings] = None
+    email: SmtpSettings | None = None
     min_severity: Severity = Severity(DEFAULT_NOTIFY_SEVERITY)
 
     @property
@@ -86,7 +87,7 @@ class NotifyOptions:
 # ---------------------------------------------------------------- settings
 
 
-def _flag_or_env(value: Optional[str], environ: Mapping[str, str], name: str) -> str:
+def _flag_or_env(value: str | None, environ: Mapping[str, str], name: str) -> str:
     """A flag's value, else its environment variable, else empty."""
     if value:
         return value.strip()
@@ -103,7 +104,7 @@ def _is_loopback(host: str) -> bool:
         return False
 
 
-def _url(value: Optional[str], environ: Mapping[str, str], flag: str, env: str) -> str:
+def _url(value: str | None, environ: Mapping[str, str], flag: str, env: str) -> str:
     """The URL for a ``--notify-*`` flag. None means the flag was not given."""
     if value is None:
         return ""
@@ -117,7 +118,7 @@ def _url(value: Optional[str], environ: Mapping[str, str], flag: str, env: str) 
     return url
 
 
-def _smtp_settings(args, environ: Mapping[str, str]) -> Optional[SmtpSettings]:
+def _smtp_settings(args, environ: Mapping[str, str]) -> SmtpSettings | None:
     recipients_arg = getattr(args, "notify_email", None)
     if recipients_arg is None:
         return None
@@ -170,7 +171,7 @@ def _smtp_settings(args, environ: Mapping[str, str]) -> Optional[SmtpSettings]:
     )
 
 
-def notify_options(args, environ: Optional[Mapping[str, str]] = None) -> NotifyOptions:
+def notify_options(args, environ: Mapping[str, str] | None = None) -> NotifyOptions:
     """Read the ``--notify-*`` and ``--smtp-*`` settings, falling back to the environment.
 
     Raises NotifyError for a destination that is asked for but cannot work.
@@ -205,7 +206,7 @@ def headline(diff: ScanDiff) -> str:
     return text
 
 
-def _listed(diff: ScanDiff) -> Tuple[Sequence[HostChange], int]:
+def _listed(diff: ScanDiff) -> tuple[Sequence[HostChange], int]:
     """The changes a chat message lists (most severe first), and how many it leaves out."""
     shown = diff.changes[:MAX_LISTED_CHANGES]
     return shown, len(diff.changes) - len(shown)
@@ -216,7 +217,7 @@ def _change_line(change: HostChange) -> str:
     return f"[{change.severity.value}] {host}: {change.describe()}"
 
 
-def webhook_payload(diff: ScanDiff, min_severity: Severity) -> Dict[str, Any]:
+def webhook_payload(diff: ScanDiff, min_severity: Severity) -> dict[str, Any]:
     """The JSON a generic webhook receives: the whole change report plus context."""
     return {
         "event": "ipmg.changes",
@@ -231,7 +232,7 @@ def _slack_escape(text: str) -> str:
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-def slack_payload(diff: ScanDiff) -> Dict[str, Any]:
+def slack_payload(diff: ScanDiff) -> dict[str, Any]:
     """A Slack incoming-webhook message."""
     shown, hidden = _listed(diff)
     lines = [f"• {_slack_escape(_change_line(change))}" for change in shown]
@@ -265,7 +266,7 @@ def slack_payload(diff: ScanDiff) -> Dict[str, Any]:
     }
 
 
-def teams_payload(diff: ScanDiff) -> Dict[str, Any]:
+def teams_payload(diff: ScanDiff) -> dict[str, Any]:
     """A Microsoft Teams message: an Adaptive Card, as Teams Workflows webhooks expect."""
     shown, hidden = _listed(diff)
     lines = [f"- {_change_line(change)}" for change in shown]
@@ -363,13 +364,13 @@ def _redact(text: str, options: NotifyOptions) -> str:
     return text
 
 
-Delivery = Tuple[str, Callable[[], None]]
+Delivery = tuple[str, Callable[[], None]]
 
 
-def _deliveries(diff: ScanDiff, options: NotifyOptions, post, mail) -> List[Delivery]:
+def _deliveries(diff: ScanDiff, options: NotifyOptions, post, mail) -> list[Delivery]:
     """One named, deferred send per destination. Each builds its own message
     when called, so an error while building one is caught like a send error."""
-    deliveries: List[Delivery] = []
+    deliveries: list[Delivery] = []
     if options.webhook_url:
         deliveries.append(
             (
@@ -390,9 +391,9 @@ def _deliveries(diff: ScanDiff, options: NotifyOptions, post, mail) -> List[Deli
 def send_notifications(
     diff: ScanDiff,
     options: NotifyOptions,
-    post: Optional[Callable[[str, Mapping[str, Any]], None]] = None,
-    mail: Optional[Callable[[SmtpSettings, EmailMessage], None]] = None,
-) -> List[str]:
+    post: Callable[[str, Mapping[str, Any]], None] | None = None,
+    mail: Callable[[SmtpSettings, EmailMessage], None] | None = None,
+) -> list[str]:
     """Send ``diff`` to every configured destination; returns the ones that failed.
 
     Nothing is sent unless a change reaches ``options.min_severity``. A
@@ -411,7 +412,7 @@ def send_notifications(
 # ------------------------------------------------------------------ alerts
 
 
-def alert_payloads(title: str, message: str) -> Dict[str, Dict[str, Any]]:
+def alert_payloads(title: str, message: str) -> dict[str, dict[str, Any]]:
     """The webhook, Slack, and Teams bodies for an alert that is not a change report."""
     card = {
         "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
@@ -450,9 +451,9 @@ def send_alert(
     title: str,
     message: str,
     options: NotifyOptions,
-    post: Optional[Callable[[str, Mapping[str, Any]], None]] = None,
-    mail: Optional[Callable[[SmtpSettings, EmailMessage], None]] = None,
-) -> List[str]:
+    post: Callable[[str, Mapping[str, Any]], None] | None = None,
+    mail: Callable[[SmtpSettings, EmailMessage], None] | None = None,
+) -> list[str]:
     """Tell every configured destination that something went wrong.
 
     For failures rather than changes, such as a monitor pass that could not
@@ -465,7 +466,7 @@ def send_alert(
     mail = mail or send_email
     payloads = alert_payloads(title, message)
 
-    deliveries: List[Delivery] = []
+    deliveries: list[Delivery] = []
     if options.webhook_url:
         deliveries.append(("Webhook", lambda: post(options.webhook_url, payloads["webhook"])))
     if options.slack_url:
@@ -487,10 +488,10 @@ def send_alert(
     return _deliver(deliveries, options)
 
 
-def _deliver(deliveries: List[Delivery], options: NotifyOptions) -> List[str]:
+def _deliver(deliveries: list[Delivery], options: NotifyOptions) -> list[str]:
     """Run each delivery, reporting failures; returns the names that failed."""
-    sent: List[str] = []
-    failed: List[str] = []
+    sent: list[str] = []
+    failed: list[str] = []
     for name, deliver in deliveries:
         try:
             deliver()

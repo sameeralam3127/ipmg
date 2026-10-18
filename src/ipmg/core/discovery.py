@@ -9,7 +9,6 @@ import platform
 import re
 import socket
 import subprocess  # nosec B404
-from typing import List, Optional, Tuple
 
 from ipmg.exceptions import DiscoveryError
 
@@ -20,7 +19,7 @@ _PROBE_TARGET = ("192.0.2.1", 9)
 log = logging.getLogger(__name__)
 
 
-def _address_from_route() -> Optional[str]:
+def _address_from_route() -> str | None:
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     except OSError:
@@ -37,7 +36,7 @@ def _address_from_route() -> Optional[str]:
         sock.close()
 
 
-def _address_from_hostname() -> Optional[str]:
+def _address_from_hostname() -> str | None:
     try:
         return socket.gethostbyname(socket.gethostname())
     except OSError:
@@ -70,14 +69,14 @@ def local_ip_address() -> str:
 DISCOVERY_FAMILIES = ("ipv4", "ipv6", "all")
 
 
-def discover_targets(family: str) -> Tuple[List[str], List[str]]:
+def discover_targets(family: str) -> tuple[list[str], list[str]]:
     """The hosts ``--discover FAMILY`` scans, and the history source name for each part.
 
     IPv4 keeps the name "auto-discovery" it always had, so history comparisons
     against scans made before IPv6 existed still find their baseline.
     """
-    ips: List[str] = []
-    sources: List[str] = []
+    ips: list[str] = []
+    sources: list[str] = []
     if family in ("ipv4", "all"):
         ips += discover_local_subnet()
         sources.append("auto-discovery")
@@ -87,7 +86,7 @@ def discover_targets(family: str) -> Tuple[List[str], List[str]]:
     return ips, sources
 
 
-def discover_local_subnet(local_ip: Optional[str] = None, prefix: int = 24) -> List[str]:
+def discover_local_subnet(local_ip: str | None = None, prefix: int = 24) -> list[str]:
     """Every host address in the /24 (by default) around the local address."""
     address = local_ip or local_ip_address()
 
@@ -112,7 +111,7 @@ _DEAD_STATES = frozenset({"failed", "incomplete", "unreachable", "(incomplete)"}
 _IPV6_COMMAND_TIMEOUT = 5
 
 
-def _run(argv: List[str]) -> str:
+def _run(argv: list[str]) -> str:
     """Run a fixed, trusted argv and return its output, or "" if it cannot run."""
     try:
         # A fixed argv, no shell; the only variable part is an interface name
@@ -130,7 +129,7 @@ def _run(argv: List[str]) -> str:
     return result.stdout
 
 
-def _interfaces() -> List[Tuple[int, str]]:
+def _interfaces() -> list[tuple[int, str]]:
     """Network interfaces other than loopback, as (index, name)."""
     try:
         interfaces = socket.if_nameindex()
@@ -140,7 +139,7 @@ def _interfaces() -> List[Tuple[int, str]]:
     return [(index, name) for index, name in interfaces if not name.lower().startswith("lo")]
 
 
-def _all_nodes_ping(system: str, index: int, name: str) -> List[str]:
+def _all_nodes_ping(system: str, index: int, name: str) -> list[str]:
     zone = str(index) if system == "windows" else name
     target = f"{_ALL_NODES}%{zone}"
     if system == "windows":
@@ -176,7 +175,7 @@ def _scoped(address: str, zone: str) -> str:
     return address
 
 
-def parse_linux_neighbours(output: str) -> List[str]:
+def parse_linux_neighbours(output: str) -> list[str]:
     """``ip -6 neigh show``: ``fe80::1 dev eth0 lladdr 52:54:00:12:34:56 REACHABLE``."""
     found = []
     for line in output.splitlines():
@@ -188,7 +187,7 @@ def parse_linux_neighbours(output: str) -> List[str]:
     return found
 
 
-def parse_bsd_neighbours(output: str) -> List[str]:
+def parse_bsd_neighbours(output: str) -> list[str]:
     """``ndp -an``: ``fe80::1%en0  aa:bb:cc:dd:ee:ff  en0  23h59m  S R``."""
     found = []
     for line in output.splitlines():
@@ -202,7 +201,7 @@ def parse_bsd_neighbours(output: str) -> List[str]:
 _WINDOWS_INTERFACE = re.compile(r"^\S.*?\s(\d+):")
 
 
-def parse_windows_neighbours(output: str) -> List[str]:
+def parse_windows_neighbours(output: str) -> list[str]:
     """``netsh interface ipv6 show neighbors``, one table per ``Interface 12: ...``."""
     found = []
     zone = ""
@@ -218,7 +217,7 @@ def parse_windows_neighbours(output: str) -> List[str]:
     return found
 
 
-def _read_neighbour_table(system: str) -> List[str]:
+def _read_neighbour_table(system: str) -> list[str]:
     if system == "linux":
         return parse_linux_neighbours(_run(["ip", "-6", "neigh", "show"]))
     if system == "windows":
@@ -236,7 +235,7 @@ def _is_host(candidate: str) -> bool:
     )
 
 
-def discover_ipv6_neighbours(system: Optional[str] = None) -> List[str]:
+def discover_ipv6_neighbours(system: str | None = None) -> list[str]:
     """IPv6 hosts on the local links, found through neighbour discovery.
 
     An IPv6 subnet is far too large to sweep, so instead every link is asked

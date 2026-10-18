@@ -13,10 +13,11 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any
 
 from ipmg.infrastructure.incremental import REPORT_FORMATS
 
@@ -50,28 +51,28 @@ def parse_age(text: str) -> timedelta:
 class PrunePlan:
     """The stored scans a retention policy would remove."""
 
-    scans: List[Dict[str, Any]] = field(default_factory=list)
+    scans: list[dict[str, Any]] = field(default_factory=list)
 
     @property
-    def scan_ids(self) -> List[int]:
+    def scan_ids(self) -> list[int]:
         return [int(scan["id"]) for scan in self.scans]
 
     @property
     def result_count(self) -> int:
         return sum(int(scan.get("completed") or 0) for scan in self.scans)
 
-    def by_source(self) -> Dict[str, int]:
-        counts: Dict[str, int] = {}
+    def by_source(self) -> dict[str, int]:
+        counts: dict[str, int] = {}
         for scan in self.scans:
             counts[scan["source"]] = counts.get(scan["source"], 0) + 1
         return counts
 
 
 def plan_prune(
-    scans: Sequence[Dict[str, Any]],
-    keep: Optional[int] = None,
-    older_than: Optional[timedelta] = None,
-    now: Optional[datetime] = None,
+    scans: Sequence[dict[str, Any]],
+    keep: int | None = None,
+    older_than: timedelta | None = None,
+    now: datetime | None = None,
 ) -> PrunePlan:
     """Which of ``scans`` a policy removes. ``scans`` are rows of the ``scans`` table.
 
@@ -91,8 +92,8 @@ def plan_prune(
         # started_at is stored as local "YYYY-MM-DD HH:MM:SS", which sorts as text.
         cutoff = ((now or datetime.now()) - older_than).isoformat(sep=" ", timespec="seconds")
 
-    seen: Dict[str, int] = {}
-    doomed: List[Dict[str, Any]] = []
+    seen: dict[str, int] = {}
+    doomed: list[dict[str, Any]] = []
     for scan in sorted(scans, key=lambda row: int(row["id"]), reverse=True):
         source = scan["source"]
         rank = seen.get(source, 0)
@@ -109,11 +110,11 @@ def plan_prune(
 # ------------------------------------------------------------------ reports
 
 
-def report_files(base: str, formats: Sequence[str] = REPORT_FORMATS) -> Dict[str, List[Path]]:
+def report_files(base: str, formats: Sequence[str] = REPORT_FORMATS) -> dict[str, list[Path]]:
     """Report files saved under ``base`` (the ``--output`` prefix), oldest first, per format."""
     directory = Path(base).parent
     prefix = Path(base).name
-    found: Dict[str, List[tuple]] = {}
+    found: dict[str, list[tuple]] = {}
     try:
         entries = list(directory.iterdir())
     except OSError:
@@ -132,8 +133,8 @@ def prune_reports(
     bases: Sequence[str],
     keep: int,
     formats: Sequence[str] = REPORT_FORMATS,
-    protect: Optional[str] = None,
-) -> List[str]:
+    protect: str | None = None,
+) -> list[str]:
     """Delete all but the ``keep`` newest report files of each format; returns the paths removed.
 
     Only files named exactly like an IPMG report under one of ``bases`` are
@@ -141,7 +142,7 @@ def prune_reports(
     never removed, whatever ``keep`` says.
     """
     keep = max(keep, 1)
-    removed: List[str] = []
+    removed: list[str] = []
     for base in dict.fromkeys(bases):
         for files in report_files(base, formats).values():
             for path in files[: max(len(files) - keep, 0)]:

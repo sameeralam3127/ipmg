@@ -8,8 +8,8 @@ static: pressing TAB never starts Python.
 from __future__ import annotations
 
 import argparse
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Sequence, Tuple
 
 SHELLS = ("bash", "zsh", "fish", "powershell")
 
@@ -19,11 +19,11 @@ _FILE_DESTS = frozenset({"input", "config", "db", "resume", "output", "diff_outp
 
 @dataclass(frozen=True)
 class Flag:
-    names: Tuple[str, ...]
+    names: tuple[str, ...]
     help: str
     #: Whether the flag takes a value at all.
     takes_value: bool
-    choices: Tuple[str, ...] = ()
+    choices: tuple[str, ...] = ()
     files: bool = False
     #: Takes several values after one flag (nargs "+" or "*").
     multiple: bool = False
@@ -38,12 +38,12 @@ class Command:
     #: "" for the scan command (plain ``ipmg``); "history prune" for a nested one.
     name: str
     help: str
-    flags: Tuple[Flag, ...]
+    flags: tuple[Flag, ...]
     #: Words that may follow the command, such as shells or "prune".
-    positionals: Tuple[str, ...] = field(default_factory=tuple)
+    positionals: tuple[str, ...] = field(default_factory=tuple)
 
 
-def _flags(parser: argparse.ArgumentParser) -> Tuple[Flag, ...]:
+def _flags(parser: argparse.ArgumentParser) -> tuple[Flag, ...]:
     flags = []
     for action in parser._actions:  # argparse's only route to its flags
         if not action.option_strings or action.help == argparse.SUPPRESS:
@@ -62,7 +62,7 @@ def _flags(parser: argparse.ArgumentParser) -> Tuple[Flag, ...]:
     return tuple(flags)
 
 
-def commands() -> List[Command]:
+def commands() -> list[Command]:
     """Every command IPMG has, read from its parsers."""
     # Imported here: parser imports this module's caller, not the other way round.
     from ipmg.cli import parser as p
@@ -71,7 +71,7 @@ def commands() -> List[Command]:
         text = build().description or ""
         return text.split(". ")[0].rstrip(".")
 
-    subcommands: Sequence[Tuple[str, Callable[[], argparse.ArgumentParser], Tuple[str, ...]]] = (
+    subcommands: Sequence[tuple[str, Callable[[], argparse.ArgumentParser], tuple[str, ...]]] = (
         ("web", p.build_web_parser, ()),
         ("history", p.build_history_parser, ("prune",)),
         ("history prune", p.build_prune_parser, ()),
@@ -86,7 +86,7 @@ def commands() -> List[Command]:
     return found
 
 
-def _subcommand_names(found: Sequence[Command]) -> List[str]:
+def _subcommand_names(found: Sequence[Command]) -> list[str]:
     return [command.name for command in found if command.name and " " not in command.name]
 
 
@@ -249,7 +249,7 @@ def _zsh_spec(flag: Flag) -> str:
 
 def zsh_script(found: Sequence[Command]) -> str:
     """Works sourced, eval'd, or installed on $fpath as ``_ipmg``."""
-    by_name: Dict[str, Command] = {command.name: command for command in found}
+    by_name: dict[str, Command] = {command.name: command for command in found}
     descriptions = " ".join(
         f"'{name}:{_zsh_quote(_zsh_help(by_name[name].help))}'" for name in _subcommand_names(found)
     )

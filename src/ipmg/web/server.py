@@ -9,7 +9,6 @@ import sys
 import threading
 import webbrowser
 from pathlib import Path
-from typing import Optional
 
 import uvicorn
 
@@ -85,7 +84,7 @@ def _explain_firewall(firewall: network.Firewall, port: int) -> None:
         ui.field("", firewall.note)
 
 
-def _print_firewall(port: int, open_firewall: bool) -> Optional[network.Firewall]:
+def _print_firewall(port: int, open_firewall: bool) -> network.Firewall | None:
     """Say what stands between other machines and IPMG Web, and open it on request.
 
     Returns the firewall whose rule IPMG Web added, so it can be removed again.
@@ -105,8 +104,8 @@ def run_dashboard(
     host: str = "127.0.0.1",
     port: int = 8080,
     open_browser: bool = True,
-    db_path: Optional[str] = None,
-    metrics_sources: Optional[int] = None,
+    db_path: str | None = None,
+    metrics_sources: int | None = None,
     max_scans: int = DEFAULT_MAX_SCANS,
     open_firewall: bool = False,
 ) -> None:
@@ -123,7 +122,7 @@ def run_dashboard(
         ui.field(label, f"{link}  ({audience})" if audience else link, wrap=False)
     ui.field("History", database.path, wrap=False)
 
-    opened: Optional[network.Firewall] = None
+    opened: network.Firewall | None = None
     if not local and not network.in_container():
         opened = _print_firewall(port, open_firewall)
 

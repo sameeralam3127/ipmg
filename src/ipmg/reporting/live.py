@@ -11,9 +11,9 @@ history, so a 65k-host scan costs no more memory than a two-host one.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Iterator, List, Tuple
 
 from rich.text import Text
 
@@ -49,7 +49,7 @@ class StreamOptions:
     all_hosts: bool = False
     refresh_s: float = DEFAULT_REFRESH_S
 
-    def clamped(self) -> "StreamOptions":
+    def clamped(self) -> StreamOptions:
         return StreamOptions(
             enabled=self.enabled,
             all_hosts=self.all_hosts,
@@ -68,7 +68,7 @@ def _cell(value: str, width: int, style: str, justify: str = "left") -> Text:
     return text
 
 
-def _columns(config: ScanConfig) -> List[Tuple[str, int, str]]:
+def _columns(config: ScanConfig) -> list[tuple[str, int, str]]:
     """The columns this scan's configuration actually produces values for."""
     columns = [
         ("Status", STATUS_WIDTH, "left"),
