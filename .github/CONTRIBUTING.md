@@ -44,7 +44,7 @@ Found a security problem? Please report it privately as described in
 You need **Git** and **Python 3.10 or newer**. IPMG probes hosts with the
 system `ping` command; macOS and Windows include it, and on minimal Linux
 images you may need to install it (see
-[the README](../README.md#the-one-thing-ipmg-needs-from-your-system)).
+[docs/INSTALL.md](../docs/INSTALL.md#the-one-thing-ipmg-needs-from-your-system)).
 
 ```bash
 # 1. Fork the repository on GitHub, then clone your fork

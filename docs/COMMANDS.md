@@ -4,7 +4,8 @@ Every IPMG command and flag, with examples you can copy. To put together a
 single scan command interactively — with every flag explained as you pick it —
 use the [command builder](https://sameeralam3127.github.io/ipmg/#builder) on the
 website. `ipmg --help` (and `ipmg web --help`, `ipmg history --help`,
-`ipmg diff --help`) always shows the options of the version you have installed.
+`ipmg diff --help`) always shows the options of the version you have installed;
+[All scan options](#all-scan-options) lists them here.
 
 > Only scan networks you are authorized to scan. Examples below that use
 > `192.168.1.0/24` or similar are placeholders: replace them with a network you
@@ -18,14 +19,18 @@ website. `ipmg --help` (and `ipmg web --help`, `ipmg history --help`,
 [Try everything safely](#try-everything-safely) ·
 [Choosing targets](#choosing-targets) ·
 [Names and open ports](#names-and-open-ports) ·
+[HTTP checks](#http-checks) ·
 [Live output and logs](#live-output-and-logs) ·
 [Speed and accuracy](#speed-and-accuracy) ·
 [Reports](#reports) ·
 [Scan history](#scan-history) ·
 [Change detection](#change-detection) ·
 [Notifications](#notifications) ·
+[Default options in a file](#default-options-in-a-file) ·
 [Automation and exit codes](#automation-and-exit-codes) ·
+[Wake-on-LAN](#wake-on-lan) ·
 [IPMG Web](#ipmg-web) ·
+[All scan options](#all-scan-options) ·
 [Errors and what they mean](#errors-and-what-they-mean)
 
 ---
@@ -40,7 +45,7 @@ website. `ipmg --help` (and `ipmg web --help`, `ipmg history --help`,
 | `ipmg history prune [options]` | Delete old scans from the history ([retention](#keeping-history-and-reports-bounded)) |
 | `ipmg diff [SCAN_ID ...] [options]` | Compare two stored scans |
 | `ipmg wake MAC [MAC ...] [options]` | Wake hosts with a Wake-on-LAN magic packet ([details](#wake-on-lan)) |
-| `ipmg completion bash\|zsh\|fish\|powershell` | Print a tab-completion script ([install it](../README.md#tab-completion)) |
+| `ipmg completion bash\|zsh\|fish\|powershell` | Print a tab-completion script ([install it](INSTALL.md#tab-completion)) |
 | `ipmg --version` | Print the installed version |
 | `python -m ipmg ...` | Same as `ipmg ...`, useful when the script is not on your `PATH` |
 
@@ -95,72 +100,76 @@ detect change (see [Automation and exit codes](#automation-and-exit-codes)).
 
 ## Choosing targets
 
-`--input` takes one target: an address, a network, a range, or a file.
+Anywhere IPMG takes `--input`, you can give it any of these:
+
+- **A single IP** — `8.8.8.8`, or IPv6 such as `2001:db8::1` or a link-local
+  `fe80::1%eth0`
+- **A CIDR block** — `10.0.0.0/24`, or an IPv6 prefix up to 65,536 hosts
+  (`2001:db8::/112`)
+- **A range** — `10.0.0.1-10.0.0.200` or `2001:db8::10-2001:db8::20`
+- **A text file** — one IP or CIDR per line. Blank lines and `#` comments are
+  ignored, so you can annotate it:
+
+  ```text
+  # Production DNS
+  8.8.8.8
+  192.168.1.0/30
+  ```
+
+- **An Excel or CSV file** (`.xlsx`, `.csv`) — must contain a column
+  named `IP Address`. Cells can hold single addresses or CIDR blocks:
+
+  | IP Address  |
+  | ----------- |
+  | 192.168.1.1 |
+  | 10.0.1.0/30 |
+
+- **A JSON file** (`.json`) — a list of addresses, a list of objects keyed by
+  `IP Address`, `ip`, or `target`, or an object with a `targets` or `ips` array:
+
+  ```json
+  ["192.168.1.1", "10.0.1.0/30"]
+  ```
+
+  Because `IP Address` is one of the keys it accepts, a report IPMG wrote with
+  `--formats json` can be fed straight back in:
+
+  ```bash
+  ipmg --input results_20260628_120000.json
+  ```
+
+`--input` takes as many of these as you like, in any mix, and may also be
+repeated:
 
 ```bash
-ipmg --input 8.8.8.8                    # a single IP address
-ipmg --input 192.168.1.0/24             # a CIDR block (network and broadcast addresses are skipped)
-ipmg --input 192.168.1.1-192.168.1.50   # an inclusive range
-ipmg --input targets.txt                # a file (see below)
-ipmg --discover                         # the /24 around the interface your machine routes through
-ipmg --input 2001:db8::/120             # IPv6 works too, mixed with IPv4 if you like
-ipmg --discover ipv6                    # IPv6 hosts on the local links (neighbour discovery)
-ipmg --discover all                     # both of the above
+ipmg --input targets.txt 10.0.0.0/30 10.0.0.5
+ipmg --input targets.txt --input 10.0.0.5     # the same thing
 ```
 
-IPv6 probing uses `ping` on Linux and Windows and `ping6` on macOS and the
-BSDs. `--discover ipv6` pings the all-nodes group (`ff02::1`) on every
-interface and scans the neighbours that answer; link-local addresses keep their
-interface, as in `fe80::1%eth0`. Its scans are stored in history as
-`auto-discovery-ipv6`, separately from the IPv4 `auto-discovery` scans.
-
-To scan several unrelated targets, put them in a file — `--input` does not
-accept a comma-separated list.
-
-### Target files
-
-| Extension | Format |
-| --- | --- |
-| `.txt`, `.list` | One IP, CIDR block, or range per line. Blank lines and lines starting with `#` are ignored. |
-| `.csv`, `.xlsx`, `.xls` | A column named exactly `IP Address`; each cell holds an IP, CIDR block, or range. Other columns are ignored. |
+IPv4 and IPv6 targets mix freely in one scan, and reports, history, and change
+detection handle both. An IPv6 `/64` holds 2^64 addresses, far too many to
+sweep one by one, so it is rejected with a pointer to `--discover ipv6`, which
+finds the hosts on your local links through neighbour discovery instead:
 
 ```bash
-cat > targets.txt <<'EOF'
-# Gateways
-192.168.1.1
-
-# Public DNS
-8.8.8.8
-1.1.1.1
-
-# A small block and a range
-10.0.0.0/30
-10.0.1.10-10.0.1.20
-EOF
-
-ipmg --input targets.txt
+ipmg --discover ipv6      # IPv6 neighbours on the local links
+ipmg --discover all       # the IPv4 /24 and the IPv6 neighbours together
 ```
 
-```bash
-printf 'IP Address\n8.8.8.8\n1.1.1.1\n' > targets.csv
-ipmg --input targets.csv
-```
-
-In files, lines that are not an IP, CIDR block, or range (for example a
-hostname) are skipped.
+Duplicate targets are removed automatically — across sources too, so a host
+that is both in the file and on the command line is scanned once — and one scan
+expands to at most 65,536 hosts in total. Larger CIDR blocks, ranges, or
+combinations are rejected up front, before the scan starts.
 
 ### Rules worth knowing
 
-- **Duplicates are removed** before scanning.
-- **One scan covers at most 65,536 hosts.** `10.0.0.0/16` (65,534 hosts) is
-  accepted; `10.0.0.0/15` is rejected before anything is sent.
 - **A range must go upwards:** `192.168.1.100-192.168.1.1` is rejected.
+- **In files, a line that is not an IP, CIDR block, or range** (a hostname, for
+  example) is skipped.
 - **A file named with `--input` must exist.** A missing file is reported as
-  `Input file '<name>' was not found.` before anything is scanned (since
-  1.13.2; earlier versions created the file with sample addresses and scanned
-  those). Only plain `ipmg`, run without `--input`, creates its default
-  `ip_list.xlsx` — with two sample targets, `8.8.8.8` and `1.1.1.1` — if it
-  does not exist yet.
+  `Input file '<name>' was not found.` before anything is scanned. Only plain
+  `ipmg`, run without `--input`, creates its default `ip_list.xlsx`, with two
+  sample targets (`8.8.8.8` and `1.1.1.1`), if it does not exist yet.
 
 ---
 
@@ -307,6 +316,10 @@ The change's `ip` field holds the URL. `--fail-on-down` also fails the run
 
 ## Live output and logs
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/sameeralam3127/ipmg/main/docs/assets/ipmg-demo.gif" alt="ipmg scanning 13 hosts in parallel: live results with reverse DNS names and latency, then a summary of 10 active and 3 timed out" width="820">
+</p>
+
 ```bash
 ipmg --input 192.168.1.0/24 --stream          # print each host that answers, as it answers
 ipmg --input 192.168.1.0/24 --stream-all      # print every result, including timeouts
@@ -395,6 +408,24 @@ one of `Active`,
 `Inactive`, `Timeout`, `Unreachable`, `Invalid IP`, or `Error`. The `md` format
 adds a status summary, ready to paste into a ticket, and `jsonl` writes one
 JSON object per line for `jq` and log pipelines.
+
+### Piping results into a script
+
+`--json` prints the finished scan to stdout as
+a JSON array, and `--jsonl` prints one object per host the moment its probe
+finishes. The human output moves to stderr, so stdout is nothing but data and no
+temp file or glob is needed:
+
+```bash
+ipmg --input 10.0.0.0/24 --json | jq '.[] | select(.Status == "Active")'
+ipmg --input 10.0.0.0/24 --jsonl | while read -r host; do notify "$host"; done
+ipmg --input 10.0.0.0/24 --json 2>/dev/null > hosts.json   # data only
+```
+
+The field names are the report columns above, and both flags print a host
+identically — `--json` is what `--jsonl` prints, gathered into an array. Unless
+you ask for `--formats` explicitly, a piped scan writes no report file at all.
+Exit codes are unchanged.
 
 ### Interrupted scans
 
@@ -505,11 +536,24 @@ keeps normal jitter out of the report:
 ipmg diff --latency-threshold 10 --latency-pct 50   # defaults: 5 ms and 25%
 ```
 
-| Change | Severity |
-| --- | --- |
-| Host offline | critical |
-| New host, host removed, IP address changed, status changed | warning |
-| Host back online, hostname changed, latency changed | info |
+| Change | Severity | Meaning |
+| --- | --- | --- |
+| Host offline | critical | Reachable in the baseline, not reachable now |
+| HTTP check failing | critical | An `--http-check` URL that passed now fails |
+| New host | warning | An IP that the baseline never saw |
+| Host removed | warning | An IP the current scan no longer covers |
+| IP address changed | warning | A known hostname, or with `--mac` a known MAC, moved to a different IP |
+| Status changed | warning | Status moved between failure modes (e.g. `Timeout` → `Unreachable`) |
+| MAC address changed | warning | With `--mac`: a different device answers at the same IP |
+| HTTP status changed | warning | An HTTP check's status or failure reason changed |
+| Host back online | info | Recovered since the baseline |
+| Hostname changed | info | Same IP, different PTR record |
+| Latency changed | info | Latency moved past both thresholds |
+| HTTP check recovered | info | A failing HTTP check passes again |
+
+By default a scan is compared with the previous scan **of the same target
+source**, so file-based and `--discover` runs do not get mixed up;
+`--compare-any-source` takes the previous scan whatever its source.
 
 ---
 
@@ -587,6 +631,61 @@ URL that is not `http(s)://`, is an error before any host is probed (exit
 login, IPMG prints a warning and carries on. The scan, its reports, its
 history entry, the other notifications, and the exit code are unaffected.
 Error messages never include a webhook URL or the password.
+
+---
+
+## Default options in a file
+
+If every run repeats the same flags, put them in **`ipmg.toml`** next to your
+work instead:
+
+```toml
+threads = 200
+timeout = 1
+resolve = true
+formats = ["md", "csv"]
+
+[profile.datacenter]
+threads = 400
+scan-ports = true
+ports = "22,80,443"
+```
+
+```bash
+ipmg --input targets.txt                        # uses the file's defaults
+ipmg --input targets.txt --profile datacenter   # and the profile on top
+ipmg --input targets.txt --threads 20           # a flag always wins
+```
+
+Any long flag can be a key, written as the flag is (`scan-ports`) or with
+underscores (`scan_ports`). A switch takes `true` to mean "as if the flag were
+passed" — `no-history = true` is `--no-history`. Files are read from
+`~/.config/ipmg/config.toml` first (or `$XDG_CONFIG_HOME`), then `./ipmg.toml`
+on top, so a project can override your global defaults:
+
+| Flag | What it does |
+| --- | --- |
+| `--config PATH` | Read that file instead of searching |
+| `--no-config` | Ignore every file and use the built-in defaults |
+| `--profile NAME` | Apply the `[profile.NAME]` section as well |
+
+**The command line always wins.** A flag that appears on it ignores the file
+entirely for that flag — including `--input`, which merges several sources on
+one command line but replaces the file's list rather than adding to it.
+
+A key that is not a flag, a value of the wrong type, or a value outside a
+flag's choices is an error naming the key and the file it came from:
+
+```text
+✗ Unknown option 'thredas' in ipmg.toml. Did you mean 'threads'?
+✗ 'formats' in ipmg.toml: 'pdf' is not one of xlsx, csv, json, jsonl, md.
+```
+
+A project's `./ipmg.toml` comes with whatever directory you scan from,
+including a repository you just cloned, so it cannot say where results are
+sent: the `--notify-*` destinations and `--smtp-*` settings are only read from
+`~/.config/ipmg/config.toml` or a file you pass with `--config`. A file also
+cannot combine flags that exclude each other, such as `json` and `jsonl`.
 
 ---
 
@@ -668,74 +767,136 @@ button for it (`POST /api/v1/wake`, behind the same access token).
 
 ## IPMG Web
 
-IPMG Web is the optional `web` extra. The one-line installers, Homebrew, and
-the Docker image include it; after a plain `pip install ipmg`, add it with
-`pip install "ipmg[web]"`.
-
 ```bash
-ipmg web                                # http://127.0.0.1:8080, opens your browser
-ipmg web --no-browser                   # don't open a browser
-ipmg web --port 9000                    # another port
-ipmg web --db ./project.db              # another history database
-ipmg web --metrics --no-browser         # also serve Prometheus metrics at /metrics
-ipmg web --max-scans 4                  # run up to 4 scans at once (default: 2)
-ipmg --web                              # same as ipmg web
+ipmg web            # this machine only
+ipmg web --lan      # other machines too: prints the link and any firewall step
 ```
 
-On a server without a browser, keep the default local-only binding and reach it
-through an SSH tunnel from your workstation:
+Everything about IPMG Web, including opening it from other machines, the
+firewall, scheduled scans, the access token, and Prometheus metrics, is in
+[WEB.md](WEB.md).
 
-```bash
-# on the server
-ipmg web --no-browser
+---
 
-# on your workstation, then open the link the server printed
-# (http://127.0.0.1:8080/#token=…)
-ssh -L 8080:127.0.0.1:8080 user@server
-```
+## All scan options
 
-Every API request needs the access token in that link. A new token is made
-each time IPMG Web starts; set `IPMG_WEB_TOKEN` to keep one fixed.
+Generated from `ipmg --help`, which always has the current set. The other
+commands list theirs with `ipmg web --help`, `ipmg history --help`,
+`ipmg history prune --help`, `ipmg diff --help`, `ipmg wake --help`, and
+`ipmg completion --help`.
 
-### Scheduled scans
+**General**
 
-IPMG Web can run scans on its own, so continuous monitoring from the browser no
-longer means leaving a terminal open. On the **Schedules** page, give a
-schedule a name, its targets, and either **every N minutes** or a five-field
-**cron expression** in the server's local time (`*/15 * * * *`,
-`0 7 * * mon-fri`, `@daily`), plus the usual scan settings. Each schedule can
-be paused, resumed, run now, or deleted (its scans stay in the history).
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--input TARGETS` | none | One or more IPs, CIDR blocks, ranges, or target files (.txt, .list, .csv, .json, .xls, .xlsx). Every source is merged and de-duplicated, and the flag may be repeated. Without --input or --discover, ip_list.xlsx is used and created with sample targets if it does not exist. |
+| `--output PREFIX` | `results` | Report file name prefix; the timestamp is appended (default: results). |
+| `--timeout SECONDS` | `2` | Seconds to wait for a reply from each host (default: 2). |
+| `--count N` | `1` | Pings per host; raise it on a lossy link (default: 1). |
+| `--threads N` | `50` | How many hosts to probe at once (default: 50). |
+| `--formats FORMAT` | none | One or more report formats: xlsx, csv, json, jsonl, md (default: xlsx, or no report file at all with --json or --jsonl). Choices: `xlsx`, `csv`, `json`, `jsonl`, `md`. |
+| `--discover FAMILY` | none | Scan this machine's networks instead of --input: ipv4 (the default) sweeps the local /24, ipv6 finds hosts on the local links through neighbour discovery, all does both. Choices: `ipv4`, `ipv6`, `all`. |
+| `--resolve` | off | Look up each host's name with a reverse DNS (PTR) query. |
+| `--mac` | off | Add each responding host's MAC address and its vendor, read from this machine's ARP/neighbour table (hosts on the local network only). |
+| `--dns-cache-ttl SECONDS` | `300` | Cache reverse DNS results for this many seconds (default: 300). |
+| `--dns-timeout SECONDS` | `2.0` | Record a host as Unresolvable when its reverse DNS lookup takes longer (default: 2, range 0.1-60). |
+| `--resolve-active-only` | off | With --resolve, only look up hosts that answered the probe. |
+| `--interval MINUTES` | none | Repeat the whole scan every N minutes until interrupted. |
+| `--verbose` | off | Debug logging. |
+| `--web` | off | Start IPMG Web, the local browser UI (same as 'ipmg web'). |
 
-- Schedules are stored in the history database, so they survive a restart; a
-  run that fell due while IPMG Web was stopped happens once, when it starts.
-- Every run is a normal scan under the source `schedule:<name>`, so it appears
-  in History, and the Changes view compares it with that schedule's previous
-  run by default.
-- A run is skipped, not stacked, while the schedule's previous run is still
-  going or `--max-scans` scans are running. The page shows the last skip and
-  why.
-- An every-N-minutes schedule runs once when created or resumed and then keeps
-  a fixed cadence; a cron schedule waits for its next match.
+**Exit status (for cron and monitoring)**
 
-The same is available over the API under `/api/v1/schedules`
-([API reference](API.md)). For scheduled scans without IPMG Web, use `--interval`
-or the [service templates](SERVICES.md).
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--fail-on-down` | off | Exit with status 3 if any target is not Active. Reports are still written. |
+| `--min-active PERCENT` | none | Exit with status 3 if fewer than PERCENT of the targets are Active (0-100). |
 
-Each scan may use up to 500 threads, each running a `ping` process, so IPMG
-Web runs at most `--max-scans` scans at once (default 2). Starting another,
-from a second tab, a double click, a script, or a schedule, is refused with
-"a scan is already running" (HTTP `429`) until one finishes or is cancelled.
+**TCP checks**
 
-`--metrics` adds `/metrics` for Prometheus, behind the same token, sent as a
-Bearer credential (`authorization.credentials_file` in a scrape config). Pin
-the token with `IPMG_WEB_TOKEN` so a restart does not break the scrape.
-`--metrics-sources N` (default 20) limits it to the N most recently scanned
-sources. The metrics and a sample alert rule are listed in the
-[README](../README.md#prometheus-metrics).
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--probe` | `icmp` | How to tell a host is up: icmp (ping, the default), tcp (a connection to any of --ports, accepted or refused), or icmp,tcp (TCP only for hosts that did not answer the ping, for hosts that block ICMP). Choices: `icmp`, `tcp`, `icmp,tcp`. |
+| `--scan-ports` | off | List which of --ports are open on every host that is up (off by default). |
+| `--ports PORTS` | `21,22,25,53,80,443,445,1433,3306,3389,5432` | Comma-separated TCP ports for --scan-ports and --probe tcp (default: 21,22,25,53,80,443,445,1433,3306,3389,5432). |
+| `--port-timeout SECONDS` | `1.0` | Connect timeout per port, for --scan-ports and --probe tcp (default: 1). |
 
-`--host 0.0.0.0` makes IPMG Web reachable from the network. The token still
-guards it, but it travels over plain HTTP, so use a reverse proxy with TLS on
-any network you don't trust.
+**HTTP checks**
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--http-check URL` | none | Request each URL and record its status, response time, and why it failed. |
+| `--http-timeout SECONDS` | `5.0` | Seconds per check, redirects included (default: 5). |
+| `--http-expect CODES` | `200-399` | Status codes that pass, such as 200-299,401 (default: 200-399). |
+| `--http-method` | `GET` | Request method (default: GET). Choices: `GET`, `HEAD`. |
+| `--http-no-redirects` | off | Do not follow redirects; the redirect's own status is checked. |
+| `--http-insecure` | off | Do not verify TLS certificates (for self-signed lab hosts; not recommended). |
+
+**Report writing**
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--no-incremental` | off | Only write the report once the scan has finished. |
+| `--autosave SECONDS` | `30.0` | How often a running scan re-saves the xlsx, json, and md reports (default: 30, range: 1-3600). csv and jsonl are written per host regardless. |
+| `--keep-reports N` | none | After writing this scan's reports, delete all but the N newest report files of each format named after --output (off by default). |
+| `--resume REPORT` | none | Finish an interrupted scan: skip the hosts its report already holds and complete that report. REPORT is its jsonl, csv, json, or xlsx file (default: the newest report named after --output). |
+
+**Machine-readable output**
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--json` | off | Print the finished scan to stdout as a JSON array, with the human output on stderr, for piping into jq or a script. |
+| `--jsonl` | off | Stream one JSON object per host to stdout as each probe finishes, with the human output on stderr. |
+
+**Live output**
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--stream` | off | Print each host that answers as soon as its probe finishes. |
+| `--stream-all` | off | Stream every result, including hosts that did not answer (implies --stream). |
+| `--stream-refresh SECONDS` | `0.25` | Seconds between progress-bar redraws while streaming (default: 0.25, range 0.05-5.0). |
+
+**Scan history**
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--no-history` | off | Do not store this scan in the local history database. |
+| `--compare` | off | Compare this scan against the previous one and print a change report (implied by any --notify-* flag). |
+| `--compare-any-source` | off | Compare against the previous scan even if it used a different target source. |
+| `--keep-scans N` | none | After storing this scan, delete all but the N newest stored scans of its source (off by default). |
+| `--db PATH` | none | Scan history database file (default: ~/.ipmg/dashboard.db). |
+| `--diff-formats FORMAT` | `` | Export the change summary as md, json, csv. Choices: `md`, `json`, `csv`. |
+| `--diff-output BASENAME` | `changes` | Base filename for exported change summaries (default: changes). |
+
+**Change detection thresholds**
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--latency-threshold MS` | `5.0` | Minimum latency delta in milliseconds before it is reported (default: 5). |
+| `--latency-pct PERCENT` | `25.0` | Minimum relative latency change before it is reported (default: 25). |
+
+**Configuration file**
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--config PATH` | none | Read default options from this file instead of searching for ipmg.toml. |
+| `--no-config` | off | Ignore every configuration file and use the built-in defaults. |
+| `--profile NAME` | none | Apply the [profile.NAME] section of the configuration file. |
+
+**Change notifications**
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--notify-webhook URL` | none | POST the change report as JSON to URL (or $IPMG_NOTIFY_WEBHOOK). |
+| `--notify-slack URL` | none | Post the changes to a Slack incoming webhook (or $IPMG_NOTIFY_SLACK). |
+| `--notify-teams URL` | none | Post the changes to a Microsoft Teams Workflows webhook (or $IPMG_NOTIFY_TEAMS). |
+| `--notify-email ADDRESS` | none | Email the Markdown change report to these addresses (or the comma-separated $IPMG_NOTIFY_EMAIL). Needs --smtp-host. |
+| `--notify-severity` | `warning` | Only notify when a change is at least this severe (default: warning). Choices: `critical`, `warning`, `info`. |
+| `--smtp-host HOST` | none | Mail server for --notify-email (or $IPMG_SMTP_HOST). |
+| `--smtp-port PORT` | none | Mail server port (or $IPMG_SMTP_PORT; default: 587, 465 with ssl, 25 with none). |
+| `--smtp-security` | none | How to encrypt the mail connection (or $IPMG_SMTP_SECURITY; default: starttls). Choices: `starttls`, `ssl`, `none`. |
+| `--smtp-user USER` | none | Mail server login (or $IPMG_SMTP_USER). The password is read from $IPMG_SMTP_PASSWORD. |
+| `--smtp-from ADDRESS` | none | Sender address (or $IPMG_SMTP_FROM; default: the login, else ipmg@<this host>). |
 
 ---
 

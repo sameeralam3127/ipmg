@@ -1,8 +1,12 @@
 # IPMG v4 development plan
 
-> **IPMG v4 is under active development on the `v4` branch. Do not switch
-> production systems to it.** Use the current stable 3.x release until
-> v4.0.0 is published. **Target: v4.0.0 at the end of October 2026.**
+> **IPMG 4.0.0 shipped in October 2026** with everything from 3.2 (TCP and
+> HTTP checks, MAC lookup, schedules, retention, IPMG Web on the LAN), on
+> Python 3.10 and newer, and with every 3.x workflow kept compatible. The
+> architectural work this plan describes (the protocols, plugins, streaming
+> pipeline, typed domain models, and contract tests below) was not part of
+> 4.0.0. It continues in the 4.x releases, under the same compatibility
+> contract.
 
 IPMG v4 is an **architectural release, not a feature release**. Its identity
 stays the same as 3.x: *fast network discovery, historical inventory, change
