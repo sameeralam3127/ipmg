@@ -109,6 +109,19 @@ that program and everything it starts, even though `arp -an` works in your
 terminal. Allow your terminal app (or the Python that runs IPMG) under
 System Settings → Privacy & Security → Local Network.
 
+### `--snmp`: every device times out, or v3 is rejected
+
+SNMP is usually off until it is configured, and a v2c agent ignores a wrong
+community string without a word. The [SNMP guide](SNMP.md#troubleshooting)
+lists what each failure means (`timeout`, `auth`, `refused`...) and how to
+check a device with `snmpget` from the same machine.
+
+### `SNMPv3 encryption needs the 'cryptography' package`
+
+A privacy key is set, and the install has no `snmp` extra. Add it with
+`pip install "ipmg[snmp]"`, or
+`uv tool install --force --python ">=3.10" "ipmg[web,snmp]"`.
+
 ---
 
 ## Input files

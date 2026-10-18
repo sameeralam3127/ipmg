@@ -169,6 +169,8 @@ body {
 .feature-card { min-height: 146px; }
 .feature-card p { margin: 0; font-size: 13px; }
 .details-card { margin-top: 14px; }
+.snmp-interfaces { margin-top: 12px; }
+.snmp-interfaces summary { cursor: pointer; color: var(--text-2); font-weight: 600; margin-bottom: 8px; }
 .details-list { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 10px 18px; margin: 0; }
 .details-list dt { color: var(--muted); font-weight: 600; }
 .details-list dd { margin: 0; color: var(--text-2); }

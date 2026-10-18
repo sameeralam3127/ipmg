@@ -1,3 +1,5 @@
+import os
+
 import pytest
 
 from ipmg.reporting import ui
@@ -24,6 +26,14 @@ def isolate_user_config(tmp_path, monkeypatch):
     test that cares about it writes its own.
     """
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+
+
+@pytest.fixture(autouse=True)
+def isolate_snmp_credentials(monkeypatch):
+    """Keep a developer's own IPMG_SNMP_* variables out of the tests."""
+    for name in list(os.environ):
+        if name.startswith("IPMG_SNMP_"):
+            monkeypatch.delenv(name)
 
 
 @pytest.fixture()

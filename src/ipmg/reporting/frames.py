@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Any
 
 from ipmg.core.engine import HostResult
 
-RESULT_COLUMNS: List[str] = [
+RESULT_COLUMNS: list[str] = [
     "IP Address",
     "Status",
     "Latency",
@@ -24,7 +25,7 @@ MAC_COLUMN = "MAC Address"
 VENDOR_COLUMN = "Vendor"
 
 
-def report_columns(config: Any = None) -> Tuple[str, ...]:
+def report_columns(config: Any = None) -> tuple[str, ...]:
     """The columns a scan's report has.
 
     The default set, plus each optional column for something the scan was
@@ -38,7 +39,7 @@ def report_columns(config: Any = None) -> Tuple[str, ...]:
             return config.get(name, default)
         return getattr(config, name, default)
 
-    extra: List[str] = []
+    extra: list[str] = []
     if setting("probe", "icmp") not in ("icmp", "", None):
         extra.append(PROBE_COLUMN)
     if setting("mac_lookup", False):
@@ -47,7 +48,7 @@ def report_columns(config: Any = None) -> Tuple[str, ...]:
     return tuple(RESULT_COLUMNS[:at] + extra + RESULT_COLUMNS[at:])
 
 
-def result_values(result: HostResult) -> Dict[str, Any]:
+def result_values(result: HostResult) -> dict[str, Any]:
     """Every per-host column a report can carry, before choosing the ones it has."""
     return {
         "IP Address": result.ip,
@@ -61,7 +62,7 @@ def result_values(result: HostResult) -> Dict[str, Any]:
     }
 
 
-Row = Dict[str, Any]
+Row = dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -72,11 +73,11 @@ class ReportTable:
     thousand rows at most, and every writer walks it row by row anyway.
     """
 
-    rows: List[Row] = field(default_factory=list)
+    rows: list[Row] = field(default_factory=list)
     columns: Sequence[str] = tuple(RESULT_COLUMNS)
 
     @classmethod
-    def from_rows(cls, rows: Iterable[Row]) -> "ReportTable":
+    def from_rows(cls, rows: Iterable[Row]) -> ReportTable:
         """A table over ``rows``, its columns being every key they use, in order."""
         rows = [dict(row) for row in rows]
         return cls(rows, columns=tuple(dict.fromkeys(key for row in rows for key in row)))
@@ -87,7 +88,7 @@ class ReportTable:
     def __iter__(self):
         return iter(self.rows)
 
-    def column(self, name: str) -> List[Any]:
+    def column(self, name: str) -> list[Any]:
         return [row.get(name) for row in self.rows]
 
 
@@ -98,7 +99,7 @@ def format_open_ports(ports: Iterable[int]) -> str:
 def results_table(
     results: Iterable[HostResult],
     batch_timestamp: Any,
-    duration_s: Optional[float],
+    duration_s: float | None,
     columns: Sequence[str] = tuple(RESULT_COLUMNS),
 ) -> ReportTable:
     """Build the report table, keeping the column set stable when empty."""

@@ -143,6 +143,7 @@ with `--compare` to see what changed, or open IPMG Web to browse it.
 | Find hosts that block ping | `ipmg --input 10.0.0.0/24 --probe icmp,tcp` |
 | Know which device each address is | `ipmg --discover --resolve --mac` |
 | Check that a web service works | `ipmg --http-check https://intranet.example.com/` |
+| Watch switches and routers: reboots, interfaces going down | `ipmg --input switches.txt --snmp --compare` |
 | See which services are listening | `ipmg --input targets.txt --scan-ports` |
 | Get a report I can send to someone | `ipmg --input targets.txt --formats md csv` |
 | Pipe the results into a script | `ipmg --input targets.txt --json \| jq .` |
@@ -187,6 +188,7 @@ Try it first with the [live demo](https://sameeralam3127.github.io/ipmg/demo/).
 | [Web API](https://github.com/sameeralam3127/ipmg/blob/main/docs/API.md) | Scripting IPMG Web over HTTP and WebSocket |
 | [Running as a service](https://github.com/sameeralam3127/ipmg/blob/main/docs/SERVICES.md) | systemd and launchd templates for scheduled scans and IPMG Web |
 | [GitHub Action](https://github.com/sameeralam3127/ipmg/blob/main/docs/GITHUB-ACTION.md) | Reachability checks in CI, before a deploy or on a schedule |
+| [SNMP polling](https://github.com/sameeralam3127/ipmg/blob/main/docs/SNMP.md) | Switches and routers over SNMP v2c and v3: credentials, interfaces, reboots, reports |
 | [How it compares](https://github.com/sameeralam3127/ipmg/blob/main/docs/COMPARISON.md) | IPMG next to nmap, fping, and Uptime Kuma |
 | [Troubleshooting](https://github.com/sameeralam3127/ipmg/blob/main/docs/TROUBLESHOOTING.md) and [FAQ](https://github.com/sameeralam3127/ipmg/blob/main/docs/FAQ.md) | Install errors, timeouts, slow scans, empty MAC addresses, common questions |
 | [Architecture](https://github.com/sameeralam3127/ipmg/blob/main/docs/ARCHITECTURE.md) | How the code fits together, for contributors |

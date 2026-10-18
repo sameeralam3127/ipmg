@@ -1,6 +1,6 @@
 // REST + WebSocket client for the local IPMG API. No external dependencies.
 
-import { demo } from "./demo.js";
+import { demo } from "./demo.js?v=20261018.2";
 
 const BASE = "/api/v1";
 // Pages has no Python process. `?demo=1` is also useful for reviewing the
@@ -79,6 +79,7 @@ export const api = {
   runSchedule: (id) => useDemo ? Promise.resolve(demo.runSchedule(id)) : request(`/schedules/${id}/run`, { method: "POST" }),
   deleteSchedule: (id) => useDemo ? Promise.resolve(demo.deleteSchedule(id)) : request(`/schedules/${id}`, { method: "DELETE" }),
   httpChecks: (id) => useDemo ? Promise.resolve([]) : request(`/scans/${id}/http`),
+  snmp: (id) => useDemo ? Promise.resolve(demo.snmp(id)) : request(`/scans/${id}/snmp`),
   startScan: (payload) =>
     useDemo ? Promise.resolve(demo.startScan(payload)) : request("/scans", {
       method: "POST",

@@ -33,10 +33,11 @@ import math
 import os
 import re
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import IO, Dict, List, Optional, Sequence, Set, Tuple
+from typing import IO
 
 from ipmg.core.engine import HostResult
 from ipmg.exceptions import FileIOError
@@ -78,7 +79,7 @@ class IncrementalOptions:
     enabled: bool = True
     autosave_s: float = DEFAULT_AUTOSAVE_S
 
-    def clamped(self) -> "IncrementalOptions":
+    def clamped(self) -> IncrementalOptions:
         return IncrementalOptions(
             enabled=self.enabled,
             autosave_s=min(max(self.autosave_s, MIN_AUTOSAVE_S), MAX_AUTOSAVE_S),
@@ -93,7 +94,7 @@ def _csv_cell(value: object) -> str:
     return text
 
 
-def jsonl_record(row: Dict[str, object]) -> str:
+def jsonl_record(row: dict[str, object]) -> str:
     """One JSON Lines record, rendered the same way mid-scan and at the end.
 
     ``default=str`` keeps timestamps readable as the text they print as,
@@ -105,9 +106,9 @@ def jsonl_record(row: Dict[str, object]) -> str:
 def result_row(
     result: HostResult,
     batch_timestamp: object,
-    elapsed_s: Optional[float],
+    elapsed_s: float | None,
     columns: Sequence[str] = tuple(RESULT_COLUMNS),
-) -> Dict[str, object]:
+) -> dict[str, object]:
     """One report row, with the same columns a finished scan writes.
 
     ``elapsed_s`` fills "Scan Duration (s)" with the time the scan had been
@@ -136,7 +137,7 @@ class IncrementalReport:
         timestamp: str,
         batch_timestamp: object,
         options: IncrementalOptions = IncrementalOptions(),
-        previous: Optional[Sequence[HostResult]] = None,
+        previous: Sequence[HostResult] | None = None,
         previous_elapsed_s: float = 0.0,
         columns: Sequence[str] = tuple(RESULT_COLUMNS),
     ) -> None:
@@ -146,18 +147,18 @@ class IncrementalReport:
         self._timestamp = timestamp
         self._batch_timestamp = batch_timestamp
         self._formats = [fmt for fmt in dict.fromkeys(formats)]
-        self._results: List[HostResult] = list(previous or ())
+        self._results: list[HostResult] = list(previous or ())
         # Resumed rows keep the time the earlier run had reached, and new rows
         # count on from it, so a report interrupted twice still knows how long
         # the whole scan has taken.
-        self._rows: List[Dict[str, object]] = [
+        self._rows: list[dict[str, object]] = [
             result_row(
                 result, batch_timestamp, previous_elapsed_s if previous else None, self._columns
             )
             for result in self._results
         ]
-        self._handles: Dict[str, IO[str]] = {}
-        self._written: Dict[str, None] = {}
+        self._handles: dict[str, IO[str]] = {}
+        self._written: dict[str, None] = {}
         self._started_at = time.monotonic() - previous_elapsed_s
         self._last_snapshot = time.monotonic()
         self._closed = False
@@ -168,16 +169,16 @@ class IncrementalReport:
         return f"{self._base}_{self._timestamp}.{fmt}"
 
     @property
-    def results(self) -> List[HostResult]:
+    def results(self) -> list[HostResult]:
         """Every result written so far, resumed rows first."""
         return list(self._results)
 
     @property
-    def written_paths(self) -> List[str]:
+    def written_paths(self) -> list[str]:
         """Report files this writer has actually put on disk, in format order."""
         return list(self._written)
 
-    def __enter__(self) -> "IncrementalReport":
+    def __enter__(self) -> IncrementalReport:
         self.open()
         return self
 
@@ -234,7 +235,7 @@ class IncrementalReport:
         if self._due_for_snapshot():
             self.snapshot()
 
-    def _render(self, fmt: str, row: Dict[str, object]) -> str:
+    def _render(self, fmt: str, row: dict[str, object]) -> str:
         if fmt == "csv":
             return ",".join(_csv_cell(row[column]) for column in self._columns) + "\n"
         return jsonl_record(row)
@@ -248,7 +249,7 @@ class IncrementalReport:
         self._last_snapshot = now
         return True
 
-    def snapshot(self) -> List[str]:
+    def snapshot(self) -> list[str]:
         """Rewrite the whole-file formats from the results collected so far."""
         formats = [fmt for fmt in self._formats if fmt in SNAPSHOT_FORMATS]
         if not formats or not self._rows:
@@ -259,7 +260,7 @@ class IncrementalReport:
         from ipmg.infrastructure.file_io import write_report
 
         frame = ReportTable(list(self._rows), columns=self._columns)
-        written: List[str] = []
+        written: list[str] = []
         for fmt in formats:
             try:
                 write_report(frame, self.path_for(fmt), fmt)
@@ -296,17 +297,17 @@ class PartialReport:
     #: resumed scan writes back to the same files.
     base: str
     timestamp: str
-    results: Tuple[HostResult, ...]
-    batch_timestamp: Optional[datetime]
+    results: tuple[HostResult, ...]
+    batch_timestamp: datetime | None
     #: How long the earlier run had been scanning when it stopped.
     elapsed_s: float
 
     @property
-    def scanned(self) -> Set[str]:
+    def scanned(self) -> set[str]:
         return {result.ip for result in self.results}
 
 
-def find_partial_report(base: str) -> Optional[str]:
+def find_partial_report(base: str) -> str | None:
     """The newest report saved under ``base`` that a scan can resume from.
 
     When one scan left several formats behind, the most faithful one wins:
@@ -358,7 +359,7 @@ def load_partial_report(path: str) -> PartialReport:
     # A spreadsheet format stores cells escaped against formula injection;
     # the scan itself needs the text the host actually reported.
     unescape = fmt in ("csv", "xlsx")
-    by_ip: Dict[str, HostResult] = {}
+    by_ip: dict[str, HostResult] = {}
     for row in frame.rows:
         result = _row_result(row, unescape)
         if result is not None:
@@ -443,7 +444,7 @@ def _text(value: object, unescape: bool = False) -> str:
     return text
 
 
-def _latency(value: object) -> Optional[float]:
+def _latency(value: object) -> float | None:
     if _is_blank(value):
         return None
     try:
@@ -452,7 +453,7 @@ def _latency(value: object) -> Optional[float]:
         return None
 
 
-def _open_ports(value: object) -> Tuple[int, ...]:
+def _open_ports(value: object) -> tuple[int, ...]:
     ports = []
     for piece in _text(value).split(","):
         try:
@@ -462,7 +463,7 @@ def _open_ports(value: object) -> Tuple[int, ...]:
     return tuple(ports)
 
 
-def _row_result(row: Dict[str, object], unescape: bool) -> Optional[HostResult]:
+def _row_result(row: dict[str, object], unescape: bool) -> HostResult | None:
     ip = _text(row.get("IP Address"))
     status = _text(row.get("Status"))
     if not ip or not status:
@@ -479,7 +480,7 @@ def _row_result(row: Dict[str, object], unescape: bool) -> Optional[HostResult]:
     )
 
 
-def _parse_timestamp(value: object) -> Optional[datetime]:
+def _parse_timestamp(value: object) -> datetime | None:
     if isinstance(value, datetime):
         return value
     if isinstance(value, (int, float)) and not isinstance(value, bool):
@@ -488,7 +489,7 @@ def _parse_timestamp(value: object) -> Optional[datetime]:
     return datetime.fromisoformat(str(value).strip())
 
 
-def _batch_timestamp(frame: ReportTable) -> Optional[datetime]:
+def _batch_timestamp(frame: ReportTable) -> datetime | None:
     """The resumed scan's start time, so both runs report as one batch."""
     if "Batch Timestamp" not in frame.columns:
         return None
@@ -508,7 +509,7 @@ def _elapsed(frame: ReportTable) -> float:
     durations = []
     for value in frame.column("Scan Duration (s)"):
         try:
-            durations.append(float(value))  # type: ignore[arg-type]
+            durations.append(float(value))
         except (TypeError, ValueError):
             continue
     durations = [value for value in durations if not math.isnan(value)]

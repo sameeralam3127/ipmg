@@ -308,6 +308,32 @@
         "HTTPBearer"
       ]
     },
+    "GET /api/v1/scans/{scan_id}/snmp": {
+      "parameters": {
+        "scan_id": {
+          "in": "path",
+          "required": true,
+          "type": "integer"
+        }
+      },
+      "responses": {
+        "200": {
+          "application/json": "array[SnmpDeviceRow]"
+        },
+        "401": {
+          "application/json": "ErrorResponse"
+        },
+        "404": {
+          "application/json": "ErrorResponse"
+        },
+        "422": {
+          "application/json": "ErrorResponse"
+        }
+      },
+      "security": [
+        "HTTPBearer"
+      ]
+    },
     "GET /api/v1/schedules": {
       "parameters": {},
       "responses": {
@@ -571,6 +597,8 @@
         "last_seen": "null | string",
         "mac": "null | string",
         "scan_count": "integer",
+        "snmp_descr": "null | string",
+        "snmp_name": "null | string",
         "status": "string",
         "vendor": "null | string"
       },
@@ -948,6 +976,62 @@
       "required": [
         "name",
         "targets"
+      ]
+    },
+    "SnmpDeviceRow": {
+      "properties": {
+        "error": "string",
+        "failure": "string",
+        "interfaces": "array[SnmpInterfaceRow]",
+        "ip": "string",
+        "ok": "boolean",
+        "polled_at": "string",
+        "response_ms": "null | number",
+        "sys_descr": "string",
+        "sys_location": "string",
+        "sys_name": "string",
+        "sys_object_id": "string",
+        "uptime_s": "null | number",
+        "version": "string"
+      },
+      "required": [
+        "error",
+        "failure",
+        "interfaces",
+        "ip",
+        "ok",
+        "polled_at",
+        "response_ms",
+        "sys_descr",
+        "sys_location",
+        "sys_name",
+        "sys_object_id",
+        "uptime_s",
+        "version"
+      ]
+    },
+    "SnmpInterfaceRow": {
+      "properties": {
+        "admin_status": "string",
+        "alias": "string",
+        "description": "string",
+        "if_index": "integer",
+        "in_octets": "integer | null",
+        "name": "string",
+        "oper_status": "string",
+        "out_octets": "integer | null",
+        "speed_mbps": "integer | null"
+      },
+      "required": [
+        "admin_status",
+        "alias",
+        "description",
+        "if_index",
+        "in_octets",
+        "name",
+        "oper_status",
+        "out_octets",
+        "speed_mbps"
       ]
     },
     "Stats": {

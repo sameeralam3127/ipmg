@@ -5,8 +5,8 @@ from __future__ import annotations
 import csv
 import io
 import json
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional
 
 from rich.text import Text
 
@@ -27,20 +27,20 @@ CSV_COLUMNS = (
     "Delta (ms)",
 )
 
-SEVERITY_STYLES: Dict[Severity, str] = {
+SEVERITY_STYLES: dict[Severity, str] = {
     Severity.CRITICAL: "danger",
     Severity.WARNING: "warning",
     Severity.INFO: "info",
 }
 
-SEVERITY_GLYPHS: Dict[Severity, str] = {
+SEVERITY_GLYPHS: dict[Severity, str] = {
     Severity.CRITICAL: "fail",
     Severity.WARNING: "warn",
     Severity.INFO: "dot",
 }
 
 
-def _cell(value: Optional[object]) -> str:
+def _cell(value: object | None) -> str:
     return "" if value is None else str(value)
 
 
@@ -55,7 +55,7 @@ def _change_label(change) -> Text:
     return text
 
 
-def print_diff(diff: ScanDiff, limit: Optional[int] = None) -> None:
+def print_diff(diff: ScanDiff, limit: int | None = None) -> None:
     """Render a comparison to the terminal."""
     ui.blank()
     ui.heading("Changes")
@@ -152,7 +152,7 @@ def _markdown_summary_rows(diff: ScanDiff) -> Iterable[str]:
 
 
 def diff_to_markdown(diff: ScanDiff) -> str:
-    lines: List[str] = [
+    lines: list[str] = [
         "# IPMG Change Report",
         "",
         f"- Baseline: {markdown_escape(diff.baseline.display())}",
@@ -228,10 +228,10 @@ def render_diff(diff: ScanDiff, fmt: str) -> str:
         ) from exc
 
 
-def export_diff(diff: ScanDiff, base: str, formats: Iterable[str]) -> List[str]:
+def export_diff(diff: ScanDiff, base: str, formats: Iterable[str]) -> list[str]:
     """Write the comparison to ``{base}_{timestamp}.{fmt}`` files."""
     stamp = timestamp_str()
-    saved: List[str] = []
+    saved: list[str] = []
 
     for fmt in formats:
         content = render_diff(diff, fmt)

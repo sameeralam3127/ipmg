@@ -7,7 +7,6 @@ import platform
 import re
 import shutil
 import subprocess  # nosec B404
-from typing import List, Optional, Tuple
 
 from ipmg.exceptions import PingError
 
@@ -46,7 +45,7 @@ def is_ipv6(ip: str) -> bool:
         return False
 
 
-def parse_latency(output: str, system: Optional[str] = None) -> Optional[float]:
+def parse_latency(output: str, system: str | None = None) -> float | None:
     """Pull the average round-trip time out of a ping's summary line.
 
     The wording differs by ping implementation and by system language, so
@@ -66,9 +65,7 @@ def parse_latency(output: str, system: Optional[str] = None) -> Optional[float]:
     return float(match.group(1)) if match else None
 
 
-def build_ping_command(
-    ip: str, timeout: int, count: int, system: Optional[str] = None
-) -> List[str]:
+def build_ping_command(ip: str, timeout: int, count: int, system: str | None = None) -> list[str]:
     """Build the platform-specific ping argv.
 
     The timeout flag is not portable: Windows ``-w`` and macOS/FreeBSD ``-W``
@@ -136,7 +133,7 @@ def missing_ping_message() -> str:
     return f"{base} Install your distribution's iputils package."
 
 
-def _replies_before_deadline(output) -> Optional[float]:
+def _replies_before_deadline(output) -> float | None:
     """Average latency of the replies a ping printed before it was stopped.
 
     ``ping6`` on macOS waits about ten seconds for a missing reply, so a probe
@@ -148,7 +145,7 @@ def _replies_before_deadline(output) -> Optional[float]:
     return sum(times) / len(times) if times else None
 
 
-def ping_ip(ip: str, timeout: int, count: int) -> Tuple[str, Optional[float]]:
+def ping_ip(ip: str, timeout: int, count: int) -> tuple[str, float | None]:
     if not validate_ip(ip):
         return "Invalid IP", None
 
@@ -158,8 +155,7 @@ def ping_ip(ip: str, timeout: int, count: int) -> Tuple[str, Optional[float]]:
         # Fixed argv list, no shell, and ip is validated before this call.
         result = subprocess.run(  # nosec B603
             cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
             timeout=timeout * count + 1,
         )

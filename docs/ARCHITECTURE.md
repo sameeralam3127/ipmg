@@ -40,7 +40,7 @@ flowchart TD
 | --- | --- | --- |
 | `cli/` | Turning a command line (and `ipmg.toml`) into arguments, dispatching `ipmg`, `web`, `history`, `diff`, `wake`, `completion` | Probe hosts or touch the database itself |
 | `services/` | The workflows: a CLI scan pass, recording history, comparing scans, retention | Know about argparse beyond reading attributes off `args` |
-| `core/` | Probing and pure logic: the engine, ping, TCP and HTTP checks, MAC lookup, discovery, change detection, health checks, cron | Print, write files, or open the database |
+| `core/` | Probing and pure logic: the engine, ping, TCP and HTTP checks, SNMP (`core/snmp/`), MAC lookup, discovery, change detection, health checks, cron | Print, write files, or open the database |
 | `infrastructure/` | Side effects: SQLite, report files, notifications, pruning | Decide *what* changed; that is `core/diff.py` |
 | `reporting/` | Everything a person or a script reads: terminal output, report tables, `--json`, Prometheus text | Probe hosts |
 | `web/` | IPMG Web: the FastAPI app, background scans, schedules, the bundled frontend | Reimplement scanning: it calls the same engine |
@@ -71,6 +71,7 @@ sequenceDiagram
     W-->>E: HostResult
     E-->>S: on_result(result) on the collecting thread
     S->>R: live row, incremental report, --jsonl line
+    S->>S: SNMP polls of the hosts that answered (--snmp)
     S->>S: HTTP checks (--http-check), after the hosts
     S->>R: summary, final reports, --json
     S->>H: record_scan (one transaction)
@@ -99,8 +100,8 @@ sequenceDiagram
    whose columns come from `report_columns(config)`: the default set, plus
    `Probe`, `MAC Address`, and `Vendor` only when the scan asked for them.
    `file_io.save_results` renders every format from that one table.
-5. **History.** `HistoryService.record_scan` stores the scan, its results, and
-   its HTTP checks in one transaction. With `--compare`,
+5. **History.** `HistoryService.record_scan` stores the scan, its results,
+   its HTTP checks, and its SNMP polls in one transaction. With `--compare`,
    `compare_with_previous` loads snapshots of this scan and the previous
    comparable scan of the same source and hands them to `core/diff.py`.
 6. **Changes.** `compare_snapshots` is pure: it returns a `ScanDiff` of
@@ -177,10 +178,12 @@ uvicorn on `127.0.0.1` by default.
   `Database._insert_results` (with a `_migrate` entry), show it in
   `reporting/live.py`, and add it to `HostResultRow` in `web/schemas.py`
   (a new, optional field) and the snapshot.
-- **A check of something other than a host** (as HTTP checks were): give it
-  its own module in `core/`, its own result type, report file, and history
-  table, and changes of its own in `core/diff.py`, rather than new columns on
-  host rows.
+- **A check of something other than a host** (as HTTP checks and SNMP
+  were): give it its own module in `core/`, its own result type, report file,
+  and history table, and changes of its own in `core/diff.py`, rather than new
+  columns on host rows. If it needs a library the core does not, import it
+  only when the check is asked for, as `services/snmp_settings.py` does for
+  `core/snmp/`.
 - **A report format:** add a renderer to `file_io.render_report` and its name
   to `REPORT_FORMATS` in `infrastructure/incremental.py`. Say whether it can
   be appended to as hosts finish (`STREAMING_FORMATS`) or must be

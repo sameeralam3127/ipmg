@@ -15,7 +15,7 @@ and review the diff: in ``/api/v1`` only additions are allowed (see docs/API.md)
 import json
 import os
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -28,7 +28,7 @@ SNAPSHOT = Path(__file__).parent / "snapshots" / "api_v1_contract.json"
 HTTP_METHODS = ("get", "put", "post", "delete", "patch")
 
 
-def _type(schema: Dict[str, Any]) -> str:
+def _type(schema: dict[str, Any]) -> str:
     """A compact, version-independent description of a JSON schema's type."""
     if "$ref" in schema:
         return schema["$ref"].rsplit("/", 1)[-1]
@@ -47,8 +47,8 @@ def _type(schema: Dict[str, Any]) -> str:
     return str(kind)
 
 
-def _operation(operation: Dict[str, Any]) -> Dict[str, Any]:
-    contract: Dict[str, Any] = {
+def _operation(operation: dict[str, Any]) -> dict[str, Any]:
+    contract: dict[str, Any] = {
         "parameters": {
             param["name"]: {
                 "in": param["in"],
@@ -73,7 +73,7 @@ def _operation(operation: Dict[str, Any]) -> Dict[str, Any]:
     return contract
 
 
-def _model(schema: Dict[str, Any]) -> Dict[str, Any]:
+def _model(schema: dict[str, Any]) -> dict[str, Any]:
     if "properties" not in schema:
         return {"type": _type(schema)}
     return {
@@ -82,7 +82,7 @@ def _model(schema: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def contract(openapi: Dict[str, Any]) -> Dict[str, Any]:
+def contract(openapi: dict[str, Any]) -> dict[str, Any]:
     paths = {
         f"{method.upper()} {path}": _operation(item[method])
         for path, item in openapi["paths"].items()
@@ -102,7 +102,7 @@ def contract(openapi: Dict[str, Any]) -> Dict[str, Any]:
 
 
 @pytest.fixture()
-def openapi(tmp_path) -> Dict[str, Any]:
+def openapi(tmp_path) -> dict[str, Any]:
     app = create_app(Database(tmp_path / "contract.db"), token="test-token")
     with TestClient(app) as client:
         response = client.get("/openapi.json")

@@ -12,8 +12,8 @@ most recently scanned sources, and a scan holds at most 65,536 hosts.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
 from datetime import datetime
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from ipmg import __version__
 from ipmg.core.portscan import decode_ports
@@ -24,7 +24,7 @@ CONTENT_TYPE = "text/plain; version=0.0.4; charset=utf-8"
 #: Sources exported by default: the most recently scanned ones.
 DEFAULT_MAX_SOURCES = 20
 
-Labels = Sequence[Tuple[str, str]]
+Labels = Sequence[tuple[str, str]]
 
 
 def _escape(value: str) -> str:
@@ -40,7 +40,7 @@ class _Exposition:
     """Collects samples per metric, then writes each family under one header."""
 
     def __init__(self) -> None:
-        self._families: Dict[str, Tuple[str, str, List[str]]] = {}
+        self._families: dict[str, tuple[str, str, list[str]]] = {}
 
     def declare(self, name: str, kind: str, help_text: str) -> None:
         self._families[name] = (kind, help_text, [])
@@ -51,7 +51,7 @@ class _Exposition:
         self._families[name][2].append(f"{series} {_number(value)}")
 
     def render(self) -> str:
-        lines: List[str] = []
+        lines: list[str] = []
         for name, (kind, help_text, samples) in self._families.items():
             lines.append(f"# HELP {name} {help_text}")
             lines.append(f"# TYPE {name} {kind}")
@@ -77,14 +77,14 @@ _FAMILIES = (
 )
 
 
-def _finished_at(scan: Dict) -> Optional[float]:
+def _finished_at(scan: dict) -> float | None:
     try:
         return datetime.fromisoformat(scan["finished_at"]).timestamp()
     except (KeyError, TypeError, ValueError):
         return None
 
 
-def _host_samples(out: _Exposition, source: str, rows: Iterable[Dict], ports: bool) -> None:
+def _host_samples(out: _Exposition, source: str, rows: Iterable[dict], ports: bool) -> None:
     for row in rows:
         labels = (("source", source), ("ip", row["ip"]))
         out.sample("ipmg_host_up", labels, 1 if row["status"] == "Active" else 0)
@@ -109,7 +109,7 @@ def render_metrics(database: Database, max_sources: int = DEFAULT_MAX_SOURCES) -
         rows = database.get_results(scan["id"])
         _host_samples(out, source, rows, bool(scan["config"].get("scan_ports")))
 
-        counts: Dict[str, int] = {}
+        counts: dict[str, int] = {}
         for row in rows:
             counts[row["status"]] = counts.get(row["status"], 0) + 1
         for status, count in sorted(counts.items()):

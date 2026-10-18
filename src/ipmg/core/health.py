@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Optional, Sequence
 
 from ipmg.core.diff import ip_sort_key
 from ipmg.core.engine import HostResult
@@ -27,7 +27,7 @@ class HealthPolicy:
     #: Fail if any target is not ``Active``, or any HTTP check failed.
     fail_on_down: bool = False
     #: Fail if fewer than this percentage of targets are ``Active``.
-    min_active_pct: Optional[float] = None
+    min_active_pct: float | None = None
 
     @property
     def enabled(self) -> bool:
@@ -56,7 +56,7 @@ def check_health(
     results: Sequence[HostResult],
     policy: HealthPolicy,
     http_results: Sequence[HttpCheckResult] = (),
-) -> Optional[str]:
+) -> str | None:
     """Why ``results`` fail ``policy``, or None when they pass."""
     if not policy.enabled:
         return None

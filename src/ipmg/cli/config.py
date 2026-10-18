@@ -32,7 +32,7 @@ import argparse
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any
 
 from ipmg.exceptions import ConfigError
 
@@ -78,6 +78,11 @@ _NOT_FROM_PROJECT = frozenset(
         "smtp_from",
     }
 )
+
+#: Tables of credentials, by the ``args`` attribute a scan reads them from.
+#: They are not flags, so a secret in one never reaches a command line, a
+#: process listing, or shell history.
+CREDENTIAL_TABLES = {"snmp-credentials": "snmp_credentials"}
 
 #: Sentinel for "this key is valid but should leave the flag's own default
 #: alone" — a boolean key set to false, meaning the flag was simply not passed.
@@ -127,7 +132,7 @@ def _user_config_path() -> Path:
 # ----------------------------------------------------------------- reading
 
 
-def _read(path: Path) -> Dict[str, Any]:
+def _read(path: Path) -> dict[str, Any]:
     try:
         with open(path, "rb") as handle:
             return tomllib.load(handle)
@@ -137,7 +142,7 @@ def _read(path: Path) -> Dict[str, Any]:
         raise ConfigError(f"Configuration file '{path}' could not be read: {exc}") from exc
 
 
-def _sources(explicit: Optional[str]) -> List[Tuple[Path, Dict[str, Any]]]:
+def _sources(explicit: str | None) -> list[tuple[Path, dict[str, Any]]]:
     """Every configuration file to apply, least specific first.
 
     An explicit ``--config`` must exist — asking for a file and silently
@@ -157,7 +162,7 @@ def _sources(explicit: Optional[str]) -> List[Tuple[Path, Dict[str, Any]]]:
     return found
 
 
-def _profiles(table: Dict[str, Any], path: Path) -> Dict[str, Any]:
+def _profiles(table: dict[str, Any], path: Path) -> dict[str, Any]:
     """The named profiles one file defines, checked for shape.
 
     Validated even when no ``--profile`` was asked for: ``profile = 3`` is a
@@ -178,13 +183,19 @@ def _profiles(table: Dict[str, Any], path: Path) -> Dict[str, Any]:
 
 
 def _select(
-    table: Dict[str, Any],
+    table: dict[str, Any],
     path: Path,
-    profile: Optional[str],
-    profiles: Dict[str, Any],
-) -> List[Tuple[str, Any, Path]]:
+    profile: str | None,
+    profiles: dict[str, Any],
+) -> list[tuple[str, Any, Path]]:
     """One file's keys: its top level, then the chosen profile on top."""
-    layers = [{key: value for key, value in table.items() if key != PROFILE_TABLE}]
+    layers = [
+        {
+            key: value
+            for key, value in table.items()
+            if key != PROFILE_TABLE and key not in CREDENTIAL_TABLES
+        }
+    ]
     if profile is not None and profile in profiles:
         layers.append(profiles[profile])
     return [(key, value, path) for layer in layers for key, value in layer.items()]
@@ -193,7 +204,7 @@ def _select(
 # -------------------------------------------------------------- validating
 
 
-def _flag_actions(parser: argparse.ArgumentParser) -> Dict[str, argparse.Action]:
+def _flag_actions(parser: argparse.ArgumentParser) -> dict[str, argparse.Action]:
     """Every long flag of ``parser``, by the key a config file would use.
 
     Both spellings of a name are accepted: ``scan-ports`` as the flag is
@@ -201,7 +212,7 @@ def _flag_actions(parser: argparse.ArgumentParser) -> Dict[str, argparse.Action]
     """
     # _actions is argparse's only route to the flags it holds; there is no
     # public accessor for them.
-    actions: Dict[str, argparse.Action] = {}
+    actions: dict[str, argparse.Action] = {}
     for action in parser._actions:
         if action.dest in _NOT_CONFIGURABLE:
             continue
@@ -231,9 +242,10 @@ def _one_value(action: argparse.Action, key: str, value: Any, path: Path) -> Any
     if custom_type and isinstance(value, (int, float)) and not isinstance(value, bool):
         value = str(value)
 
-    if action.type is not None and isinstance(value, str):
+    converter = action.type
+    if callable(converter) and isinstance(value, str):
         try:
-            value = action.type(value)
+            value = converter(value)
         except (argparse.ArgumentTypeError, TypeError, ValueError) as exc:
             raise ConfigError(f"{where}: {exc}") from exc
 
@@ -281,7 +293,7 @@ def _coerce(action: argparse.Action, key: str, value: Any, path: Path) -> Any:
     return _one_value(action, key, value, path)
 
 
-def _unknown_key(key: str, path: Path, known: Dict[str, argparse.Action]) -> ConfigError:
+def _unknown_key(key: str, path: Path, known: dict[str, argparse.Action]) -> ConfigError:
     reason = _NOT_CONFIGURABLE.get(key.replace("-", "_"))
     if reason is not None:
         return ConfigError(f"'{key}' in {path} cannot be set in a configuration file: {reason}.")
@@ -290,7 +302,7 @@ def _unknown_key(key: str, path: Path, known: Dict[str, argparse.Action]) -> Con
     return ConfigError(f"Unknown option '{key}' in {path}.{hint}")
 
 
-def _closest(key: str, known: Dict[str, argparse.Action]) -> Optional[str]:
+def _closest(key: str, known: dict[str, argparse.Action]) -> str | None:
     from difflib import get_close_matches
 
     # Only the hyphenated spellings, so a suggestion reads like the flag.
@@ -304,10 +316,10 @@ def _closest(key: str, known: Dict[str, argparse.Action]) -> Optional[str]:
 
 def resolve(
     parser: argparse.ArgumentParser,
-    explicit: Optional[str],
-    profile: Optional[str],
-    given: Set[str],
-) -> Dict[str, Any]:
+    explicit: str | None,
+    profile: str | None,
+    given: set[str],
+) -> dict[str, Any]:
     """The defaults to apply, keyed by argparse ``dest``.
 
     ``given`` are the dests the command line already set; they are dropped, so
@@ -323,7 +335,7 @@ def resolve(
         raise ConfigError(f"No [{PROFILE_TABLE}.{profile}] section in {names}.")
 
     known = _flag_actions(parser)
-    defaults: Dict[str, Any] = {}
+    defaults: dict[str, Any] = {}
     for (path, table), found in zip(sources, profiles):
         from_project = explicit is None and path == Path(PROJECT_CONFIG)
         for key, value, origin in _select(table, path, profile, found):
@@ -344,11 +356,38 @@ def resolve(
             else:
                 defaults[action.dest] = resolved
     _check_exclusive(parser, defaults, given)
+    defaults.update(_credential_tables(sources, explicit))
     return defaults
 
 
+def _credential_tables(
+    sources: list[tuple[Path, dict[str, Any]]], explicit: str | None
+) -> dict[str, dict[str, Any]]:
+    """Each credentials table, merged across files, keyed by its ``args`` attribute.
+
+    A project's ./ipmg.toml may not hold one: it usually lives in the
+    repository next to the code, and a secret in it gets committed with it.
+    """
+    found: dict[str, dict[str, Any]] = {}
+    for path, table in sources:
+        for name, dest in CREDENTIAL_TABLES.items():
+            if name not in table:
+                continue
+            section = table[name]
+            if not isinstance(section, dict):
+                raise ConfigError(f"[{name}] in {path} must be a table of settings.")
+            if explicit is None and path == Path(PROJECT_CONFIG):
+                raise ConfigError(
+                    f"[{name}] in {path}: keep credentials out of a project file, which is "
+                    f"usually committed with the code. Put them in {_user_config_path()}, "
+                    "in a file you pass with --config, or in environment variables."
+                )
+            found.setdefault(dest, {}).update(section)
+    return found
+
+
 def _check_exclusive(
-    parser: argparse.ArgumentParser, defaults: Dict[str, Any], given: Set[str]
+    parser: argparse.ArgumentParser, defaults: dict[str, Any], given: set[str]
 ) -> None:
     """Enforce the parser's mutually exclusive groups on the file's values.
 
@@ -370,7 +409,7 @@ def _check_exclusive(
             raise ConfigError(f"The configuration sets {names}, which cannot be combined.")
 
 
-def _given_dests(build, argv: List[str]) -> Set[str]:
+def _given_dests(build, argv: list[str]) -> set[str]:
     """Which options the command line set, whatever spelling it used.
 
     A throwaway parser whose every default is ``SUPPRESS`` leaves out the
@@ -390,7 +429,7 @@ def _given_dests(build, argv: List[str]) -> Set[str]:
     return set(vars(namespace))
 
 
-def apply(parser: argparse.ArgumentParser, build, argv: List[str]) -> None:
+def apply(parser: argparse.ArgumentParser, build, argv: list[str]) -> None:
     """Set ``parser``'s defaults from the configuration files ``argv`` selects.
 
     ``build`` remakes the parser for the throwaway pass that works out which

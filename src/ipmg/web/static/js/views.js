@@ -1,7 +1,7 @@
 // Page views for the IPMG dashboard. Each view renders into the <main> node.
 
-import { api, onEvent } from "./api.js?v=20261018.1";
-import { STATUS_COLORS, latencyTrend, statusDonut } from "./charts.js?v=20261018.1";
+import { api, onEvent } from "./api.js?v=20261018.2";
+import { STATUS_COLORS, latencyTrend, statusDonut } from "./charts.js?v=20261018.2";
 
 const REPORT_FORMATS = ["xlsx", "csv", "json", "md"];
 
@@ -75,6 +75,36 @@ function localTimestamp(date = new Date()) {
 
 function fmtLatency(latency) {
   return latency == null ? "—" : `${Number(latency).toFixed(1)} ms`;
+}
+
+function fmtUptime(seconds) {
+  if (seconds == null) return "—";
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (days) return `${days}d ${hours}h`;
+  if (hours) return `${hours}h ${minutes}m`;
+  return minutes ? `${minutes}m` : `${Math.floor(seconds)}s`;
+}
+
+function fmtBytes(octets) {
+  if (octets == null) return "—";
+  const units = ["B", "KB", "MB", "GB", "TB", "PB"];
+  let value = Number(octets);
+  let unit = 0;
+  while (value >= 1000 && unit < units.length - 1) {
+    value /= 1000;
+    unit += 1;
+  }
+  return `${value.toFixed(unit ? 1 : 0)} ${units[unit]}`;
+}
+
+// A cell for a CSV a spreadsheet will open: quoted, and never a formula. A
+// hostname or SNMP name comes from the device itself and could be one.
+function csvCell(value) {
+  let text = String(value ?? "");
+  if (/^[=+\-@\t\r]/.test(text) && !/^[+-]?\d+(\.\d+)?$/.test(text)) text = `'${text}`;
+  return `"${text.replaceAll('"', '""')}"`;
 }
 
 function fmtDuration(seconds) {
@@ -707,6 +737,106 @@ export async function scanDetailView(root, scanId) {
 
   const checks = await api.httpChecks(scan.id).catch(() => []);
   if (checks.length) root.append(httpChecksCard(checks));
+  const devices = await api.snmp(scan.id).catch(() => []);
+  if (devices.length) root.append(snmpCard(devices));
+}
+
+function resultPill(ok, label, color) {
+  const pill = h("span", { class: "pill" }, label);
+  pill.style.setProperty("--pill-color", color || (ok ? "var(--st-active)" : "var(--st-inactive)"));
+  return pill;
+}
+
+const INTERFACE_DOWN_STATES = ["down", "notPresent", "lowerLayerDown"];
+
+// Enabled but not passing traffic: what "Interface down" in the changes means.
+function interfaceDown(port) {
+  return port.admin_status === "up" && INTERFACE_DOWN_STATES.includes(port.oper_status);
+}
+
+// Green when up, red when enabled but down, grey when switched off or unknown.
+function interfacePill(port) {
+  if (port.oper_status === "up") return resultPill(true, "up");
+  if (interfaceDown(port)) return resultPill(false, port.oper_status);
+  return resultPill(true, port.oper_status, "var(--st-invalid)");
+}
+
+function shortened(text, limit = 90) {
+  return text.length > limit ? `${text.slice(0, limit - 1).trimEnd()}…` : text;
+}
+
+function interfacesTable(interfaces) {
+  return h(
+    "div",
+    { class: "table-wrap" },
+    h(
+      "table",
+      {},
+      h("thead", {}, h("tr", {}, ...["Interface", "Alias", "Admin", "Status", "Speed", "In", "Out"].map((t) => h("th", {}, t)))),
+      h(
+        "tbody",
+        {},
+        interfaces.map((port) =>
+          h(
+            "tr",
+            {},
+            h("td", {}, port.name),
+            h("td", {}, port.alias || "—"),
+            h("td", {}, port.admin_status || "—"),
+            h("td", {}, port.oper_status ? interfacePill(port) : "—"),
+            h("td", {}, port.speed_mbps == null ? "—" : `${port.speed_mbps} Mbit/s`),
+            h("td", {}, fmtBytes(port.in_octets)),
+            h("td", {}, fmtBytes(port.out_octets))
+          )
+        )
+      )
+    )
+  );
+}
+
+function snmpCard(devices) {
+  const failed = devices.filter((device) => !device.ok).length;
+  const rows = devices.map((device) => {
+    const down = device.interfaces.filter(interfaceDown);
+    const up = device.interfaces.filter((port) => port.oper_status === "up").length;
+    const detail = device.error || (down.length ? `down: ${down.map((port) => port.name).join(", ")}` : (device.sys_descr || "").split("\n")[0]);
+    return h(
+      "tr",
+      {},
+      h("td", {}, resultPill(device.ok, device.ok ? "OK" : "Failed")),
+      h("td", {}, device.ip),
+      h("td", {}, device.sys_name || "—"),
+      h("td", {}, device.ok ? fmtUptime(device.uptime_s) : device.failure || "—"),
+      h("td", {}, device.interfaces.length ? `${up} up · ${down.length} down` : "—"),
+      h("td", { title: detail }, detail ? shortened(detail) : "—")
+    );
+  });
+  const perDevice = devices
+    .filter((device) => device.interfaces.length)
+    .map((device) =>
+      h(
+        "details",
+        { class: "snmp-interfaces" },
+        h("summary", {}, `Interfaces of ${device.sys_name || device.ip} (${device.interfaces.length})`),
+        interfacesTable(device.interfaces)
+      )
+    );
+  return h(
+    "div",
+    { class: "card", style: "margin-top:14px" },
+    h("h3", {}, `SNMP (${devices.length} ${devices.length === 1 ? "device" : "devices"}, ${failed} not answering)`),
+    h(
+      "div",
+      { class: "table-wrap" },
+      h(
+        "table",
+        {},
+        h("thead", {}, h("tr", {}, ...["Result", "Host", "Name", "Uptime", "Interfaces", "Detail"].map((t) => h("th", {}, t)))),
+        h("tbody", {}, rows)
+      )
+    ),
+    ...perDevice
+  );
 }
 
 function httpChecksCard(checks) {
@@ -773,7 +903,7 @@ export async function inventoryView(root) {
 
   const assets = await api.assets();
   const toolbar = h("div", { class: "toolbar" });
-  const search = h("input", { type: "text", placeholder: "Filter by IP, hostname, MAC, or vendor…" });
+  const search = h("input", { type: "text", placeholder: "Filter by IP, name, MAC, or vendor…" });
   const exportBtn = h("button", { class: "ghost-btn", type: "button" }, "Export CSV");
   toolbar.append(search, h("span", { class: "spacer" }), exportBtn);
 
@@ -783,7 +913,7 @@ export async function inventoryView(root) {
     const term = search.value.trim().toLowerCase();
     if (!term) return assets;
     return assets.filter((asset) =>
-      [asset.ip, asset.hostname, asset.mac, asset.vendor].some((value) => (value || "").toLowerCase().includes(term))
+      [asset.ip, asset.hostname, asset.snmp_name, asset.mac, asset.vendor].some((value) => (value || "").toLowerCase().includes(term))
     );
   }
 
@@ -806,7 +936,7 @@ export async function inventoryView(root) {
             h(
               "tr",
               {},
-              ...["IP Address", "Hostname", "MAC Address", "Vendor", "Last status", "Avg latency", "Last seen active", "Last checked", "Scans", ""].map((t) => h("th", {}, t))
+              ...["IP Address", "Hostname", "SNMP name", "MAC Address", "Vendor", "Last status", "Avg latency", "Last seen active", "Last checked", "Scans", ""].map((t) => h("th", {}, t))
             )
           ),
           h(
@@ -818,6 +948,7 @@ export async function inventoryView(root) {
                 {},
                 h("td", {}, asset.ip),
                 h("td", {}, asset.hostname || "—"),
+                h("td", { title: asset.snmp_descr || "" }, asset.snmp_name || "—"),
                 h("td", { class: "mono" }, asset.mac || "—"),
                 h("td", {}, asset.vendor || "—"),
                 h("td", {}, statusPill(asset.status)),
@@ -837,12 +968,12 @@ export async function inventoryView(root) {
   search.addEventListener("input", draw);
   exportBtn.addEventListener("click", () => {
     const rows = matching();
-    const header = "IP Address,Hostname,MAC Address,Vendor,Last Status,Avg Latency,Last Seen Active,Last Checked,Scans";
+    const header = "IP Address,Hostname,SNMP Name,MAC Address,Vendor,Last Status,Avg Latency,Last Seen Active,Last Checked,Scans";
     const csv = [
       header,
       ...rows.map((asset) =>
-        [asset.ip, asset.hostname || "", asset.mac || "", asset.vendor || "", asset.status, asset.avg_latency ?? "", asset.last_seen || "", asset.last_checked || "", asset.scan_count]
-          .map((value) => `"${String(value).replaceAll('"', '""')}"`)
+        [asset.ip, asset.hostname, asset.snmp_name, asset.mac, asset.vendor, asset.status, asset.avg_latency, asset.last_seen, asset.last_checked, asset.scan_count]
+          .map(csvCell)
           .join(",")
       ),
     ].join("\n");

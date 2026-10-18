@@ -8,8 +8,9 @@ code renders on a modern terminal and on a legacy Windows console.
 
 from __future__ import annotations
 
-from typing import Iterable, Optional, Sequence, Tuple
+from collections.abc import Iterable, Sequence
 
+from rich.console import JustifyMethod
 from rich.padding import Padding
 from rich.progress import (
     BarColumn,
@@ -39,6 +40,7 @@ _UNICODE_GLYPHS = {
     "dash": "—",
     "bar_full": "━",
     "bar_empty": "─",
+    "ellipsis": "…",
 }
 
 _ASCII_GLYPHS = {
@@ -51,9 +53,10 @@ _ASCII_GLYPHS = {
     "dash": "-",
     "bar_full": "#",
     "bar_empty": ".",
+    "ellipsis": "...",
 }
 
-_glyphs: Optional[dict] = None
+_glyphs: dict | None = None
 
 
 def _detect_glyphs(target=None) -> dict:
@@ -107,7 +110,7 @@ def blank() -> None:
     console.line()
 
 
-def header(subtitle: Optional[str] = None) -> None:
+def header(subtitle: str | None = None) -> None:
     """The one-line product banner: ``ipmg 1.6.1 · scan``."""
     text = Text(INDENT)
     text.append("ipmg", style="ipmg.brand")
@@ -135,7 +138,7 @@ def field(label: str, value: object, value_style: str = "ipmg.value", wrap: bool
     console.print(text, soft_wrap=not wrap)
 
 
-def fields(pairs: Iterable[Tuple[str, object]]) -> None:
+def fields(pairs: Iterable[tuple[str, object]]) -> None:
     for label, value in pairs:
         field(label, value)
 
@@ -187,8 +190,8 @@ def bar(fraction: float, width: int = BAR_WIDTH, style: str = "ipmg.bar") -> Tex
 
 def table(
     *columns: str,
-    justify: Optional[Sequence[str]] = None,
-    min_widths: Optional[Sequence[Optional[int]]] = None,
+    justify: Sequence[JustifyMethod] | None = None,
+    min_widths: Sequence[int | None] | None = None,
 ) -> Table:
     """A borderless table with dim headers; pass '' for unlabelled columns.
 
@@ -258,7 +261,7 @@ def progress(
     )
 
 
-def format_duration(seconds: Optional[float]) -> str:
+def format_duration(seconds: float | None) -> str:
     if seconds is None:
         return "-"
     if seconds < 1:
@@ -269,7 +272,7 @@ def format_duration(seconds: Optional[float]) -> str:
     return f"{int(minutes)}m {remainder:.0f}s"
 
 
-def format_latency(latency: Optional[float]) -> str:
+def format_latency(latency: float | None) -> str:
     return "-" if latency is None else f"{latency:.1f} ms"
 
 

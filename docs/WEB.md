@@ -17,11 +17,13 @@ nothing is loaded from a CDN.
 - **Schedules**: scans that run on their own, every N minutes or on a cron
   schedule ([details](#scheduled-scans))
 - **History**: every scan, searchable, downloadable as XLSX, CSV, JSON, or
-  Markdown, with its HTTP checks
+  Markdown, with its HTTP checks and, for `ipmg --snmp` scans, each polled
+  device's uptime and interfaces ([SNMP](SNMP.md))
 - **Changes**: compare any two scans (new and offline hosts, IP, hostname, and
-  MAC changes, latency shifts) and export the summary
-- **Inventory**: every host ever seen, with its last status, MAC address, and
-  vendor, and a **Wake** button for hosts with a known MAC
+  MAC changes, latency shifts, reboots and interfaces going down) and export
+  the summary
+- **Inventory**: every host ever seen, with its last status, SNMP name, MAC
+  address, and vendor, and a **Wake** button for hosts with a known MAC
 
 IPMG Web is the optional `web` extra. The one-line installers, Homebrew, and
 the Docker image include it; after a plain `pip install ipmg`, add it with

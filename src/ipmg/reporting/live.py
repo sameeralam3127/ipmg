@@ -11,10 +11,11 @@ history, so a 65k-host scan costs no more memory than a two-host one.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Iterator, List, Tuple
 
+from rich.align import AlignMethod
 from rich.text import Text
 
 from ipmg.core.engine import HostResult, ResultCallback, ScanConfig
@@ -49,7 +50,7 @@ class StreamOptions:
     all_hosts: bool = False
     refresh_s: float = DEFAULT_REFRESH_S
 
-    def clamped(self) -> "StreamOptions":
+    def clamped(self) -> StreamOptions:
         return StreamOptions(
             enabled=self.enabled,
             all_hosts=self.all_hosts,
@@ -57,7 +58,7 @@ class StreamOptions:
         )
 
 
-def _cell(value: str, width: int, style: str, justify: str = "left") -> Text:
+def _cell(value: str, width: int, style: str, justify: AlignMethod = "left") -> Text:
     """One fixed-width column: truncated when long, padded to the full width."""
     text = Text(value, style=style, no_wrap=True)
     text.truncate(width - COLUMN_GAP, overflow="ellipsis")
@@ -68,9 +69,9 @@ def _cell(value: str, width: int, style: str, justify: str = "left") -> Text:
     return text
 
 
-def _columns(config: ScanConfig) -> List[Tuple[str, int, str]]:
+def _columns(config: ScanConfig) -> list[tuple[str, int, AlignMethod]]:
     """The columns this scan's configuration actually produces values for."""
-    columns = [
+    columns: list[tuple[str, int, AlignMethod]] = [
         ("Status", STATUS_WIDTH, "left"),
         ("Host", IP_WIDTH, "left"),
         ("Latency", LATENCY_WIDTH, "right"),

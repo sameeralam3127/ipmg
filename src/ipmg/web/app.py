@@ -11,11 +11,12 @@ import asyncio
 import re
 import secrets
 import tempfile
+from collections.abc import Callable, Mapping
 from contextlib import asynccontextmanager
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Mapping, Optional, Union
+from typing import Any
 from urllib.parse import urlsplit
 
 from fastapi import (
@@ -75,8 +76,10 @@ from ipmg.web.schemas import (
     Schedule,
     SchedulePatch,
     ScheduleRequest,
+    SnmpDeviceRow,
     Stats,
     UploadResult,
+    ValidationIssue,
     WakeRequest,
     WakeSent,
     websocket_event_schemas,
@@ -158,7 +161,7 @@ _BEARER_SCHEME = HTTPBearer(
 )
 
 
-def _bearer_token(headers: Mapping[str, str]) -> Optional[str]:
+def _bearer_token(headers: Mapping[str, str]) -> str | None:
     """The token from an ``Authorization: Bearer`` header.
 
     Tokens are never read from the URL: query strings end up in access logs,
@@ -170,7 +173,7 @@ def _bearer_token(headers: Mapping[str, str]) -> Optional[str]:
     return None
 
 
-def _websocket_token(websocket: WebSocket) -> Optional[str]:
+def _websocket_token(websocket: WebSocket) -> str | None:
     """A Bearer header (non-browser clients) or the ``ipmg.token.`` subprotocol."""
     token = _bearer_token(websocket.headers)
     if token is not None:
@@ -181,7 +184,7 @@ def _websocket_token(websocket: WebSocket) -> Optional[str]:
     return None
 
 
-def _token_valid(supplied: Optional[str], expected: str) -> bool:
+def _token_valid(supplied: str | None, expected: str) -> bool:
     return supplied is not None and secrets.compare_digest(
         supplied.encode("utf-8"), expected.encode("utf-8")
     )
@@ -197,7 +200,7 @@ def _require_token(expected: str) -> Callable[[Request], None]:
 
     def check(
         request: Request,
-        _credentials: Optional[HTTPAuthorizationCredentials] = Security(_BEARER_SCHEME),
+        _credentials: HTTPAuthorizationCredentials | None = Security(_BEARER_SCHEME),
     ) -> None:
         if not _token_valid(_bearer_token(request.headers), expected):
             raise HTTPException(
@@ -219,7 +222,7 @@ The HTTP API behind the IPMG dashboard. See docs/API.md for a guide.
 """
 
 #: Error responses shared by every API route.
-_COMMON_ERRORS: Dict[Union[int, str], Dict[str, Any]] = {
+_COMMON_ERRORS: dict[int | str, dict[str, Any]] = {
     401: {"model": ErrorResponse, "description": "Missing or invalid access token"},
     422: {"model": ErrorResponse, "description": "Request failed validation"},
 }
@@ -234,7 +237,7 @@ _ERROR_DESCRIPTIONS = {
 }
 
 
-def _errors(*codes: int, **described: str) -> Dict[Union[int, str], Dict[str, Any]]:
+def _errors(*codes: int, **described: str) -> dict[int | str, dict[str, Any]]:
     """OpenAPI error responses; ``e409="..."`` overrides one code's description."""
     descriptions = {**_ERROR_DESCRIPTIONS}
     descriptions.update({int(key[1:]): text for key, text in described.items()})
@@ -245,13 +248,15 @@ def _errors(*codes: int, **described: str) -> Dict[Union[int, str], Dict[str, An
 DELETE_RUNNING_ERROR = "Scan is still running. Cancel it first, then delete it."
 
 
-def _file_response(media_types: Mapping[str, str], description: str) -> Dict[int, Dict[str, Any]]:
+def _file_response(
+    media_types: Mapping[str, str], description: str
+) -> dict[int | str, dict[str, Any]]:
     """OpenAPI entry for a 200 response that is a file download."""
     binary = {"schema": {"type": "string", "format": "binary"}}
     return {200: {"description": description, "content": {m: binary for m in media_types.values()}}}
 
 
-def _parse_scan_targets(request: ScanRequest) -> List[str]:
+def _parse_scan_targets(request: ScanRequest) -> list[str]:
     try:
         if request.ips:
             return parse_manual_targets("\n".join(request.ips))
@@ -262,7 +267,7 @@ def _parse_scan_targets(request: ScanRequest) -> List[str]:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-def _results_table(scan: Dict[str, Any], rows: List[Dict[str, Any]]) -> ReportTable:
+def _results_table(scan: dict[str, Any], rows: list[dict[str, Any]]) -> ReportTable:
     results = [
         HostResult(
             ip=row["ip"],
@@ -286,7 +291,7 @@ def _render_report(table: ReportTable, fmt: str) -> bytes:
     return render_report(table, fmt)
 
 
-def _parse_upload(filename: str, payload: bytes) -> List[str]:
+def _parse_upload(filename: str, payload: bytes) -> list[str]:
     suffix = Path(filename).suffix.lower()
 
     if suffix not in SUPPORTED_INPUT_SUFFIXES:
@@ -308,17 +313,17 @@ def _parse_upload(filename: str, payload: bytes) -> List[str]:
 
 def _register_overview_routes(api: APIRouter, database: Database) -> None:
     @api.get("/stats", response_model=Stats, summary="Dashboard overview")
-    def stats() -> Dict[str, Any]:
+    def stats() -> dict[str, Any]:
         return database.overview()
 
-    @api.get("/assets", response_model=List[Asset], summary="Every host ever scanned")
-    def assets() -> List[Dict[str, Any]]:
+    @api.get("/assets", response_model=list[Asset], summary="Every host ever scanned")
+    def assets() -> list[dict[str, Any]]:
         return database.inventory()
 
-    @api.get("/scans", response_model=List[ScanSummary], summary="Recent scans, newest first")
+    @api.get("/scans", response_model=list[ScanSummary], summary="Recent scans, newest first")
     def list_scans(
         limit: int = Query(50, description="Maximum scans to return (clamped to 1-500)"),
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         return database.list_scans(limit=max(1, min(limit, 500)))
 
 
@@ -330,7 +335,7 @@ def _register_scan_routes(api: APIRouter, database: Database, manager: ScanManag
         responses=_errors(400, 429),
         summary="Start a scan",
     )
-    def create_scan(request: ScanRequest) -> Dict[str, Any]:
+    def create_scan(request: ScanRequest) -> dict[str, Any]:
         ips = _parse_scan_targets(request)
         config = ScanConfig(**request.scan_settings()).clamped()
         try:
@@ -342,7 +347,7 @@ def _register_scan_routes(api: APIRouter, database: Database, manager: ScanManag
     @api.get(
         "/scans/{scan_id}", response_model=ScanSummary, responses=_errors(404), summary="One scan"
     )
-    def get_scan(scan_id: int) -> Dict[str, Any]:
+    def get_scan(scan_id: int) -> dict[str, Any]:
         scan = database.get_scan(scan_id)
         if scan is None:
             raise HTTPException(status_code=404, detail="Scan not found")
@@ -350,29 +355,44 @@ def _register_scan_routes(api: APIRouter, database: Database, manager: ScanManag
 
     @api.get(
         "/scans/{scan_id}/results",
-        response_model=List[HostResultRow],
+        response_model=list[HostResultRow],
         responses=_errors(404),
         summary="Per-host results of a scan",
     )
     def get_results(
         scan_id: int,
-        status: Optional[str] = Query(None, description="Only this status, e.g. 'Active'"),
-        search: Optional[str] = Query(None, description="Substring of the IP or hostname"),
-    ) -> List[Dict[str, Any]]:
+        status: str | None = Query(None, description="Only this status, e.g. 'Active'"),
+        search: str | None = Query(None, description="Substring of the IP or hostname"),
+    ) -> list[dict[str, Any]]:
         if database.get_scan(scan_id) is None:
             raise HTTPException(status_code=404, detail="Scan not found")
         return database.get_results(scan_id, status=status, search=search)
 
+
+def _register_check_routes(api: APIRouter, database: Database) -> None:
+    """What a scan checked beyond reachability: HTTP services and SNMP devices."""
+
     @api.get(
         "/scans/{scan_id}/http",
-        response_model=List[HttpCheckRow],
+        response_model=list[HttpCheckRow],
         responses=_errors(404),
         summary="HTTP checks a scan made (ipmg --http-check)",
     )
-    def get_http_checks(scan_id: int) -> List[Dict[str, Any]]:
+    def get_http_checks(scan_id: int) -> list[dict[str, Any]]:
         if database.get_scan(scan_id) is None:
             raise HTTPException(status_code=404, detail="Scan not found")
         return database.get_http_checks(scan_id)
+
+    @api.get(
+        "/scans/{scan_id}/snmp",
+        response_model=list[SnmpDeviceRow],
+        responses=_errors(404),
+        summary="Devices a scan polled over SNMP (ipmg --snmp), with their interfaces",
+    )
+    def get_snmp_devices(scan_id: int) -> list[dict[str, Any]]:
+        if database.get_scan(scan_id) is None:
+            raise HTTPException(status_code=404, detail="Scan not found")
+        return database.get_snmp_devices(scan_id)
 
 
 def _register_scan_control_routes(api: APIRouter, database: Database, manager: ScanManager) -> None:
@@ -382,7 +402,7 @@ def _register_scan_control_routes(api: APIRouter, database: Database, manager: S
         responses=_errors(409),
         summary="Stop a running scan",
     )
-    def cancel_scan(scan_id: int) -> Dict[str, Any]:
+    def cancel_scan(scan_id: int) -> dict[str, Any]:
         if not manager.cancel(scan_id):
             raise HTTPException(status_code=409, detail="Scan is not running")
         return {"id": scan_id, "cancelling": True}
@@ -437,7 +457,7 @@ def _register_report_routes(api: APIRouter, database: Database) -> None:
 
 async def _read_upload(file: UploadFile) -> bytes:
     """Read an upload, refusing anything above :data:`MAX_UPLOAD_BYTES`."""
-    chunks: List[bytes] = []
+    chunks: list[bytes] = []
     size = 0
     while True:
         chunk = await file.read(64 * 1024)
@@ -456,7 +476,7 @@ async def _read_upload(file: UploadFile) -> bytes:
 def _register_diff_routes(api: APIRouter, history: HistoryService) -> None:
     def _diff(
         scan_id: int,
-        baseline: Optional[int],
+        baseline: int | None,
         latency_threshold: float,
         latency_pct: float,
     ):
@@ -485,10 +505,10 @@ def _register_diff_routes(api: APIRouter, history: HistoryService) -> None:
     )
     def scan_diff(
         scan_id: int,
-        baseline: Optional[int] = baseline_query,
+        baseline: int | None = baseline_query,
         latency_threshold: float = threshold_query,
         latency_pct: float = pct_query,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         return _diff(scan_id, baseline, latency_threshold, latency_pct).to_dict()
 
     @api.get(
@@ -503,7 +523,7 @@ def _register_diff_routes(api: APIRouter, history: HistoryService) -> None:
     def scan_diff_report(
         scan_id: int,
         fmt: str = Query("md", description="One of: " + ", ".join(DIFF_FORMATS)),
-        baseline: Optional[int] = baseline_query,
+        baseline: int | None = baseline_query,
         latency_threshold: float = threshold_query,
         latency_pct: float = pct_query,
     ) -> Response:
@@ -528,11 +548,11 @@ def _register_diff_routes(api: APIRouter, history: HistoryService) -> None:
         )
 
 
-def _schedule_response(schedule: Dict[str, Any]) -> Dict[str, Any]:
+def _schedule_response(schedule: dict[str, Any]) -> dict[str, Any]:
     return {**schedule, "source": schedule_source(schedule["name"])}
 
 
-def _require_schedule(database: Database, schedule_id: int) -> Dict[str, Any]:
+def _require_schedule(database: Database, schedule_id: int) -> dict[str, Any]:
     schedule = database.get_schedule(schedule_id)
     if schedule is None:
         raise HTTPException(status_code=404, detail="Schedule not found")
@@ -569,7 +589,7 @@ def _create_schedule(database: Database, request: ScheduleRequest) -> int:
     )
 
 
-def _run_schedule_now(scheduler: Scheduler, schedule_id: int) -> Dict[str, Any]:
+def _run_schedule_now(scheduler: Scheduler, schedule_id: int) -> dict[str, Any]:
     try:
         return scheduler.run_now(schedule_id)
     except KeyError:
@@ -583,8 +603,8 @@ def _run_schedule_now(scheduler: Scheduler, schedule_id: int) -> Dict[str, Any]:
 
 
 def _register_schedule_routes(api: APIRouter, database: Database) -> None:
-    @api.get("/schedules", response_model=List[Schedule], summary="Every scheduled scan")
-    def list_schedules() -> List[Dict[str, Any]]:
+    @api.get("/schedules", response_model=list[Schedule], summary="Every scheduled scan")
+    def list_schedules() -> list[dict[str, Any]]:
         return [_schedule_response(schedule) for schedule in database.list_schedules()]
 
     @api.post(
@@ -594,7 +614,7 @@ def _register_schedule_routes(api: APIRouter, database: Database) -> None:
         responses=_errors(400, 409, e409="A schedule with that name exists"),
         summary="Create a scheduled scan",
     )
-    def create_schedule(request: ScheduleRequest) -> Dict[str, Any]:
+    def create_schedule(request: ScheduleRequest) -> dict[str, Any]:
         schedule_id = _create_schedule(database, request)
         return _schedule_response(_require_schedule(database, schedule_id))
 
@@ -604,7 +624,7 @@ def _register_schedule_routes(api: APIRouter, database: Database) -> None:
         responses=_errors(404, e404="Schedule not found"),
         summary="One scheduled scan",
     )
-    def get_schedule(schedule_id: int) -> Dict[str, Any]:
+    def get_schedule(schedule_id: int) -> dict[str, Any]:
         return _schedule_response(_require_schedule(database, schedule_id))
 
 
@@ -617,7 +637,7 @@ def _register_schedule_control_routes(
         responses=_errors(404, e404="Schedule not found"),
         summary="Pause or resume a scheduled scan",
     )
-    def update_schedule(schedule_id: int, patch: SchedulePatch) -> Dict[str, Any]:
+    def update_schedule(schedule_id: int, patch: SchedulePatch) -> dict[str, Any]:
         schedule = _require_schedule(database, schedule_id)
         if patch.paused is not None and patch.paused != schedule["paused"]:
             upcoming = None
@@ -648,7 +668,7 @@ def _register_schedule_control_routes(
         ),
         summary="Run a scheduled scan now",
     )
-    def run_schedule(schedule_id: int) -> Dict[str, Any]:
+    def run_schedule(schedule_id: int) -> dict[str, Any]:
         return _run_schedule_now(scheduler, schedule_id)
 
 
@@ -659,7 +679,7 @@ def _register_wake_route(api: APIRouter) -> None:
         responses=_errors(400),
         summary="Send a Wake-on-LAN magic packet",
     )
-    def wake(request: WakeRequest) -> Dict[str, Any]:
+    def wake(request: WakeRequest) -> dict[str, Any]:
         try:
             mac = send_magic_packet(request.mac, broadcast=request.broadcast, port=request.port)
         except WakeError as exc:
@@ -674,7 +694,7 @@ def _register_upload_route(api: APIRouter) -> None:
         responses=_errors(400, 413),
         summary="Parse targets from a file",
     )
-    async def upload_targets(file: UploadFile) -> Dict[str, Any]:
+    async def upload_targets(file: UploadFile) -> dict[str, Any]:
         payload = await _read_upload(file)
         try:
             targets = _parse_upload(file.filename or "", payload)
@@ -771,18 +791,17 @@ def _register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(RequestValidationError)
     async def validation_error(_request: Request, exc: RequestValidationError) -> Response:
         issues = [
-            {
-                "loc": list(error.get("loc", ())),
-                "msg": error.get("msg", ""),
-                "type": error.get("type", ""),
-            }
+            ValidationIssue(
+                loc=list(error.get("loc", ())),
+                msg=error.get("msg", ""),
+                type=error.get("type", ""),
+            )
             for error in exc.errors()
         ]
-        first = issues[0] if issues else None
         summary = "Invalid request"
-        if first:
-            where = ".".join(str(part) for part in first["loc"])
-            summary = f"Invalid request: {where}: {first['msg']}"
+        if issues:
+            where = ".".join(str(part) for part in issues[0].loc)
+            summary = f"Invalid request: {where}: {issues[0].msg}"
         body = ErrorResponse(detail=summary, errors=issues)
         return JSONResponse(body.model_dump(), status_code=422)
 
@@ -790,7 +809,7 @@ def _register_error_handlers(app: FastAPI) -> None:
 def _install_openapi(app: FastAPI) -> None:
     """Add the WebSocket event schemas, which FastAPI cannot infer, to ``/openapi.json``."""
 
-    def openapi() -> Dict[str, Any]:
+    def openapi() -> dict[str, Any]:
         if app.openapi_schema is None:
             schema = get_openapi(
                 title=app.title,
@@ -822,9 +841,9 @@ def _register_metrics_route(app: FastAPI, database: Database, token: str, max_so
 
 
 def create_app(
-    db: Optional[Database] = None,
-    token: Optional[str] = None,
-    metrics_sources: Optional[int] = None,
+    db: Database | None = None,
+    token: str | None = None,
+    metrics_sources: int | None = None,
     max_scans: int = DEFAULT_MAX_SCANS,
     schedule_tick_s: float = TICK_S,
 ) -> FastAPI:
@@ -867,6 +886,7 @@ def create_app(
     )
     _register_overview_routes(api, database)
     _register_scan_routes(api, database, manager)
+    _register_check_routes(api, database)
     _register_scan_control_routes(api, database, manager)
     _register_schedule_routes(api, database)
     _register_schedule_control_routes(api, database, scheduler)

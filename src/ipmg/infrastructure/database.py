@@ -14,12 +14,20 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+from collections.abc import Iterable, Sequence
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any
 
-from ipmg.core.diff import HostSnapshot, HttpSnapshot, ScanRef, ip_sort_key
+from ipmg.core.diff import (
+    HostSnapshot,
+    HttpSnapshot,
+    InterfaceSnapshot,
+    ScanRef,
+    SnmpSnapshot,
+    ip_sort_key,
+)
 from ipmg.core.engine import HostResult
 from ipmg.core.portscan import encode_ports
 
@@ -87,6 +95,41 @@ CREATE TABLE IF NOT EXISTS http_checks (
 
 CREATE INDEX IF NOT EXISTS idx_http_checks_scan ON http_checks(scan_id);
 
+CREATE TABLE IF NOT EXISTS snmp_devices (
+    scan_id INTEGER NOT NULL REFERENCES scans(id) ON DELETE CASCADE,
+    ip TEXT NOT NULL,
+    ok INTEGER NOT NULL,
+    version TEXT NOT NULL DEFAULT '',
+    sys_name TEXT NOT NULL DEFAULT '',
+    sys_descr TEXT NOT NULL DEFAULT '',
+    sys_object_id TEXT NOT NULL DEFAULT '',
+    sys_location TEXT NOT NULL DEFAULT '',
+    uptime_s REAL,
+    response_ms REAL,
+    failure TEXT NOT NULL DEFAULT '',
+    error TEXT NOT NULL DEFAULT '',
+    polled_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_snmp_devices_scan ON snmp_devices(scan_id);
+CREATE INDEX IF NOT EXISTS idx_snmp_devices_ip ON snmp_devices(ip);
+
+CREATE TABLE IF NOT EXISTS snmp_interfaces (
+    scan_id INTEGER NOT NULL REFERENCES scans(id) ON DELETE CASCADE,
+    ip TEXT NOT NULL,
+    if_index INTEGER NOT NULL,
+    name TEXT NOT NULL DEFAULT '',
+    description TEXT NOT NULL DEFAULT '',
+    alias TEXT NOT NULL DEFAULT '',
+    admin_status TEXT NOT NULL DEFAULT '',
+    oper_status TEXT NOT NULL DEFAULT '',
+    speed_mbps INTEGER,
+    in_octets INTEGER,
+    out_octets INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_snmp_interfaces_scan ON snmp_interfaces(scan_id, ip);
+
 CREATE TABLE IF NOT EXISTS schedules (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
@@ -109,12 +152,56 @@ _SCHEDULE_SQL = (
     "LEFT JOIN scans s ON s.id = sc.last_scan_id"
 )
 
+#: SQLite integers are signed 64-bit; a Counter64 above that is stored as unknown.
+_SQLITE_MAX_INT = 2**63 - 1
+
 #: ``ESCAPE`` character used to neutralise user-supplied LIKE wildcards.
 _LIKE_ESCAPE = "\\"
 
 
 def _now() -> str:
     return datetime.now().isoformat(sep=" ", timespec="seconds")
+
+
+def _counter(value: int | None) -> int | None:
+    return value if value is not None and value <= _SQLITE_MAX_INT else None
+
+
+def _snmp_device_row(scan_id: int, device: Any, polled_at: str) -> tuple:
+    return (
+        scan_id,
+        device.ip,
+        int(device.ok),
+        device.version,
+        device.sys_name,
+        device.sys_descr,
+        device.sys_object_id,
+        device.sys_location,
+        device.uptime_s,
+        device.response_ms,
+        device.failure,
+        device.error,
+        polled_at,
+    )
+
+
+def _snmp_interface_rows(scan_id: int, device: Any) -> list[tuple]:
+    return [
+        (
+            scan_id,
+            device.ip,
+            interface.index,
+            interface.name,
+            interface.description,
+            interface.alias,
+            interface.admin_status,
+            interface.oper_status,
+            interface.speed_mbps,
+            _counter(interface.in_octets),
+            _counter(interface.out_octets),
+        )
+        for interface in device.interfaces
+    ]
 
 
 def _escape_like(term: str) -> str:
@@ -170,7 +257,7 @@ class Database:
 
     # ------------------------------------------------------------- scans
 
-    def create_scan(self, source: str, total: int, config: Dict[str, Any]) -> int:
+    def create_scan(self, source: str, total: int, config: dict[str, Any]) -> int:
         with self._session() as conn:
             cursor = conn.execute(
                 "INSERT INTO scans (started_at, source, total, config) VALUES (?, ?, ?, ?)",
@@ -238,10 +325,11 @@ class Database:
         self,
         source: str,
         results: Sequence[HostResult],
-        config: Dict[str, Any],
+        config: dict[str, Any],
         duration_s: float,
         status: str = "complete",
         http_checks: Sequence[Any] = (),
+        snmp_devices: Sequence[Any] = (),
     ) -> int:
         """Persist an already-finished scan (used by the CLI) in one go.
 
@@ -278,9 +366,75 @@ class Database:
                     for check in http_checks
                 ],
             )
+            self._insert_snmp(conn, scan_id, snmp_devices, now)
         return scan_id
 
-    def get_http_checks(self, scan_id: int) -> List[Dict[str, Any]]:
+    @staticmethod
+    def _insert_snmp(
+        conn: sqlite3.Connection, scan_id: int, devices: Sequence[Any], polled_at: str
+    ) -> None:
+        if not devices:
+            return
+        conn.executemany(
+            "INSERT INTO snmp_devices (scan_id, ip, ok, version, sys_name, sys_descr, "
+            "sys_object_id, sys_location, uptime_s, response_ms, failure, error, polled_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [_snmp_device_row(scan_id, device, polled_at) for device in devices],
+        )
+        conn.executemany(
+            "INSERT INTO snmp_interfaces (scan_id, ip, if_index, name, description, alias, "
+            "admin_status, oper_status, speed_mbps, in_octets, out_octets) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [row for device in devices for row in _snmp_interface_rows(scan_id, device)],
+        )
+
+    def get_snmp_devices(self, scan_id: int) -> list[dict[str, Any]]:
+        """A scan's ``--snmp`` polls, each with its interfaces, in the order polled."""
+        with self._session() as conn:
+            devices = conn.execute(
+                "SELECT ip, ok, version, sys_name, sys_descr, sys_object_id, sys_location, "
+                "uptime_s, response_ms, failure, error, polled_at FROM snmp_devices "
+                "WHERE scan_id = ? ORDER BY rowid",
+                (scan_id,),
+            ).fetchall()
+            interfaces = conn.execute(
+                "SELECT ip, if_index, name, description, alias, admin_status, oper_status, "
+                "speed_mbps, in_octets, out_octets FROM snmp_interfaces "
+                "WHERE scan_id = ? ORDER BY rowid",
+                (scan_id,),
+            ).fetchall()
+        by_ip: dict[str, list[dict[str, Any]]] = {}
+        for row in interfaces:
+            interface = dict(row)
+            by_ip.setdefault(interface.pop("ip"), []).append(interface)
+        return [
+            {**dict(row), "ok": bool(row["ok"]), "interfaces": by_ip.get(row["ip"], [])}
+            for row in devices
+        ]
+
+    def snmp_snapshot(self, scan_id: int) -> list[SnmpSnapshot]:
+        return [
+            SnmpSnapshot(
+                ip=device["ip"],
+                ok=device["ok"],
+                uptime_s=device["uptime_s"],
+                failure=device["failure"],
+                sys_name=device["sys_name"],
+                polled_at=device["polled_at"],
+                interfaces=tuple(
+                    InterfaceSnapshot(
+                        name=interface["name"],
+                        alias=interface["alias"],
+                        admin_status=interface["admin_status"],
+                        oper_status=interface["oper_status"],
+                    )
+                    for interface in device["interfaces"]
+                ),
+            )
+            for device in self.get_snmp_devices(scan_id)
+        ]
+
+    def get_http_checks(self, scan_id: int) -> list[dict[str, Any]]:
         """A scan's ``--http-check`` results, in the order they were checked."""
         with self._session() as conn:
             rows = conn.execute(
@@ -290,7 +444,7 @@ class Database:
             ).fetchall()
         return [{**dict(row), "ok": bool(row["ok"])} for row in rows]
 
-    def http_snapshot(self, scan_id: int) -> List[HttpSnapshot]:
+    def http_snapshot(self, scan_id: int) -> list[HttpSnapshot]:
         return [
             HttpSnapshot(
                 url=row["url"],
@@ -301,7 +455,7 @@ class Database:
             for row in self.get_http_checks(scan_id)
         ]
 
-    def interrupt_scans(self, error: str, scan_ids: Optional[Sequence[int]] = None) -> int:
+    def interrupt_scans(self, error: str, scan_ids: Sequence[int] | None = None) -> int:
         """Mark ``running`` scans as interrupted; all of them unless ``scan_ids`` is given.
 
         Returns how many were marked. Only rows still ``running`` change, so a
@@ -317,7 +471,7 @@ class Database:
                 for scan_id in scan_ids
             )
 
-    def get_scan(self, scan_id: int) -> Optional[Dict[str, Any]]:
+    def get_scan(self, scan_id: int) -> dict[str, Any] | None:
         with self._session() as conn:
             row = conn.execute("SELECT * FROM scans WHERE id = ?", (scan_id,)).fetchone()
             if row is None:
@@ -327,9 +481,9 @@ class Database:
             scan["avg_latency"] = self._avg_latency(conn, scan_id)
             return scan
 
-    def list_scans(self, limit: int = 50, source: Optional[str] = None) -> List[Dict[str, Any]]:
+    def list_scans(self, limit: int = 50, source: str | None = None) -> list[dict[str, Any]]:
         query = "SELECT * FROM scans"
-        params: List[Any] = []
+        params: list[Any] = []
         if source:
             query += " WHERE source = ?"
             params.append(source)
@@ -351,10 +505,10 @@ class Database:
             cursor = conn.execute("DELETE FROM scans WHERE id = ?", (scan_id,))
             return cursor.rowcount > 0
 
-    def scan_rows(self, source: Optional[str] = None) -> List[Dict[str, Any]]:
+    def scan_rows(self, source: str | None = None) -> list[dict[str, Any]]:
         """Every stored scan's own row (no aggregates), newest first."""
         query = "SELECT id, started_at, source, status, completed FROM scans"
-        params: List[Any] = []
+        params: list[Any] = []
         if source:
             query += " WHERE source = ?"
             params.append(source)
@@ -388,10 +542,10 @@ class Database:
 
     # ----------------------------------------------------------- history
 
-    def previous_scan_id(self, scan_id: int, source: Optional[str] = None) -> Optional[int]:
+    def previous_scan_id(self, scan_id: int, source: str | None = None) -> int | None:
         """Newest comparable scan recorded before ``scan_id``."""
         query = _PREVIOUS_SCAN_SQL
-        params: List[Any] = [scan_id, *COMPARABLE_STATUSES]
+        params: list[Any] = [scan_id, *COMPARABLE_STATUSES]
         if source:
             query += " AND source = ?"
             params.append(source)
@@ -401,10 +555,10 @@ class Database:
             row = conn.execute(query, params).fetchone()
         return int(row["id"]) if row else None
 
-    def latest_scan_ids(self, limit: int = 2, source: Optional[str] = None) -> List[int]:
+    def latest_scan_ids(self, limit: int = 2, source: str | None = None) -> list[int]:
         """IDs of the most recent comparable scans, newest first."""
         query = _LATEST_SCANS_SQL
-        params: List[Any] = list(COMPARABLE_STATUSES)
+        params: list[Any] = list(COMPARABLE_STATUSES)
         if source:
             query += " AND source = ?"
             params.append(source)
@@ -414,7 +568,7 @@ class Database:
         with self._session() as conn:
             return [int(row["id"]) for row in conn.execute(query, params).fetchall()]
 
-    def snapshot(self, scan_id: int) -> List[HostSnapshot]:
+    def snapshot(self, scan_id: int) -> list[HostSnapshot]:
         """Every host recorded by a scan, as comparison-ready snapshots."""
         with self._session() as conn:
             rows = conn.execute(
@@ -433,7 +587,7 @@ class Database:
             for row in rows
         ]
 
-    def scan_ref(self, scan_id: int) -> Optional[ScanRef]:
+    def scan_ref(self, scan_id: int) -> ScanRef | None:
         """Identifying metadata for a scan, or ``None`` when it does not exist."""
         with self._session() as conn:
             row = conn.execute(
@@ -453,14 +607,14 @@ class Database:
     def get_results(
         self,
         scan_id: int,
-        status: Optional[str] = None,
-        search: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+        status: str | None = None,
+        search: str | None = None,
+    ) -> list[dict[str, Any]]:
         query = (
             "SELECT ip, status, latency, hostname, open_ports, checked_at, method, mac, vendor "
             "FROM results WHERE scan_id = ?"
         )
-        params: List[Any] = [scan_id]
+        params: list[Any] = [scan_id]
         if status:
             query += " AND status = ?"
             params.append(status)
@@ -476,7 +630,7 @@ class Database:
         with self._session() as conn:
             return [dict(row) for row in conn.execute(query, params).fetchall()]
 
-    def latest_completed_scans(self, limit: int) -> Tuple[List[Dict[str, Any]], int]:
+    def latest_completed_scans(self, limit: int) -> tuple[list[dict[str, Any]], int]:
         """The newest completed scan of each source, most recent source first.
 
         Returns at most ``limit`` scans, each with a ``completed_count`` of the
@@ -494,7 +648,7 @@ class Database:
 
     # ------------------------------------------------------- aggregates
 
-    def overview(self) -> Dict[str, Any]:
+    def overview(self) -> dict[str, Any]:
         with self._session() as conn:
             scan_count = conn.execute("SELECT COUNT(*) FROM scans").fetchone()[0]
             host_count = conn.execute("SELECT COUNT(DISTINCT ip) FROM results").fetchone()[0]
@@ -530,7 +684,7 @@ class Database:
                 "trend": [dict(row) for row in reversed(trend_rows)],
             }
 
-    def inventory(self) -> List[Dict[str, Any]]:
+    def inventory(self) -> list[dict[str, Any]]:
         query = (
             "SELECT r.ip, "
             "  (SELECT r2.hostname FROM results r2 "
@@ -544,6 +698,12 @@ class Database:
             "  (SELECT r5.vendor FROM results r5 "
             "   WHERE r5.ip = r.ip AND r5.mac != '' "
             "   ORDER BY r5.rowid DESC LIMIT 1) AS vendor, "
+            "  (SELECT d.sys_name FROM snmp_devices d "
+            "   WHERE d.ip = r.ip AND d.ok = 1 AND d.sys_name != '' "
+            "   ORDER BY d.rowid DESC LIMIT 1) AS snmp_name, "
+            "  (SELECT d2.sys_descr FROM snmp_devices d2 "
+            "   WHERE d2.ip = r.ip AND d2.ok = 1 AND d2.sys_descr != '' "
+            "   ORDER BY d2.rowid DESC LIMIT 1) AS snmp_descr, "
             "  AVG(CASE WHEN r.status = 'Active' THEN r.latency END) AS avg_latency, "
             "  MAX(CASE WHEN r.status = 'Active' THEN r.checked_at END) AS last_seen, "
             "  MAX(r.checked_at) AS last_checked, "
@@ -563,10 +723,10 @@ class Database:
         self,
         name: str,
         targets: str,
-        config: Dict[str, Any],
-        interval_minutes: Optional[int],
-        cron: Optional[str],
-        next_run_at: Optional[str],
+        config: dict[str, Any],
+        interval_minutes: int | None,
+        cron: str | None,
+        next_run_at: str | None,
         paused: bool = False,
     ) -> int:
         with self._session() as conn:
@@ -586,17 +746,17 @@ class Database:
             )
             return int(cursor.lastrowid)
 
-    def list_schedules(self) -> List[Dict[str, Any]]:
+    def list_schedules(self) -> list[dict[str, Any]]:
         with self._session() as conn:
             rows = conn.execute(_SCHEDULE_SQL + " ORDER BY sc.id").fetchall()
         return [self._schedule_dict(row) for row in rows]
 
-    def get_schedule(self, schedule_id: int) -> Optional[Dict[str, Any]]:
+    def get_schedule(self, schedule_id: int) -> dict[str, Any] | None:
         with self._session() as conn:
             row = conn.execute(_SCHEDULE_SQL + " WHERE sc.id = ?", (schedule_id,)).fetchone()
         return self._schedule_dict(row) if row is not None else None
 
-    def due_schedules(self, now: str) -> List[Dict[str, Any]]:
+    def due_schedules(self, now: str) -> list[dict[str, Any]]:
         """Schedules that are not paused and whose next run is at or before ``now``."""
         with self._session() as conn:
             rows = conn.execute(
@@ -606,9 +766,7 @@ class Database:
             ).fetchall()
         return [self._schedule_dict(row) for row in rows]
 
-    def set_schedule_paused(
-        self, schedule_id: int, paused: bool, next_run_at: Optional[str]
-    ) -> bool:
+    def set_schedule_paused(self, schedule_id: int, paused: bool, next_run_at: str | None) -> bool:
         with self._session() as conn:
             cursor = conn.execute(
                 "UPDATE schedules SET paused = ?, next_run_at = ? WHERE id = ?",
@@ -617,7 +775,7 @@ class Database:
             return cursor.rowcount > 0
 
     def record_schedule_run(
-        self, schedule_id: int, ran_at: str, scan_id: int, next_run_at: Optional[str]
+        self, schedule_id: int, ran_at: str, scan_id: int, next_run_at: str | None
     ) -> None:
         with self._session() as conn:
             conn.execute(
@@ -627,7 +785,7 @@ class Database:
             )
 
     def record_schedule_skip(
-        self, schedule_id: int, skipped_at: str, reason: str, next_run_at: Optional[str]
+        self, schedule_id: int, skipped_at: str, reason: str, next_run_at: str | None
     ) -> None:
         with self._session() as conn:
             conn.execute(
@@ -645,20 +803,20 @@ class Database:
     # ------------------------------------------------------------ helpers
 
     @staticmethod
-    def _schedule_dict(row: sqlite3.Row) -> Dict[str, Any]:
+    def _schedule_dict(row: sqlite3.Row) -> dict[str, Any]:
         schedule = dict(row)
         schedule["config"] = json.loads(schedule.get("config") or "{}")
         schedule["paused"] = bool(schedule["paused"])
         return schedule
 
     @staticmethod
-    def _scan_dict(row: sqlite3.Row) -> Dict[str, Any]:
+    def _scan_dict(row: sqlite3.Row) -> dict[str, Any]:
         scan = dict(row)
         scan["config"] = json.loads(scan.get("config") or "{}")
         return scan
 
     @staticmethod
-    def _status_counts(conn: sqlite3.Connection, scan_id: int) -> Dict[str, int]:
+    def _status_counts(conn: sqlite3.Connection, scan_id: int) -> dict[str, int]:
         rows = conn.execute(
             "SELECT status, COUNT(*) AS count FROM results WHERE scan_id = ? GROUP BY status",
             (scan_id,),
@@ -666,7 +824,7 @@ class Database:
         return {row["status"]: row["count"] for row in rows}
 
     @staticmethod
-    def _avg_latency(conn: sqlite3.Connection, scan_id: int) -> Optional[float]:
+    def _avg_latency(conn: sqlite3.Connection, scan_id: int) -> float | None:
         value = conn.execute(
             "SELECT AVG(latency) FROM results WHERE scan_id = ? AND status = 'Active'",
             (scan_id,),

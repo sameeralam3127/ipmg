@@ -20,9 +20,9 @@ import os
 import platform
 import shutil
 import subprocess  # nosec B404
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, List, Optional, Sequence, Tuple
 
 from ipmg.core.discovery import local_ip_address
 from ipmg.exceptions import DiscoveryError
@@ -32,10 +32,10 @@ log = logging.getLogger(__name__)
 #: Seconds allowed for each firewall query.
 _COMMAND_TIMEOUT_S = 5
 
-Runner = Callable[[Sequence[str]], Optional[Tuple[int, str]]]
+Runner = Callable[[Sequence[str]], tuple[int, str] | None]
 
 
-def _run(argv: Sequence[str]) -> Optional[Tuple[int, str]]:
+def _run(argv: Sequence[str]) -> tuple[int, str] | None:
     """Run a fixed argv; (exit status, output), or None if it cannot run at all."""
     if shutil.which(argv[0]) is None and not Path(argv[0]).exists():
         return None
@@ -80,7 +80,7 @@ def _url_host(host: str) -> str:
     return host
 
 
-def browse_urls(host: str, port: int, token: str) -> List[Tuple[str, str]]:
+def browse_urls(host: str, port: int, token: str) -> list[tuple[str, str]]:
     """The links to print, as (url, who it is for), the one to open first."""
 
     def link(address: str) -> str:
@@ -115,25 +115,25 @@ class Firewall:
 
     name: str
     #: True: the port is closed. False: it is open. None: it cannot tell.
-    blocks: Optional[bool]
+    blocks: bool | None
     #: Commands that open the port, to print.
-    open_commands: Tuple[str, ...] = ()
+    open_commands: tuple[str, ...] = ()
     note: str = ""
     #: argv pairs IPMG Web can run itself (as root) to open and close the port.
-    open_argv: Tuple[str, ...] = field(default_factory=tuple)
-    close_argv: Tuple[str, ...] = field(default_factory=tuple)
+    open_argv: tuple[str, ...] = field(default_factory=tuple)
+    close_argv: tuple[str, ...] = field(default_factory=tuple)
 
     @property
     def can_manage(self) -> bool:
         return bool(self.open_argv)
 
 
-def _firewalld(port: int, run: Runner) -> Optional[Firewall]:
+def _firewalld(port: int, run: Runner) -> Firewall | None:
     state = run(["firewall-cmd", "--state"])
     if state is None or state[0] != 0 or "running" not in state[1]:
         return None
     query = run(["firewall-cmd", f"--query-port={port}/tcp"])
-    blocks: Optional[bool] = None
+    blocks: bool | None = None
     if query is not None and query[1].strip() in ("yes", "no"):
         blocks = query[1].strip() == "no"
     return Firewall(
@@ -150,14 +150,14 @@ def _firewalld(port: int, run: Runner) -> Optional[Firewall]:
     )
 
 
-def _ufw(port: int, run: Runner) -> Optional[Firewall]:
+def _ufw(port: int, run: Runner) -> Firewall | None:
     status = run(["ufw", "status"])
     if status is None:
         return None
     code, output = status
     if code == 0 and "Status: inactive" in output:
         return None
-    blocks: Optional[bool] = None
+    blocks: bool | None = None
     if code == 0 and "Status: active" in output:
         allowed = any(
             line.split()[:1] in ([f"{port}/tcp"], [str(port)]) and "ALLOW" in line
@@ -176,7 +176,7 @@ def _ufw(port: int, run: Runner) -> Optional[Firewall]:
     )
 
 
-def _windows(port: int, run: Runner) -> Optional[Firewall]:
+def _windows(port: int, run: Runner) -> Firewall | None:
     state = run(["netsh", "advfirewall", "show", "currentprofile", "state"])
     if state is None or "ON" not in state[1].upper():
         return None
@@ -195,7 +195,7 @@ def _windows(port: int, run: Runner) -> Optional[Firewall]:
 _SOCKETFILTERFW = "/usr/libexec/ApplicationFirewall/socketfilterfw"
 
 
-def _macos(port: int, run: Runner) -> Optional[Firewall]:
+def _macos(port: int, run: Runner) -> Firewall | None:
     state = run([_SOCKETFILTERFW, "--getglobalstate"])
     if state is None or "enabled" not in state[1].lower():
         return None
@@ -208,8 +208,8 @@ def _macos(port: int, run: Runner) -> Optional[Firewall]:
 
 
 def detect_firewall(
-    port: int, system: Optional[str] = None, run: Optional[Runner] = None
-) -> Optional[Firewall]:
+    port: int, system: str | None = None, run: Runner | None = None
+) -> Firewall | None:
     """The firewall that could keep other machines out, or None if there is none to see."""
     system = (system or platform.system()).lower()
     run = run or _run
@@ -227,7 +227,7 @@ def is_admin() -> bool:
     return bool(geteuid and geteuid() == 0)
 
 
-def open_port(firewall: Firewall, run: Optional[Runner] = None) -> bool:
+def open_port(firewall: Firewall, run: Runner | None = None) -> bool:
     """Run the firewall's own command to open the port; True if it worked."""
     if not firewall.can_manage:
         return False
@@ -235,7 +235,7 @@ def open_port(firewall: Firewall, run: Optional[Runner] = None) -> bool:
     return result is not None and result[0] == 0
 
 
-def close_port(firewall: Firewall, run: Optional[Runner] = None) -> bool:
+def close_port(firewall: Firewall, run: Runner | None = None) -> bool:
     if not firewall.can_manage:
         return False
     result = (run or _run)(list(firewall.close_argv))

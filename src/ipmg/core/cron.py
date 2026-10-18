@@ -16,7 +16,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import FrozenSet, Optional, Tuple
 
 _MACROS = {
     "@hourly": "0 * * * *",
@@ -56,11 +55,9 @@ def _value(text: str, names: dict, low: int, high: int, field: str) -> int:
     return number
 
 
-def _field(
-    text: str, low: int, high: int, field: str, names: Optional[dict] = None
-) -> FrozenSet[int]:
+def _field(text: str, low: int, high: int, field: str, names: dict | None = None) -> frozenset[int]:
     names = names or {}
-    values = set()
+    values: set[int] = set()
     for part in text.split(","):
         part = part.strip()
         if not part:
@@ -93,11 +90,11 @@ def _field(
 @dataclass(frozen=True)
 class CronSchedule:
     expression: str
-    minutes: FrozenSet[int]
-    hours: FrozenSet[int]
-    days: FrozenSet[int]
-    months: FrozenSet[int]
-    weekdays: FrozenSet[int]
+    minutes: frozenset[int]
+    hours: frozenset[int]
+    days: frozenset[int]
+    months: frozenset[int]
+    weekdays: frozenset[int]
     #: Whether day-of-month and day-of-week were restricted (not ``*``).
     day_restricted: bool
     weekday_restricted: bool
@@ -170,7 +167,7 @@ def parse_cron(expression: str) -> CronSchedule:
 
 def next_interval_run(
     previous: datetime, interval: timedelta, now: datetime
-) -> Tuple[datetime, int]:
+) -> tuple[datetime, int]:
     """The next slot on a fixed cadence after ``now``, and how many slots were missed.
 
     Runs stay on ``previous + n * interval``, so a run that started late does

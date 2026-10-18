@@ -33,6 +33,7 @@ from ipmg.infrastructure.retention import parse_age
 from ipmg.reporting.diff_report import DIFF_FORMATS
 from ipmg.reporting.live import DEFAULT_REFRESH_S, MAX_REFRESH_S, MIN_REFRESH_S
 from ipmg.reporting.metrics import DEFAULT_MAX_SOURCES
+from ipmg.services import snmp_settings as snmp_defaults
 
 PROG = "IPMG - IP Management & Ping Monitoring Tool"
 
@@ -79,6 +80,25 @@ def _age(value: str):
         raise argparse.ArgumentTypeError(str(exc)) from exc
 
 
+def _udp_port(value: str) -> int:
+    port = _positive_int(value)
+    if port > 65535:
+        raise argparse.ArgumentTypeError(f"invalid port {value!r}: use 1-65535")
+    return port
+
+
+def _retries(value: str) -> int:
+    try:
+        retries = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"invalid retry count {value!r}") from None
+    if not 0 <= retries <= snmp_defaults.MAX_RETRIES:
+        raise argparse.ArgumentTypeError(
+            f"invalid retry count {value!r}: use 0-{snmp_defaults.MAX_RETRIES}"
+        )
+    return retries
+
+
 def _status_ranges(value: str) -> str:
     try:
         parse_expect(value)
@@ -95,6 +115,56 @@ def _percent(value: str) -> float:
     if not 0 <= percent <= 100:
         raise argparse.ArgumentTypeError(f"percentage out of range (0-100): {value}")
     return percent
+
+
+def _add_snmp_arguments(parser: argparse.ArgumentParser) -> None:
+    snmp = parser.add_argument_group(
+        "SNMP polling",
+        "Ask the hosts that answered for their name, uptime, and interfaces. Credentials "
+        f"come from {snmp_defaults.ENV_COMMUNITY} (v2c; default: "
+        f"{snmp_defaults.DEFAULT_COMMUNITY}) or {snmp_defaults.ENV_USER}, "
+        f"{snmp_defaults.ENV_AUTH_KEY}, and {snmp_defaults.ENV_PRIV_KEY} (v3), or the "
+        f"[{snmp_defaults.CREDENTIALS_TABLE}] table of your config file; never from a flag.",
+    )
+    snmp.add_argument(
+        "--snmp",
+        action="store_true",
+        help="Poll every host that answered over SNMP: name, description, uptime, and "
+        "interfaces. Reboots, interfaces going down, and agents that stop answering are "
+        "reported as changes.",
+    )
+    snmp.add_argument(
+        "--snmp-version",
+        choices=snmp_defaults.VERSIONS,
+        default="2c",
+        help="SNMP version (default: 2c). Version 3 encryption needs the snmp extra.",
+    )
+    snmp.add_argument(
+        "--snmp-port",
+        type=_udp_port,
+        default=snmp_defaults.DEFAULT_PORT,
+        metavar="PORT",
+        help=f"Agent UDP port (default: {snmp_defaults.DEFAULT_PORT}).",
+    )
+    snmp.add_argument(
+        "--snmp-timeout",
+        type=float,
+        default=snmp_defaults.DEFAULT_TIMEOUT_S,
+        metavar="SECONDS",
+        help=f"Seconds to wait for each answer (default: {snmp_defaults.DEFAULT_TIMEOUT_S:g}).",
+    )
+    snmp.add_argument(
+        "--snmp-retries",
+        type=_retries,
+        default=snmp_defaults.DEFAULT_RETRIES,
+        metavar="N",
+        help=f"Times to resend an unanswered request (default: {snmp_defaults.DEFAULT_RETRIES}).",
+    )
+    snmp.add_argument(
+        "--snmp-no-interfaces",
+        action="store_true",
+        help="Read only the system group, not the interface tables.",
+    )
 
 
 def _add_database_argument(parser) -> None:
@@ -445,6 +515,8 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Do not verify TLS certificates (for self-signed lab hosts; not recommended).",
     )
+
+    _add_snmp_arguments(parser)
 
     reports = parser.add_argument_group("report writing")
     reports.add_argument(
