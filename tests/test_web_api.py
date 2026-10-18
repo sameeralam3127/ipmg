@@ -399,3 +399,267 @@ def test_websocket_events_match_their_models(client):
         while not types or types[-1] != "scan_finished":
             types.append(adapter.validate_python(websocket.receive_json()).type)
     assert types == ["scan_started", "result", "scan_finished"]
+
+
+def test_scans_left_running_by_a_stopped_process_are_interrupted_on_startup(tmp_path):
+    db = Database(tmp_path / "stale.db")
+    # What a killed IPMG Web leaves behind: a scan that will never finish.
+    stale = db.create_scan("manual", 3, {})
+    finished = db.record_scan("manual", [], {}, 1.0)
+
+    app = create_app(db, token="test-token")
+    with TestClient(app, headers={"Authorization": "Bearer test-token"}) as client:
+        stats = client.get("/api/v1/stats").json()
+        scan = client.get(f"/api/v1/scans/{stale}").json()
+        cancel = client.post(f"/api/v1/scans/{stale}/cancel")
+
+    assert stats["running_scans"] == []
+    assert scan["status"] == "interrupted"
+    assert scan["error"] == "IPMG Web stopped during the scan"
+    assert scan["finished_at"]
+    assert cancel.status_code == 409
+    assert db.get_scan(finished)["status"] == "complete"
+
+
+def test_shutdown_stops_running_scans_and_records_them(tmp_path, monkeypatch):
+    import threading
+
+    release = threading.Event()
+
+    def slow_ping(_ip, _timeout, _count):
+        release.wait(0.2)
+        return ("Active", 1.0)
+
+    monkeypatch.setattr("ipmg.core.engine.ping_ip", slow_ping)
+    db = Database(tmp_path / "shutdown.db")
+    app = create_app(db, token="test-token")
+    with TestClient(app, headers={"Authorization": "Bearer test-token"}) as client:
+        targets = "\n".join(f"10.0.0.{n}" for n in range(1, 101))
+        scan_id = client.post("/api/v1/scans", json={"targets": targets, "threads": 1}).json()["id"]
+    # Leaving the block runs the app's shutdown.
+
+    scan = db.get_scan(scan_id)
+    assert scan["status"] == "cancelled"
+    assert scan["completed"] < 100
+
+
+def test_shutdown_marks_a_scan_that_will_not_stop_as_interrupted(tmp_path):
+    import threading
+
+    from ipmg.web.manager import ScanManager
+
+    db = Database(tmp_path / "stuck.db")
+    manager = ScanManager(db)
+    scan_id = db.create_scan("manual", 1, {})
+    stuck = threading.Thread(target=threading.Event().wait, args=(5,), daemon=True)
+    stuck.start()
+    manager._stops[scan_id] = threading.Event()
+    manager._threads[scan_id] = stuck
+
+    manager.shutdown(wait_s=0.1)
+
+    assert db.get_scan(scan_id)["status"] == "interrupted"
+
+
+def test_record_scan_is_one_transaction(tmp_path, monkeypatch):
+    # A CLI killed while recording must not leave a scan stuck at "running".
+    from ipmg.core.engine import HostResult
+    from ipmg.infrastructure import database as database_module
+
+    db = Database(tmp_path / "atomic.db")
+
+    def die(*_args, **_kwargs):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(database_module.Database, "_insert_results", staticmethod(die))
+    with pytest.raises(KeyboardInterrupt):
+        db.record_scan("manual", [HostResult("10.0.0.1", "Active", 1.0)], {}, 1.0)
+
+    assert db.list_scans() == []
+
+
+def test_deleting_a_running_scan_is_refused_until_it_stops(tmp_path, monkeypatch):
+    import threading
+
+    release = threading.Event()
+    monkeypatch.setattr(
+        "ipmg.core.engine.ping_ip", lambda *_a: (release.wait(5), ("Active", 1.0))[1]
+    )
+    app = create_app(Database(tmp_path / "delete.db"), token="test-token")
+    with TestClient(app, headers={"Authorization": "Bearer test-token"}) as client:
+        scan_id = client.post("/api/v1/scans", json={"targets": "10.0.0.1", "threads": 1}).json()[
+            "id"
+        ]
+
+        refused = client.delete(f"/api/v1/scans/{scan_id}")
+        assert refused.status_code == 409
+        assert "Cancel it first" in refused.json()["detail"]
+        # Still there, and its worker is still running.
+        assert client.get(f"/api/v1/scans/{scan_id}").status_code == 200
+        assert client.post(f"/api/v1/scans/{scan_id}/cancel").status_code == 200
+
+        release.set()
+        wait_for_completion(client, scan_id)
+        assert client.delete(f"/api/v1/scans/{scan_id}").status_code == 204
+        assert client.get(f"/api/v1/scans/{scan_id}").status_code == 404
+
+
+def test_deleting_a_finished_scan_works(client):
+    scan_id = client.post("/api/v1/scans", json={"targets": "10.0.0.1"}).json()["id"]
+    wait_for_completion(client, scan_id)
+
+    assert client.delete(f"/api/v1/scans/{scan_id}").status_code == 204
+    assert client.delete(f"/api/v1/scans/{scan_id}").status_code == 404
+
+
+def test_scans_beyond_max_scans_are_refused_with_429(tmp_path, monkeypatch):
+    import threading
+
+    release = threading.Event()
+    monkeypatch.setattr(
+        "ipmg.core.engine.ping_ip", lambda *_a: (release.wait(5), ("Active", 1.0))[1]
+    )
+    app = create_app(Database(tmp_path / "limit.db"), token="test-token", max_scans=2)
+    with TestClient(app, headers={"Authorization": "Bearer test-token"}) as client:
+        start = {"targets": "10.0.0.1", "threads": 1}
+        first = client.post("/api/v1/scans", json=start)
+        second = client.post("/api/v1/scans", json=start)
+        refused = [client.post("/api/v1/scans", json=start) for _ in range(3)]
+
+        assert (first.status_code, second.status_code) == (201, 201)
+        assert {response.status_code for response in refused} == {429}
+        assert "2 scans are already running" in refused[0].json()["detail"]
+        # A refused scan stores nothing.
+        assert len(client.get("/api/v1/scans").json()) == 2
+
+        release.set()
+        wait_for_completion(client, first.json()["id"])
+        wait_for_completion(client, second.json()["id"])
+        # A finished scan frees its slot.
+        assert client.post("/api/v1/scans", json=start).status_code == 201
+
+
+def test_concurrent_starts_cannot_overshoot_the_limit(tmp_path):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    from ipmg.core.engine import ScanConfig
+    from ipmg.web.manager import ScanLimitError, ScanManager
+
+    release = threading.Event()
+    manager = ScanManager(Database(tmp_path / "race.db"), max_scans=1)
+    manager._run = lambda *_a: release.wait(5)
+
+    def start(_n):
+        try:
+            return manager.start_scan(["10.0.0.1"], ScanConfig(), "race")
+        except ScanLimitError:
+            return None
+
+    with ThreadPoolExecutor(8) as pool:
+        started = [scan_id for scan_id in pool.map(start, range(16)) if scan_id is not None]
+    release.set()
+
+    assert len(started) == 1
+
+
+def test_web_command_passes_max_scans(monkeypatch):
+    from ipmg.cli import commands
+
+    captured = {}
+    monkeypatch.setattr("ipmg.web.server.run_dashboard", lambda **kwargs: captured.update(kwargs))
+    assert commands.run(["web", "--no-browser", "--max-scans", "4"]) == 0
+    assert captured["max_scans"] == 4
+
+
+SECURITY_HEADERS = {
+    "x-frame-options": "DENY",
+    "x-content-type-options": "nosniff",
+    "referrer-policy": "no-referrer",
+}
+
+
+@pytest.mark.parametrize("path", ["/", "/index.html", "/js/app.js", "/api/v1/stats"])
+def test_every_response_carries_the_security_headers(client, path):
+    response = client.get(path)
+
+    for name, value in SECURITY_HEADERS.items():
+        assert response.headers[name] == value
+    policy = response.headers["content-security-policy"]
+    # Nothing may frame the dashboard: it is logged in through localStorage.
+    assert "frame-ancestors 'none'" in policy
+    assert "default-src 'self'" in policy
+    assert "base-uri 'none'" in policy
+    assert "unsafe-inline" not in policy
+
+
+def test_error_responses_carry_the_security_headers(anonymous):
+    response = anonymous.get("/api/v1/stats")
+
+    assert response.status_code == 401
+    assert response.headers["x-frame-options"] == "DENY"
+
+
+def test_csp_allows_the_dashboard_websocket(client):
+    policy = client.get("/", headers={"Host": "127.0.0.1:8080"}).headers["content-security-policy"]
+
+    assert "connect-src 'self' ws://127.0.0.1:8080 wss://127.0.0.1:8080;" in policy
+
+
+def test_csp_never_repeats_a_malformed_host_header(client):
+    policy = client.get("/", headers={"Host": "evil; script-src *"}).headers[
+        "content-security-policy"
+    ]
+
+    assert "evil" not in policy
+    assert "connect-src 'self';" in policy
+
+
+@pytest.mark.parametrize("path", ["/docs", "/redoc"])
+def test_api_docs_get_their_own_policy_for_the_cdn(client, path):
+    response = client.get(path)
+
+    assert response.status_code == 200
+    policy = response.headers["content-security-policy"]
+    assert "https://cdn.jsdelivr.net" in policy
+    assert "frame-ancestors 'none'" in policy
+    assert response.headers["x-frame-options"] == "DENY"
+
+
+def test_frontend_has_no_inline_scripts_or_styles():
+    # The strict policy blocks both; a change that adds one would break the
+    # dashboard in every browser.
+    import re
+
+    from ipmg.web.app import STATIC_DIR
+
+    html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    assert not re.search(r"<script(?![^>]*\bsrc=)[^>]*>", html)
+    assert "<style" not in html
+    assert not re.search(r"\sstyle=", html)
+    assert not re.search(r"\son[a-z]+=", html)
+    for script in (STATIC_DIR / "js").glob("*.js"):
+        source = script.read_text(encoding="utf-8")
+        assert 'setAttribute("style"' not in source, script.name
+        assert "eval(" not in source and "new Function" not in source, script.name
+
+
+def test_a_tcp_probe_scan_reports_which_method_found_each_host(client, monkeypatch):
+    monkeypatch.setattr("ipmg.core.engine.ping_ip", lambda *_a: ("Timeout", None))
+    monkeypatch.setattr("ipmg.core.engine.tcp_probe", lambda *_a: ("Active", 3.0))
+
+    scan_id = client.post(
+        "/api/v1/scans", json={"targets": "10.0.0.1", "probe": "icmp,tcp"}
+    ).json()["id"]
+    wait_for_completion(client, scan_id)
+
+    [row] = client.get(f"/api/v1/scans/{scan_id}/results").json()
+    assert (row["status"], row["method"]) == ("Active", "tcp")
+    report = client.get(f"/api/v1/scans/{scan_id}/report?fmt=csv").text
+    assert report.splitlines()[0].split(",")[5] == "Probe"
+
+
+def test_an_unknown_probe_is_rejected(client):
+    response = client.post("/api/v1/scans", json={"targets": "10.0.0.1", "probe": "udp"})
+
+    assert response.status_code == 422

@@ -7,9 +7,14 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     groups:
       actions:
         patterns: ["*"]
+        update-types:
+          - "minor"
+          - "patch"
     commit-message:
       prefix: ci
 
@@ -17,9 +22,15 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
     groups:
       python:
         patterns: ["*"]
+        update-types:
+          - "minor"
+          - "patch"
     commit-message:
       prefix: build
       include: scope

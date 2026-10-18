@@ -6,30 +6,28 @@
 [![Publish](https://github.com/sameeralam3127/ipmg/actions/workflows/publish.yml/badge.svg)](https://github.com/sameeralam3127/ipmg/actions/workflows/publish.yml)
 
 > [!WARNING]
-> **This is the `v4` development branch. IPMG v4 is under active development
-> and is not ready for production.** Keep production systems on the current
-> stable 3.x release (`pip install ipmg`) until v4.0.0 is published, targeted
-> for the end of October 2026. v4 is an architectural release: a SOLID,
-> plugin-based core, a streaming scan pipeline, strong typing, and contract
-> tests, with 3.x workflows kept compatible. See the
-> [v4 development plan](docs/v4/PLAN.md).
+> **This is the `v4` branch. IPMG v4 is in beta.** Try it with
+> `pip install --pre ipmg` and report what breaks; keep production systems on
+> the stable 3.x release (`pip install ipmg`) until v4.0.0 is published. v4 is
+> an architectural release: a SOLID, plugin-based core, a streaming scan
+> pipeline, strong typing, and contract tests, with 3.x workflows kept
+> compatible. See the [v4 development plan](docs/v4/PLAN.md).
 
-**Find out which hosts on your network are up — and what changed since last time.**
+**Know what changed on your network since the last scan.**
 
-IPMG pings hosts in parallel, resolves their names, and hands you a report you
-can send to someone: Excel, CSV, JSON, or Markdown. It works from the command
-line or from IPMG Web, a local browser UI, and it remembers every scan so it can tell
-you what moved.
+IPMG keeps a history of every scan and tells you what moved between two of
+them: hosts that went offline or appeared, IP addresses and hostnames that
+moved, latency that shifted. Every change carries a severity, so you can send
+only the ones that matter to Slack, Teams, a webhook, or email, or fail a cron
+job or CI step with an exit code. Around that: parallel ping scanning of IPs,
+CIDR blocks, and ranges (IPv4 and IPv6), IPMG Web, a local dashboard that
+works offline, and reports in Excel, CSV, JSON, and Markdown.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/sameeralam3127/ipmg/main/docs/assets/ipmg-demo.gif" alt="ipmg scanning 13 hosts in parallel: live results with reverse DNS names and latency, then a summary of 10 active and 3 timed out" width="820">
+  <img src="https://raw.githubusercontent.com/sameeralam3127/ipmg/main/docs/assets/ipmg-compare.gif" alt="ipmg scans 13 hosts with --stream, printing each one as it answers; a new address is added to the target file; a second scan with --compare reports it as a new host (warning) against the first" width="820">
 </p>
 
-**Why not `nmap -sn`, `fping`, or Angry IP Scanner?** They tell you what is up
-right now. IPMG also remembers every scan and tells you what changed since the
-last one: the host that dropped off, the device that appeared, the latency that
-doubled. It writes the report you would otherwise build by hand.
-[How it compares](#how-it-compares)
+[How it compares](#how-it-compares) to nmap, fping, and Uptime Kuma.
 
 **Website:** [sameeralam3127.github.io/ipmg](https://sameeralam3127.github.io/ipmg/) ·
 **Live demo:** [IPMG Web with sample data](https://sameeralam3127.github.io/ipmg/demo/) ·
@@ -37,7 +35,8 @@ doubled. It writes the report you would otherwise build by hand.
 
 ```bash
 pip install ipmg
-ipmg --discover        # scan the network you are on, right now
+ipmg --discover             # scan the network you are on, right now
+ipmg --discover --compare   # later: scan again and see what changed
 ```
 
 > **Please read:** only scan networks you are authorized to scan. Unauthorized
@@ -46,14 +45,16 @@ ipmg --discover        # scan the network you are on, right now
 **Contents**
 
 [How it compares](#how-it-compares) ·
+[Requirements and platform support](#requirements-and-platform-support) ·
 [Install](#install) ·
 [Your first scan](#your-first-scan) ·
+[Change detection](#change-detection) ·
 [Common tasks](#common-tasks) ·
 [Live results](#live-results) ·
-[Change detection](#change-detection) ·
 [IPMG Web](#ipmg-web) ·
 [What you can scan](#what-you-can-scan) ·
 [Reports](#reports) ·
+[In GitHub Actions](#in-github-actions) ·
 [All options](#all-options) ·
 [Security](#security) ·
 [More help](#more-help) ·
@@ -63,21 +64,61 @@ ipmg --discover        # scan the network you are on, right now
 
 ## How it compares
 
-| | IPMG | `nmap -sn` | `fping` | Angry IP Scanner |
+| | IPMG | nmap | fping | Uptime Kuma |
 | --- | --- | --- | --- | --- |
-| Parallel ping sweep | Yes | Yes | Yes | Yes |
-| Scan history and "what changed" | Built in | Save XML, compare with `ndiff` | No | No |
-| Reports | Excel, CSV, JSON, Markdown | XML, grepable text | Plain text | CSV, TXT, XML |
-| Browser UI | IPMG Web, local | No (Zenmap is a desktop app) | No | Desktop app (Java) |
-| Port checks | Common TCP ports | Full port and OS scanner | No | Via fetchers |
+| Primary purpose | Network discovery, scan history, and what changed | Network discovery and security auditing ([nmap.org](https://nmap.org/)) | Fast ICMP reachability for many hosts at once ([man page](https://fping.org/fping.8.html)) | Self-hosted uptime monitoring of individual services ([features](https://github.com/louislam/uptime-kuma#-features)) |
+| Ping sweeps of CIDR blocks and ranges | Yes, one system `ping` per host, `--threads` at a time | Yes, `-sn` host discovery ([docs](https://nmap.org/book/man-host-discovery.html)) | Yes, round-robin from one process with `-g`; the fastest here ([man page](https://fping.org/fping.8.html)) | No: one Ping monitor per host ([features](https://github.com/louislam/uptime-kuma#-features)) |
+| TCP checks | Connect checks on chosen ports, and `--probe tcp` for hosts that block ping | A full port scanner ([docs](https://nmap.org/book/man-port-scanning-techniques.html)) | No ([man page](https://fping.org/fping.8.html)) | A TCP monitor per host and port ([features](https://github.com/louislam/uptime-kuma#-features)) |
+| HTTP checks | `--http-check`: status, time, redirects, TLS, certificate expiry | Through NSE scripts such as `http-title` ([NSE](https://nmap.org/nsedoc/scripts/http-title.html)) | No ([man page](https://fping.org/fping.8.html)) | HTTP(s), keyword, and JSON query monitors ([features](https://github.com/louislam/uptime-kuma#-features)) |
+| History and "what changed" | Built in: every scan stored, changes with severities | Save XML, compare two scans with `ndiff` ([ndiff](https://nmap.org/ndiff/)) | No ([man page](https://fping.org/fping.8.html)) | Up/down state and ping charts per monitor ([features](https://github.com/louislam/uptime-kuma#-features)) |
+| Alerts | Slack, Teams, webhook, email, filtered by severity | No; it writes output files for other tools ([output](https://nmap.org/book/man-output.html)) | No ([man page](https://fping.org/fping.8.html)) | 90+ notification services ([features](https://github.com/louislam/uptime-kuma#-features)) |
+| Exit codes for cron and CI | `3` with `--fail-on-down`, `2` with `diff --fail-on-change` | No; parse its XML output instead ([output](https://nmap.org/book/man-output.html)) | `1` if any host is unreachable ([man page](https://fping.org/fping.8.html)) | Not a command-line tool ([install](https://github.com/louislam/uptime-kuma#-how-to-install)) |
+| Reports | Excel, CSV, JSON, JSON Lines, Markdown | Normal, XML, grepable ([output](https://nmap.org/book/man-output.html)) | Plain text, with summaries (`-s`, `-C`) ([man page](https://fping.org/fping.8.html)) | Status pages ([features](https://github.com/louislam/uptime-kuma#-features)) |
+| Browser UI | IPMG Web: local, offline, with scheduled scans | No; Zenmap is a desktop app ([Zenmap](https://nmap.org/zenmap/)) | No ([man page](https://fping.org/fping.8.html)) | It is a web app ([features](https://github.com/louislam/uptime-kuma#-features)) |
+| Install | `pip`, `uv`, one-line installers, Homebrew, Docker | Packages and installers ([download](https://nmap.org/download.html)) | From source, or Docker ([README](https://github.com/schweikert/fping#installation)) | Docker, or Node.js ([install](https://github.com/louislam/uptime-kuma#-how-to-install)) |
 
-Reach for nmap when you need a real port or OS scanner. Reach for IPMG when you
-look after a network and need to know what moved since yesterday, with a report
-you can hand to someone.
+Where the others are better: **nmap** is a real port, service, and OS
+scanner, and IPMG does not try to be one. **fping** sends every probe from a
+single process, so on large ranges it is much faster than IPMG, which starts
+one `ping` per host. **Uptime Kuma** is built for watching a fixed set of
+services around the clock, with status pages to share. [Angry IP
+Scanner](https://angryip.org/) is a point-and-click desktop scanner with a
+plugin system.
+
+Reach for IPMG when you look after a network and need to know what moved since
+yesterday, with a report you can hand to someone.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/sameeralam3127/ipmg/main/docs/assets/ipmg-web.png" alt="IPMG Web dashboard: scan totals, a status donut of 16 active, 1 timeout and 1 inactive host, a latency trend chart, and a list of recent scans" width="820">
 </p>
+
+---
+
+## Requirements and platform support
+
+IPMG does not craft packets. It runs your operating system's `ping` command
+once per host, as a direct process call with no shell, and reads its output.
+That means:
+
+- **Python 3.10 or newer**, unless you use the one-line installers, which
+  bring their own.
+- **The system `ping` command.** macOS and Windows include it; minimal Linux
+  and container images may not ([how to install it](#the-one-thing-ipmg-needs-from-your-system)).
+- **No root or administrator rights.** IPMG has exactly the privileges your
+  `ping` has: if `ping 8.8.8.8` works for your user, a scan works too. Port
+  checks (`--scan-ports`) are ordinary TCP connections.
+
+| Platform | What IPMG runs | Status |
+| --- | --- | --- |
+| Linux (iputils or busybox `ping`) | `ping -c COUNT -W SECONDS` | Supported. CI runs the tests and a scan on Ubuntu; see [verified environments](#verified-environments) |
+| macOS | `ping -c COUNT -W MILLISECONDS`; `ping6` for IPv6 | Supported. CI runs the tests and a scan on macOS |
+| Windows | `ping -n COUNT -w MILLISECONDS` | Supported. CI runs the tests and a scan of `127.0.0.1` on `windows-latest`; not yet verified against a real LAN |
+| FreeBSD | `ping -c COUNT -W MILLISECONDS`; `ping6` for IPv6 | Probed in a FreeBSD VM in CI when the ping code changes |
+| OpenBSD | `ping -c COUNT -w SECONDS`; `ping6` for IPv6 | Probed in an OpenBSD VM in CI when the ping code changes |
+| NetBSD | `ping -c COUNT -w DEADLINE`; `ping6 -x MILLISECONDS` for IPv6 | Probed in a NetBSD VM in CI when the ping code changes |
+
+`--discover ipv6` reads the neighbour table with `ip -6 neigh` on Linux (the
+`iproute2` package), `ndp -an` on macOS, and `netsh` on Windows.
 
 ---
 
@@ -119,10 +160,12 @@ irm https://raw.githubusercontent.com/sameeralam3127/ipmg/main/install.ps1 | iex
 
 It works in Windows PowerShell 5.1 and PowerShell 7 and needs no
 administrator rights: it installs uv if it is missing, installs IPMG, adds it
-to your user `PATH`, and checks that `ipmg --version` runs. To pin a release:
+to your user `PATH`, and checks that `ipmg --version` runs. To pin a release,
+replace `X.Y.Z` with any version listed on
+[PyPI](https://pypi.org/project/ipmg/#history):
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/sameeralam3127/ipmg/main/install.ps1))) -Version 2.3.0
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/sameeralam3127/ipmg/main/install.ps1))) -Version X.Y.Z
 ```
 
 **Docker (amd64 and arm64):**
@@ -166,7 +209,7 @@ docker compose run --rm scan --input 10.0.0.0/24          # CLI scans land in th
 
 Publishing the port more widely (`8080:8080`) exposes IPMG Web on your
 network over plain HTTP; put a reverse proxy with TLS in front first. Images
-are tagged with the release version (`2.4.0`), the minor line (`2.4`), and
+are tagged with the release version (`X.Y.Z`), the minor line (`X.Y`), and
 `latest`.
 
 ### Installing with pip
@@ -214,6 +257,19 @@ The one-line installers, Homebrew, and the Docker image install it with the
 `web` extra already. Run `ipmg web` without it and IPMG tells you the command
 that adds it.
 
+### Tab completion
+
+`ipmg completion SHELL` prints a completion script for commands, flags, their
+choices, and file names. It is generated from IPMG's own flag definitions, so
+it never falls behind; run it again after an upgrade.
+
+| Shell | Add this |
+| --- | --- |
+| bash | `eval "$(ipmg completion bash)"` in `~/.bashrc` (bash 3.2 and later; no bash-completion package needed) |
+| zsh | `eval "$(ipmg completion zsh)"` in `~/.zshrc`, after `compinit`; or save it as `_ipmg` in a directory on your `$fpath` |
+| fish | `ipmg completion fish > ~/.config/fish/completions/ipmg.fish` |
+| PowerShell | `ipmg completion powershell \| Out-String \| Invoke-Expression` in your `$PROFILE` |
+
 ### The one thing IPMG needs from your system
 
 IPMG probes hosts with your operating system's `ping` command, and minimal
@@ -234,13 +290,17 @@ IPMG runs the same `ping` you would run by hand.
 
 ### Verified environments
 
-Each of these was installed from scratch and run against a live target:
+The installer is tested in each of these whenever `install.sh` changes, and
+weekly: a fresh install as root with `--with-deps`, then a scan
+([workflow](https://github.com/sameeralam3127/ipmg/actions/workflows/install-sh.yml)).
+macOS and Ubuntu are also tested as a normal user, as are a pinned
+`--version` and an upgrade over an existing install.
 
 | Environment | Notes |
 | --- | --- |
 | Ubuntu 22.04 / 24.04 | 24.04 blocks `pip install`; the installer is unaffected |
 | Debian 12 | same PEP 668 situation as Ubuntu |
-| RHEL 8 / RHEL 9 (UBI), Rocky 9 | RHEL 8's system Python is 3.6 — uv supplies its own |
+| RHEL 8 / RHEL 9 (UBI), Rocky 9 | RHEL 8's system Python is 3.6; uv supplies its own |
 | Fedora 41 | |
 | openSUSE Leap 15.6 | image has no Python at all; installer supplies everything |
 | Alpine 3.20 | run the installer with `bash`, not `sh` |
@@ -262,10 +322,11 @@ one of them.
 uv tool install ipmg
 ```
 
-**Pin a specific version:**
+**Pin a specific version** (any release listed on
+[PyPI](https://pypi.org/project/ipmg/#history)):
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/sameeralam3127/ipmg/main/install.sh | bash -s -- --version 1.13.0
+curl -sSL https://raw.githubusercontent.com/sameeralam3127/ipmg/main/install.sh | bash -s -- --version X.Y.Z
 ```
 
 **From source (development):**
@@ -308,7 +369,7 @@ ipmg --input targets.txt              # a file of hosts
 Here is what a finished scan looks like:
 
 ```text
-  ipmg 1.13.0  ·  scan
+  ipmg X.Y.Z  ·  scan
   ICMP probes only — scan only networks you are authorized to scan.
 
   Source   targets.txt
@@ -331,6 +392,84 @@ IPMG wrote for you.
 Running plain `ipmg` with no arguments uses `ip_list.xlsx` as its input, and
 creates it with two sample targets (`8.8.8.8` and `1.1.1.1`) if it does not
 exist yet. A file you name with `--input` must already exist.
+
+---
+
+## Change detection
+
+Every scan is stored in a local SQLite history (`~/.ipmg/dashboard.db`), shared
+by the CLI and IPMG Web. IPMG can then tell you what moved between any two
+scans — which is usually the question you actually have.
+
+```bash
+ipmg --input targets.txt --compare    # compare with the previous scan
+ipmg diff                             # compare the two latest scans
+ipmg diff 14                          # compare scan 14 with the one before it
+ipmg diff 12 14                       # compare two specific scans
+ipmg diff --diff-formats md json      # export the change summary
+ipmg diff --fail-on-change            # exit 2 when anything changed (CI)
+ipmg history --limit 10               # list stored scans
+```
+
+The same comparison is the **Changes** view in [IPMG Web](#ipmg-web), with
+the summary exportable as Markdown, JSON, or CSV:
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/sameeralam3127/ipmg/main/docs/assets/ipmg-changes.png" alt="IPMG Web Changes view comparing scan 23 with scan 24: 4 changes, 1 critical. A host back online, a latency change of +6.2 ms, a host offline, and a status change from Timeout to Inactive" width="820">
+</p>
+
+To hear about changes without watching the terminal, send them to Slack,
+Microsoft Teams, any JSON webhook, or email. Any `--notify-*` flag turns on
+`--compare`, and with `--interval` every pass that changes something alerts:
+
+```bash
+ipmg --input targets.txt --interval 15 --notify-slack        # URL from $IPMG_NOTIFY_SLACK
+ipmg --input targets.txt --notify-email ops@example.com --smtp-host smtp.example.com
+ipmg diff --notify-webhook https://ops.example.com/ipmg --notify-severity critical
+```
+
+Only changes at or above `--notify-severity` (default `warning`) trigger a
+notification. A notification that fails is reported but never fails the scan.
+Secrets such as webhook URLs and `IPMG_SMTP_PASSWORD` can come from environment
+variables; see [Notifications](docs/COMMANDS.md#notifications) for all of them.
+
+What counts as a change:
+
+| Change | Severity | Meaning |
+| --- | --- | --- |
+| Host offline | critical | Reachable in the baseline, not reachable now |
+| New host | warning | An IP that the baseline never saw |
+| Host removed | warning | An IP the current scan no longer covers |
+| IP address changed | warning | A known hostname moved to a different IP |
+| Status changed | warning | Status moved between failure modes (e.g. `Timeout` → `Unreachable`) |
+| Host back online | info | Recovered since the baseline |
+| Hostname changed | info | Same IP, different PTR record |
+| Latency changed | info | Latency moved past both thresholds |
+
+A latency change is only reported when it clears **both** `--latency-threshold`
+(default 5 ms) and `--latency-pct` (default 25%), which keeps normal jitter out
+of the report.
+
+By default a scan is compared against the previous scan **of the same target
+source**, so file-based and `--discover` runs do not get mixed up. Pass
+`--compare-any-source` if you want the previous scan whatever its source.
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--compare` | off | Print a change report after the scan |
+| `--compare-any-source` | off | Allow a baseline from a different target source |
+| `--no-history` | off | Do not store the scan |
+| `--db` | `~/.ipmg/dashboard.db` | History database location |
+| `--diff-formats` | none | Export the change summary as `md`, `json`, `csv` |
+| `--diff-output` | `changes` | Base filename for exported change summaries |
+| `--latency-threshold` | `5` | Minimum latency delta in ms |
+| `--latency-pct` | `25` | Minimum relative latency change |
+| `--fail-on-change` | off | `ipmg diff` exits 2 when changes are found |
+| `--notify-webhook` | off | POST the change report as JSON to a URL |
+| `--notify-slack` | off | Post changes to a Slack incoming webhook |
+| `--notify-teams` | off | Post changes to a Microsoft Teams Workflows webhook |
+| `--notify-email` | off | Email the Markdown change report (with `--smtp-host`, `--smtp-port`, `--smtp-security`, `--smtp-user`, `--smtp-from`) |
+| `--notify-severity` | `warning` | Only notify for changes at least this severe |
 
 ---
 
@@ -361,6 +500,7 @@ Or pick a ready-made command:
 | See what changed since last time | `ipmg --input targets.txt --compare` |
 | Check which services are listening | `ipmg --input targets.txt --scan-ports` |
 | Keep scanning every 5 minutes | `ipmg --input targets.txt --interval 5` |
+| Keep it running after logout and reboots | the systemd and launchd templates in [docs/SERVICES.md](https://github.com/sameeralam3127/ipmg/blob/main/docs/SERVICES.md) |
 | Look back at earlier scans | `ipmg history` |
 | Compare two specific scans | `ipmg diff 12 14` |
 | Use IPMG Web in your browser instead | `ipmg web` |
@@ -379,6 +519,10 @@ a running count of the hosts that answered:
 ipmg --input 192.168.1.0/24 --stream
 ```
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/sameeralam3127/ipmg/main/docs/assets/ipmg-demo.gif" alt="ipmg scanning 13 hosts in parallel: live results with reverse DNS names and latency, then a summary of 10 active and 3 timed out" width="820">
+</p>
+
 ```text
   Live
   Status        Host                Latency
@@ -396,77 +540,6 @@ Streaming costs nothing in scan time: rows are printed by the thread that
 collects results, so the workers never wait on the terminal. When output is
 piped or redirected the progress bar is dropped and the rows are written as
 plain lines, which makes `ipmg --stream-all >> scan.log` a usable live log.
-
----
-
-## Change detection
-
-Every scan is stored in a local SQLite history (`~/.ipmg/dashboard.db`), shared
-by the CLI and IPMG Web. IPMG can then tell you what moved between any two
-scans — which is usually the question you actually have.
-
-```bash
-ipmg --input targets.txt --compare    # compare with the previous scan
-ipmg diff                             # compare the two latest scans
-ipmg diff 14                          # compare scan 14 with the one before it
-ipmg diff 12 14                       # compare two specific scans
-ipmg diff --diff-formats md json      # export the change summary
-ipmg diff --fail-on-change            # exit 2 when anything changed (CI)
-ipmg history --limit 10               # list stored scans
-```
-
-To hear about changes without watching the terminal, send them to Slack,
-Microsoft Teams, any JSON webhook, or email. Any `--notify-*` flag turns on
-`--compare`, and with `--interval` every pass that changes something alerts:
-
-```bash
-ipmg --input targets.txt --interval 15 --notify-slack        # URL from $IPMG_NOTIFY_SLACK
-ipmg --input targets.txt --notify-email ops@example.com --smtp-host smtp.example.com
-ipmg diff --notify-webhook https://ops.example.com/ipmg --notify-severity critical
-```
-
-Only changes at or above `--notify-severity` (default `warning`) trigger a
-notification. A notification that fails is reported but never fails the scan.
-Secrets such as webhook URLs and `IPMG_SMTP_PASSWORD` can come from environment
-variables; see [Notifications](docs/COMMANDS.md#notifications) for all of them.
-
-What counts as a change:
-
-| Change | Severity | Meaning |
-| --- | --- | --- |
-| Host offline | critical | Reachable in the baseline, not reachable now |
-| New host | warning | An IP that the baseline never saw |
-| Host removed | warning | An IP the current scan no longer covers |
-| IP address changed | warning | A known hostname moved to a different IP |
-| Service changed | warning | Status moved between failure modes (e.g. `Timeout` → `Unreachable`) |
-| Host back online | info | Recovered since the baseline |
-| Hostname changed | info | Same IP, different PTR record |
-| Latency changed | info | Latency moved past both thresholds |
-
-A latency change is only reported when it clears **both** `--latency-threshold`
-(default 5 ms) and `--latency-pct` (default 25%), which keeps normal jitter out
-of the report.
-
-By default a scan is compared against the previous scan **of the same target
-source**, so file-based and `--discover` runs do not get mixed up. Pass
-`--compare-any-source` if you want the previous scan whatever its source.
-
-| Flag | Default | Description |
-| --- | --- | --- |
-| `--compare` | off | Print a change report after the scan |
-| `--compare-any-source` | off | Allow a baseline from a different target source |
-| `--no-history` | off | Do not store the scan |
-| `--db` | `~/.ipmg/dashboard.db` | History database location |
-| `--diff-formats` | none | Export the change summary as `md`, `json`, `csv` |
-| `--diff-output` | `changes` | Base filename for exported change summaries |
-| `--latency-threshold` | `5` | Minimum latency delta in ms |
-| `--latency-pct` | `25` | Minimum relative latency change |
-| `--fail-on-change` | off | `ipmg diff` exits 2 when changes are found |
-| `--notify-webhook` | off | POST the change report as JSON to a URL |
-| `--notify-slack` | off | Post changes to a Slack incoming webhook |
-| `--notify-teams` | off | Post changes to a Microsoft Teams Workflows webhook |
-| `--notify-email` | off | Email the Markdown change report (with `--smtp-host`, `--smtp-port`, `--smtp-security`, `--smtp-user`, `--smtp-from`) |
-| `--notify-severity` | `warning` | Only notify for changes at least this severe |
 
 ---
 
@@ -728,6 +801,66 @@ them — so piping IPMG into a file or a log gives you clean text.
 
 ---
 
+## In GitHub Actions
+
+This repository is also a GitHub Action: a pipeline step that checks your
+infrastructure is reachable and fails the job when it is not. It installs IPMG
+with uv, scans, writes a summary of the hosts that are down to the job page,
+and uploads the reports as an artifact, even when the step fails.
+
+Before a deploy:
+
+```yaml
+- name: Check the database and cache hosts are up
+  uses: sameeralam3127/ipmg@vX.Y.Z      # any IPMG release tag
+  with:
+    targets: 10.0.4.10 10.0.4.11 10.0.5.0/28
+    fail-on-down: true
+    args: --probe icmp,tcp --ports 5432,6379
+```
+
+On a schedule, with the reports kept and a Slack alert for changes (the
+history lives in the cached database):
+
+```yaml
+on:
+  schedule: [{ cron: "*/30 * * * *" }]
+jobs:
+  reachability:
+    runs-on: [self-hosted, office-lan]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/cache@v6
+        with: { path: ipmg-history, key: "ipmg-${{ github.run_id }}", restore-keys: ipmg- }
+      - uses: sameeralam3127/ipmg@vX.Y.Z
+        with:
+          targets: targets.txt
+          args: --db ipmg-history/history.db --compare --notify-slack
+          formats: csv md
+        env:
+          IPMG_NOTIFY_SLACK: ${{ secrets.SLACK_WEBHOOK }}
+```
+
+| Input | Default | Meaning |
+| --- | --- | --- |
+| `targets` | (required) | IPs, CIDR blocks, ranges, or target files, separated by spaces or newlines |
+| `args` | | Extra IPMG flags, split on whitespace |
+| `version` | `latest` | The IPMG release to install, such as `3.2.0` |
+| `fail-on-down` | `false` | Fail the step when any target is not Active |
+| `formats` | `csv json md` | Report formats to write |
+| `upload-artifact` | `true` | Upload the reports as an artifact |
+| `artifact-name` | `ipmg-reports` | The artifact's name |
+
+Outputs: `active` and `total` host counts, `report-path`, and `exit-code`.
+
+GitHub-hosted runners generally cannot ping hosts outside GitHub's network,
+and cannot reach your private networks at all. For a LAN or a VPC, use a
+[self-hosted runner](https://docs.github.com/en/actions/hosting-your-own-runners)
+inside it; for public hosts that drop ICMP, add `--probe tcp` or `--probe
+icmp,tcp` to `args`, or check the service itself with `--http-check`.
+
+---
+
 ## Default options in a file
 
 If every run repeats the same flags, put them in **`ipmg.toml`** next to your
@@ -903,7 +1036,9 @@ Contributions are welcome.
 [CONTRIBUTING.md](https://github.com/sameeralam3127/ipmg/blob/main/.github/CONTRIBUTING.md)
 covers setting up a development environment, running the tests, the commit
 message format that drives automated releases, and how the project website and
-IPMG Web demo are built. Everyone taking part is expected to follow the
+IPMG Web demo are built.
+[docs/ARCHITECTURE.md](https://github.com/sameeralam3127/ipmg/blob/main/docs/ARCHITECTURE.md)
+explains how the code fits together. Everyone taking part is expected to follow the
 [Code of Conduct](https://github.com/sameeralam3127/ipmg/blob/main/.github/CODE_OF_CONDUCT.md).
 
 ---

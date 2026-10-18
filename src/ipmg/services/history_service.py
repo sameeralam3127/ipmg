@@ -8,6 +8,7 @@ share one implementation of "what changed since the last scan?".
 from __future__ import annotations
 
 from dataclasses import asdict
+from datetime import timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
@@ -15,6 +16,7 @@ from ipmg.core.diff import DiffOptions, ScanDiff, ScanRef, compare_snapshots
 from ipmg.core.engine import HostResult, ScanConfig
 from ipmg.exceptions import HistoryError
 from ipmg.infrastructure.database import DEFAULT_DB_PATH, Database
+from ipmg.infrastructure.retention import PrunePlan, plan_prune
 
 
 class HistoryService:
@@ -42,19 +44,36 @@ class HistoryService:
         results: Sequence[HostResult],
         config: ScanConfig,
         duration_s: float,
+        http_checks: Sequence[Any] = (),
     ) -> int:
-        """Store a finished scan and return its id."""
+        """Store a finished scan, and its HTTP checks, and return its id."""
         return self._db.record_scan(
             source=source,
             results=results,
             config=asdict(config),
             duration_s=duration_s,
+            http_checks=http_checks,
         )
 
     # ------------------------------------------------------------ listing
 
     def list_scans(self, limit: int = 20, source: Optional[str] = None) -> List[Dict[str, Any]]:
         return self._db.list_scans(limit=max(1, limit), source=source)
+
+    # ----------------------------------------------------------- retention
+
+    def plan_prune(
+        self,
+        keep: Optional[int] = None,
+        older_than: Optional[timedelta] = None,
+        source: Optional[str] = None,
+    ) -> PrunePlan:
+        """The scans a retention policy would delete, without deleting anything."""
+        return plan_prune(self._db.scan_rows(source), keep=keep, older_than=older_than)
+
+    def prune(self, plan: PrunePlan) -> int:
+        """Delete the scans in ``plan``; returns how many were deleted."""
+        return self._db.delete_scans(plan.scan_ids)
 
     # --------------------------------------------------------- comparison
 
@@ -74,6 +93,8 @@ class HistoryService:
             options=options,
             baseline_ref=baseline_ref,
             current_ref=target_ref,
+            baseline_http=self._db.http_snapshot(baseline_id),
+            current_http=self._db.http_snapshot(target_id),
         )
 
     def compare_with_previous(

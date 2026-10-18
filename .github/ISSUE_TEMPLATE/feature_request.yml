@@ -1,0 +1,41 @@
+name: Feature request
+description: Something IPMG should do that it does not.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        IPMG's focus is network discovery, scan history, change detection, and
+        reporting. The [v4 plan](https://github.com/sameeralam3127/ipmg/blob/v4/docs/v4/PLAN.md)
+        lists what is in scope and what is not.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What you are trying to do, and what gets in the way today.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed features
+      description: How IPMG could solve it. Flags, output, and examples are welcome.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: How we will know it is done.
+      placeholder: |
+        - Default scans are unchanged.
+        - Documented in docs/COMMANDS.md.
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other tools or workarounds you have tried.

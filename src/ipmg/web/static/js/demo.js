@@ -3,7 +3,7 @@
 
 const seeds = [
   { id: 24, started_at: "2026-08-07 09:40", source: "branch-office.csv", total: 18, completed: 18, status: "complete", avg_latency: 13.8, duration_s: 4.2, status_counts: { Active: 16, Timeout: 1, Inactive: 1 } },
-  { id: 23, started_at: "2026-08-06 09:40", source: "branch-office.csv", total: 18, completed: 18, status: "complete", avg_latency: 11.7, duration_s: 4.0, status_counts: { Active: 17, Timeout: 1 } },
+  { id: 23, started_at: "2026-08-06 09:40", source: "branch-office.csv", total: 18, completed: 18, status: "complete", avg_latency: 11.7, duration_s: 4.0, status_counts: { Active: 16, Timeout: 2 } },
   { id: 22, started_at: "2026-08-05 18:15", source: "datacenter-core.txt", total: 12, completed: 12, status: "complete", avg_latency: 8.9, duration_s: 3.1, status_counts: { Active: 12 } },
   { id: 21, started_at: "2026-08-04 09:40", source: "branch-office.csv", total: 18, completed: 18, status: "complete", avg_latency: 12.4, duration_s: 4.1, status_counts: { Active: 16, Timeout: 2 } },
 ];
@@ -20,12 +20,20 @@ const hosts = [
   ["10.24.8.81", "access-controller", "Timeout", null], ["10.24.8.91", "backup-appliance", "Inactive", null],
 ];
 
+// How scan #23, the day before the latest, differed, so comparing #23 with #24
+// shows a host going offline, one coming back, a latency jump, and a status move.
+const dayBefore = { "10.24.8.33": ["Timeout", null], "10.24.8.42": ["Active", 4.1], "10.24.8.81": ["Active", 6.0] };
+
 let scans = structuredClone(seeds);
 let records = new Map();
 
 function scanRows(scan) {
   if (records.has(scan.id)) return records.get(scan.id);
   const rows = hosts.slice(0, scan.total).map(([ip, hostname, status, latency], index) => {
+    if (scan.id === 23 && dayBefore[ip]) {
+      const [priorStatus, priorLatency] = dayBefore[ip];
+      return { ip, hostname, status: priorStatus, latency: priorLatency, checked_at: scan.started_at };
+    }
     const isPrior = scan.id !== 24 && index === 17 ? "Timeout" : status;
     const adjusted = latency == null ? null : Number((latency * (1 + (24 - scan.id) * 0.05)).toFixed(1));
     return { ip, hostname, status: isPrior, latency: isPrior === "Active" ? adjusted : null, checked_at: scan.started_at };
@@ -40,7 +48,21 @@ function csv(rows) {
 
 function statusCounts(rows) { return rows.reduce((out, row) => ({ ...out, [row.status]: (out[row.status] || 0) + 1 }), {}); }
 
+// Schedules the demo page can create and pause; they never run.
+let schedules = [
+  { id: 1, name: "branch-office", source: "schedule:branch-office", targets: "10.24.8.0/27", interval_minutes: 15, cron: null, paused: false, created_at: "2026-08-01 09:00", next_run_at: "2026-08-07 09:55", last_run_at: "2026-08-07 09:40", last_scan_id: 24, last_status: "complete", last_skipped_at: null, last_skip_reason: null, config: {} },
+];
+
 export const demo = {
+  schedules: () => schedules,
+  createSchedule: (payload) => {
+    const schedule = { id: Math.max(0, ...schedules.map((s) => s.id)) + 1, source: `schedule:${payload.name}`, paused: false, created_at: "2026-08-07 10:05", next_run_at: payload.cron ? "2026-08-07 11:00" : "2026-08-07 10:05", last_run_at: null, last_scan_id: null, last_status: null, last_skipped_at: null, last_skip_reason: null, config: {}, cron: null, interval_minutes: null, ...payload };
+    schedules = [...schedules, schedule];
+    return schedule;
+  },
+  pauseSchedule: (id, paused) => { schedules = schedules.map((s) => (s.id === id ? { ...s, paused, next_run_at: paused ? null : s.next_run_at || "2026-08-07 10:05" } : s)); return schedules.find((s) => s.id === id); },
+  runSchedule: (id) => ({ id: demo.startScan({ targets: schedules.find((s) => s.id === id)?.targets || "", source: "demo schedule" }).id, total: 0 }),
+  deleteSchedule: (id) => { schedules = schedules.filter((s) => s.id !== id); return null; },
   stats: () => ({ scan_count: scans.length, host_count: hosts.length, latest_scan: scans[0], running_scans: [], trend: [...scans].reverse().map((s) => ({ ...s, active: s.status_counts.Active || 0 })) }),
   assets: () => hosts.map(([ip, hostname, status, latency], index) => ({ ip, hostname, status, avg_latency: latency, last_seen: status === "Active" ? "2026-08-07 09:40" : null, last_checked: "2026-08-07 09:40", scan_count: index < 16 ? 4 : 3 })),
   scans: (limit = 50) => scans.slice(0, limit),
@@ -56,12 +78,13 @@ export const demo = {
   },
   deleteScan: (id) => { scans = scans.filter((s) => s.id !== Number(id)); records.delete(Number(id)); return null; },
   cancelScan: (id) => ({ id, cancelling: true }),
+  wake: (mac) => ({ mac, broadcast: "255.255.255.255", port: 9 }),
   upload: async (file) => ({ filename: file.name, count: (await file.text()).split(/\r?\n/).filter(Boolean).length, targets: (await file.text()).split(/\r?\n/).filter(Boolean) }),
   reportUrl: (id) => `data:text/csv;charset=utf-8,${encodeURIComponent(csv(demo.results(id)))}`,
   diff: (id, { baseline } = {}) => {
     const current = demo.results(id); const previous = demo.results(baseline || scans.find((s) => s.id !== Number(id)).id);
     const before = new Map(previous.map((row) => [row.ip, row]));
-    const changes = current.flatMap((row) => { const old = before.get(row.ip); if (!old) return [{ severity: "warning", label: "New host", ip: row.ip, hostname: row.hostname, previous: null, current: row.status }]; if (old.status !== row.status) return [{ severity: row.status === "Inactive" ? "critical" : "warning", label: "Service changed", ip: row.ip, hostname: row.hostname, previous: old.status, current: row.status }]; if (row.latency && old.latency && Math.abs(row.latency - old.latency) >= 5) return [{ severity: "info", label: "Latency changed", ip: row.ip, hostname: row.hostname, previous: `${old.latency} ms`, current: `${row.latency} ms`, delta: row.latency - old.latency }]; return []; });
+    const changes = current.flatMap((row) => { const old = before.get(row.ip); if (!old) return [{ severity: "warning", label: "New host", ip: row.ip, hostname: row.hostname, previous: null, current: row.status }]; if (old.status !== row.status) { const [severity, label] = old.status === "Active" ? ["critical", "Host offline"] : row.status === "Active" ? ["info", "Host back online"] : ["warning", "Status changed"]; return [{ severity, label, ip: row.ip, hostname: row.hostname, previous: old.status, current: row.status }]; } if (row.latency && old.latency && Math.abs(row.latency - old.latency) >= 5) return [{ severity: "info", label: "Latency changed", ip: row.ip, hostname: row.hostname, previous: `${old.latency} ms`, current: `${row.latency} ms`, delta: row.latency - old.latency }]; return []; });
     return { changes, summary: { total_changes: changes.length, severity_counts: statusCounts(changes.map((c) => ({ status: c.severity }))), unchanged_hosts: current.length - changes.length, baseline_hosts: previous.length, current_hosts: current.length } };
   },
   diffReportUrl: (id, _fmt, options) => `data:text/csv;charset=utf-8,${encodeURIComponent(csv(demo.results(id, options)))}`,

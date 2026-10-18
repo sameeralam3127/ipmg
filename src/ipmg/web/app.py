@@ -8,9 +8,12 @@ The API contract (models, errors, versioning) is described in docs/API.md.
 from __future__ import annotations
 
 import asyncio
+import re
 import secrets
 import tempfile
 from contextlib import asynccontextmanager
+from dataclasses import asdict
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Optional, Union
 from urllib.parse import urlsplit
@@ -38,6 +41,7 @@ from ipmg import __version__
 from ipmg.core.diff import DiffOptions
 from ipmg.core.engine import HostResult, ScanConfig
 from ipmg.core.portscan import decode_ports
+from ipmg.core.wake import WakeError, send_magic_packet
 from ipmg.exceptions import FileIOError, HistoryError, ReportError
 from ipmg.infrastructure.database import DEFAULT_DB_PATH, Database
 from ipmg.infrastructure.file_io import (
@@ -47,20 +51,34 @@ from ipmg.infrastructure.file_io import (
     render_report,
 )
 from ipmg.reporting.diff_report import DIFF_FORMATS, render_diff
-from ipmg.reporting.frames import ReportTable, results_table
+from ipmg.reporting.frames import ReportTable, report_columns, results_table
 from ipmg.services.history_service import HistoryService
-from ipmg.web.manager import OVERFLOW, ScanManager
+from ipmg.web.manager import DEFAULT_MAX_SCANS, OVERFLOW, ScanLimitError, ScanManager
+from ipmg.web.scheduler import (
+    TICK_S,
+    ScheduleBusyError,
+    Scheduler,
+    first_run,
+    format_time,
+    schedule_source,
+)
 from ipmg.web.schemas import (
     Asset,
     ErrorResponse,
     HostResultRow,
+    HttpCheckRow,
     ScanCancelled,
     ScanCreated,
     ScanDiffModel,
     ScanRequest,
     ScanSummary,
+    Schedule,
+    SchedulePatch,
+    ScheduleRequest,
     Stats,
     UploadResult,
+    WakeRequest,
+    WakeSent,
     websocket_event_schemas,
 )
 
@@ -81,6 +99,45 @@ DIFF_MEDIA_TYPES = {fmt: REPORT_MEDIA_TYPES[fmt] for fmt in DIFF_FORMATS}
 
 #: Hostnames that count as "this machine" when checking WebSocket origins.
 _LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+
+#: The dashboard keeps its token in localStorage, so a page that framed it
+#: could click Delete or Start scan as the user (clickjacking). The frontend
+#: is bundled, with no inline scripts or CDN assets, so 'self' covers it; the
+#: CSP is also a second layer behind textContent rendering of values that
+#: come from the network, such as PTR hostnames.
+_SECURITY_HEADERS = {
+    "X-Frame-Options": "DENY",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+}
+_CSP = (
+    "default-src 'self'; connect-src 'self'{websocket}; img-src 'self' data:; "
+    "frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+)
+#: /docs (Swagger UI) and /redoc load their scripts, styles, and fonts from a
+#: CDN and start with an inline script, so they get a policy of their own.
+_DOCS_CSP = (
+    "default-src 'self'; "
+    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+    "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; "
+    "font-src 'self' https://fonts.gstatic.com; "
+    "img-src 'self' data: https://fastapi.tiangolo.com https://cdn.jsdelivr.net; "
+    "worker-src 'self' blob:; connect-src 'self'; "
+    "frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+)
+_DOCS_PATHS = frozenset({"/docs", "/docs/oauth2-redirect", "/redoc"})
+#: What a Host header may look like before it is repeated in a policy.
+_HOST_HEADER = re.compile(r"[A-Za-z0-9.\-]+(:\d{1,5})?|\[[0-9A-Fa-f:.]+\](:\d{1,5})?")
+
+
+def _content_security_policy(path: str, host: str) -> str:
+    if path in _DOCS_PATHS:
+        return _DOCS_CSP
+    # CSP3 lets 'self' cover ws:// and wss:// to the same host, but older
+    # browsers need the WebSocket origin spelled out.
+    websocket = f" ws://{host} wss://{host}" if _HOST_HEADER.fullmatch(host) else ""
+    return _CSP.format(websocket=websocket)
+
 
 AUTH_ERROR = (
     "Missing or invalid access token. Open IPMG Web with the link that "
@@ -168,14 +225,24 @@ _COMMON_ERRORS: Dict[Union[int, str], Dict[str, Any]] = {
 }
 
 
-def _errors(*codes: int) -> Dict[Union[int, str], Dict[str, Any]]:
-    descriptions = {
-        400: "Invalid request",
-        404: "Scan not found",
-        409: "Scan is not running",
-        413: "Upload too large",
-    }
+_ERROR_DESCRIPTIONS = {
+    400: "Invalid request",
+    404: "Scan not found",
+    409: "Scan is not running",
+    413: "Upload too large",
+    429: "Too many scans running (--max-scans)",
+}
+
+
+def _errors(*codes: int, **described: str) -> Dict[Union[int, str], Dict[str, Any]]:
+    """OpenAPI error responses; ``e409="..."`` overrides one code's description."""
+    descriptions = {**_ERROR_DESCRIPTIONS}
+    descriptions.update({int(key[1:]): text for key, text in described.items()})
     return {code: {"model": ErrorResponse, "description": descriptions[code]} for code in codes}
+
+
+#: Deleting a scan while its worker is still writing would race those writes.
+DELETE_RUNNING_ERROR = "Scan is still running. Cancel it first, then delete it."
 
 
 def _file_response(media_types: Mapping[str, str], description: str) -> Dict[int, Dict[str, Any]]:
@@ -203,10 +270,15 @@ def _results_table(scan: Dict[str, Any], rows: List[Dict[str, Any]]) -> ReportTa
             latency=row["latency"],
             hostname=row["hostname"] or "",
             open_ports=decode_ports(row.get("open_ports") or ""),
+            method=row.get("method") or "",
+            mac=row.get("mac") or "",
+            vendor=row.get("vendor") or "",
         )
         for row in rows
     ]
-    return results_table(results, scan["started_at"], scan["duration_s"])
+    # The same columns the scan's own report had, from the settings it ran with.
+    columns = report_columns(scan.get("config") or {})
+    return results_table(results, scan["started_at"], scan["duration_s"], columns)
 
 
 def _render_report(table: ReportTable, fmt: str) -> bytes:
@@ -255,19 +327,16 @@ def _register_scan_routes(api: APIRouter, database: Database, manager: ScanManag
         "/scans",
         status_code=201,
         response_model=ScanCreated,
-        responses=_errors(400),
+        responses=_errors(400, 429),
         summary="Start a scan",
     )
     def create_scan(request: ScanRequest) -> Dict[str, Any]:
         ips = _parse_scan_targets(request)
-        config = ScanConfig(
-            timeout=request.timeout,
-            count=request.count,
-            threads=request.threads,
-            resolve=request.resolve,
-            dns_cache_ttl=request.dns_cache_ttl,
-        ).clamped()
-        scan_id = manager.start_scan(ips, config, source=request.source)
+        config = ScanConfig(**request.scan_settings()).clamped()
+        try:
+            scan_id = manager.start_scan(ips, config, source=request.source)
+        except ScanLimitError as exc:
+            raise HTTPException(status_code=429, detail=str(exc)) from exc
         return {"id": scan_id, "total": len(ips)}
 
     @api.get(
@@ -294,6 +363,19 @@ def _register_scan_routes(api: APIRouter, database: Database, manager: ScanManag
             raise HTTPException(status_code=404, detail="Scan not found")
         return database.get_results(scan_id, status=status, search=search)
 
+    @api.get(
+        "/scans/{scan_id}/http",
+        response_model=List[HttpCheckRow],
+        responses=_errors(404),
+        summary="HTTP checks a scan made (ipmg --http-check)",
+    )
+    def get_http_checks(scan_id: int) -> List[Dict[str, Any]]:
+        if database.get_scan(scan_id) is None:
+            raise HTTPException(status_code=404, detail="Scan not found")
+        return database.get_http_checks(scan_id)
+
+
+def _register_scan_control_routes(api: APIRouter, database: Database, manager: ScanManager) -> None:
     @api.post(
         "/scans/{scan_id}/cancel",
         response_model=ScanCancelled,
@@ -309,10 +391,12 @@ def _register_scan_routes(api: APIRouter, database: Database, manager: ScanManag
         "/scans/{scan_id}",
         status_code=204,
         response_class=Response,
-        responses=_errors(404),
+        responses=_errors(404, 409, e409="Scan is still running"),
         summary="Delete a scan and its results",
     )
     def delete_scan(scan_id: int) -> Response:
+        if manager.is_running(scan_id):
+            raise HTTPException(status_code=409, detail=DELETE_RUNNING_ERROR)
         if not database.delete_scan(scan_id):
             raise HTTPException(status_code=404, detail="Scan not found")
         return Response(status_code=204)
@@ -444,6 +528,145 @@ def _register_diff_routes(api: APIRouter, history: HistoryService) -> None:
         )
 
 
+def _schedule_response(schedule: Dict[str, Any]) -> Dict[str, Any]:
+    return {**schedule, "source": schedule_source(schedule["name"])}
+
+
+def _require_schedule(database: Database, schedule_id: int) -> Dict[str, Any]:
+    schedule = database.get_schedule(schedule_id)
+    if schedule is None:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+    return schedule
+
+
+def _create_schedule(database: Database, request: ScheduleRequest) -> int:
+    """Check a new schedule and store it, or raise the HTTP error that says why not."""
+    name = request.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Give the schedule a name.")
+    if (request.interval_minutes is None) == (not request.cron):
+        raise HTTPException(
+            status_code=400, detail="Give either interval_minutes or cron, and not both."
+        )
+    if any(other["name"].lower() == name.lower() for other in database.list_schedules()):
+        raise HTTPException(status_code=409, detail=f"A schedule named {name!r} already exists.")
+    try:
+        parse_manual_targets(request.targets)
+        first = first_run(request.interval_minutes, request.cron, datetime.now())
+    except FileIOError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid cron expression: {exc}") from exc
+
+    return database.create_schedule(
+        name=name,
+        targets=request.targets,
+        config=asdict(ScanConfig(**request.scan_settings()).clamped()),
+        interval_minutes=request.interval_minutes,
+        cron=" ".join(request.cron.split()) if request.cron else None,
+        next_run_at=None if request.paused else format_time(first),
+        paused=request.paused,
+    )
+
+
+def _run_schedule_now(scheduler: Scheduler, schedule_id: int) -> Dict[str, Any]:
+    try:
+        return scheduler.run_now(schedule_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Schedule not found") from None
+    except ScheduleBusyError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ScanLimitError as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+    except FileIOError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def _register_schedule_routes(api: APIRouter, database: Database) -> None:
+    @api.get("/schedules", response_model=List[Schedule], summary="Every scheduled scan")
+    def list_schedules() -> List[Dict[str, Any]]:
+        return [_schedule_response(schedule) for schedule in database.list_schedules()]
+
+    @api.post(
+        "/schedules",
+        status_code=201,
+        response_model=Schedule,
+        responses=_errors(400, 409, e409="A schedule with that name exists"),
+        summary="Create a scheduled scan",
+    )
+    def create_schedule(request: ScheduleRequest) -> Dict[str, Any]:
+        schedule_id = _create_schedule(database, request)
+        return _schedule_response(_require_schedule(database, schedule_id))
+
+    @api.get(
+        "/schedules/{schedule_id}",
+        response_model=Schedule,
+        responses=_errors(404, e404="Schedule not found"),
+        summary="One scheduled scan",
+    )
+    def get_schedule(schedule_id: int) -> Dict[str, Any]:
+        return _schedule_response(_require_schedule(database, schedule_id))
+
+
+def _register_schedule_control_routes(
+    api: APIRouter, database: Database, scheduler: Scheduler
+) -> None:
+    @api.patch(
+        "/schedules/{schedule_id}",
+        response_model=Schedule,
+        responses=_errors(404, e404="Schedule not found"),
+        summary="Pause or resume a scheduled scan",
+    )
+    def update_schedule(schedule_id: int, patch: SchedulePatch) -> Dict[str, Any]:
+        schedule = _require_schedule(database, schedule_id)
+        if patch.paused is not None and patch.paused != schedule["paused"]:
+            upcoming = None
+            if not patch.paused:
+                when = first_run(schedule["interval_minutes"], schedule["cron"], datetime.now())
+                upcoming = format_time(when)
+            database.set_schedule_paused(schedule_id, patch.paused, upcoming)
+        return _schedule_response(_require_schedule(database, schedule_id))
+
+    @api.delete(
+        "/schedules/{schedule_id}",
+        status_code=204,
+        response_class=Response,
+        responses=_errors(404, e404="Schedule not found"),
+        summary="Delete a scheduled scan (its scans stay in the history)",
+    )
+    def delete_schedule(schedule_id: int) -> Response:
+        if not database.delete_schedule(schedule_id):
+            raise HTTPException(status_code=404, detail="Schedule not found")
+        return Response(status_code=204)
+
+    @api.post(
+        "/schedules/{schedule_id}/run",
+        status_code=201,
+        response_model=ScanCreated,
+        responses=_errors(
+            400, 404, 409, 429, e404="Schedule not found", e409="Its previous run is still going"
+        ),
+        summary="Run a scheduled scan now",
+    )
+    def run_schedule(schedule_id: int) -> Dict[str, Any]:
+        return _run_schedule_now(scheduler, schedule_id)
+
+
+def _register_wake_route(api: APIRouter) -> None:
+    @api.post(
+        "/wake",
+        response_model=WakeSent,
+        responses=_errors(400),
+        summary="Send a Wake-on-LAN magic packet",
+    )
+    def wake(request: WakeRequest) -> Dict[str, Any]:
+        try:
+            mac = send_magic_packet(request.mac, broadcast=request.broadcast, port=request.port)
+        except WakeError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"mac": mac, "broadcast": request.broadcast, "port": request.port}
+
+
 def _register_upload_route(api: APIRouter) -> None:
     @api.post(
         "/upload",
@@ -518,6 +741,21 @@ def _register_websocket(app: FastAPI, manager: ScanManager, token: str) -> None:
             manager.unsubscribe(queue)
 
 
+def _install_security_headers(app: FastAPI) -> None:
+    """Send the security headers on every HTTP response: API, pages, and assets."""
+
+    @app.middleware("http")
+    async def security_headers(request: Request, call_next):
+        response = await call_next(request)
+        for name, value in _SECURITY_HEADERS.items():
+            response.headers.setdefault(name, value)
+        response.headers.setdefault(
+            "Content-Security-Policy",
+            _content_security_policy(request.url.path, request.headers.get("host", "")),
+        )
+        return response
+
+
 def _register_error_handlers(app: FastAPI) -> None:
     """Give every error the one :class:`ErrorResponse` shape."""
 
@@ -587,21 +825,31 @@ def create_app(
     db: Optional[Database] = None,
     token: Optional[str] = None,
     metrics_sources: Optional[int] = None,
+    max_scans: int = DEFAULT_MAX_SCANS,
+    schedule_tick_s: float = TICK_S,
 ) -> FastAPI:
     """Build the app. ``token`` guards every API route; a random one is made if omitted.
 
     ``metrics_sources`` turns on ``/metrics`` for that many of the most
     recently scanned sources; left as None, the endpoint does not exist.
+    ``max_scans`` caps how many scans run at once; one more is refused with 429.
     """
     database = db if db is not None else Database(DEFAULT_DB_PATH)
     token = token or secrets.token_urlsafe(32)
-    manager = ScanManager(database)
+    manager = ScanManager(database, max_scans=max_scans)
     history = HistoryService(database)
+    scheduler = Scheduler(database, manager, tick_s=schedule_tick_s)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
         manager.attach_loop(asyncio.get_running_loop())
+        manager.recover()
+        scheduler.start()
         yield
+        # Off the event loop: waiting for the threads blocks.
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, scheduler.stop)
+        await loop.run_in_executor(None, manager.shutdown)
 
     app = FastAPI(
         title="IPMG Web", version=__version__, description=API_DESCRIPTION, lifespan=lifespan
@@ -609,6 +857,7 @@ def create_app(
     app.state.db = database
     app.state.manager = manager
     app.state.history = history
+    app.state.scheduler = scheduler
     app.state.token = token
 
     api = APIRouter(
@@ -618,15 +867,20 @@ def create_app(
     )
     _register_overview_routes(api, database)
     _register_scan_routes(api, database, manager)
+    _register_scan_control_routes(api, database, manager)
+    _register_schedule_routes(api, database)
+    _register_schedule_control_routes(api, database, scheduler)
     _register_report_routes(api, database)
     _register_diff_routes(api, history)
     _register_upload_route(api)
+    _register_wake_route(api)
     app.include_router(api)
 
     _register_websocket(app, manager, token)
     if metrics_sources is not None:
         _register_metrics_route(app, database, token, metrics_sources)
     _register_error_handlers(app)
+    _install_security_headers(app)
     _install_openapi(app)
 
     if STATIC_DIR.is_dir():

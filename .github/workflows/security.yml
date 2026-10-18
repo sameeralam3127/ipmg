@@ -3,9 +3,14 @@ name: Security
 # No paths-ignore here: the secret scan must cover every file, docs included.
 on:
   push:
-    branches: [main]
+    branches: [main, v4]
   pull_request:
-    branches: [main]
+    branches: [main, v4]
+  # Weekly, so a newly disclosed CVE in a dependency shows up without
+  # waiting for the next push.
+  schedule:
+    - cron: "41 4 * * 1"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -35,8 +40,20 @@ jobs:
       - name: Static security analysis (bandit)
         run: bandit -r src
 
+      # What users actually install: IPMG with every extra, resolved by pip
+      # from pyproject.toml in a fresh environment, then audited at exactly
+      # the versions that resolved. pip freeze leaves out pip and setuptools,
+      # which come with the virtualenv, not with IPMG, and the editable IPMG.
+      - name: Install IPMG to audit
+        run: |
+          python -m venv "$RUNNER_TEMP/audit"
+          "$RUNNER_TEMP/audit/bin/pip" install --quiet -e ".[dev]"
+          "$RUNNER_TEMP/audit/bin/pip" freeze --exclude-editable > "$RUNNER_TEMP/installed.txt"
+
       - name: Dependency vulnerability audit (pip-audit)
-        run: pip-audit -r requirements.txt
+        run: |
+          pip-audit --requirement "$RUNNER_TEMP/installed.txt" --no-deps --disable-pip \
+            --progress-spinner off
 
       - name: Secret scan (detect-secrets)
         run: git ls-files -z | xargs -0 detect-secrets-hook --baseline .secrets.baseline

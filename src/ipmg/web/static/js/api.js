@@ -63,6 +63,22 @@ export const api = {
     const suffix = params.toString() ? `?${params}` : "";
     return useDemo ? Promise.resolve(demo.results(id, { status, search })) : request(`/scans/${id}/results${suffix}`);
   },
+  schedules: () => useDemo ? Promise.resolve(demo.schedules()) : request("/schedules"),
+  createSchedule: (payload) =>
+    useDemo ? Promise.resolve(demo.createSchedule(payload)) : request("/schedules", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
+  pauseSchedule: (id, paused) =>
+    useDemo ? Promise.resolve(demo.pauseSchedule(id, paused)) : request(`/schedules/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paused }),
+    }),
+  runSchedule: (id) => useDemo ? Promise.resolve(demo.runSchedule(id)) : request(`/schedules/${id}/run`, { method: "POST" }),
+  deleteSchedule: (id) => useDemo ? Promise.resolve(demo.deleteSchedule(id)) : request(`/schedules/${id}`, { method: "DELETE" }),
+  httpChecks: (id) => useDemo ? Promise.resolve([]) : request(`/scans/${id}/http`),
   startScan: (payload) =>
     useDemo ? Promise.resolve(demo.startScan(payload)) : request("/scans", {
       method: "POST",
@@ -76,6 +92,12 @@ export const api = {
     form.append("file", file);
     return useDemo ? demo.upload(file) : request("/upload", { method: "POST", body: form });
   },
+  wake: (mac) =>
+    useDemo ? Promise.resolve(demo.wake(mac)) : request("/wake", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mac }),
+    }),
   reportUrl: (id, fmt) => useDemo ? demo.reportUrl(id, fmt) : `${BASE}/scans/${id}/report?fmt=${fmt}`,
   diff: (id, { baseline, latencyThreshold, latencyPct } = {}) =>
     useDemo ? Promise.resolve(demo.diff(id, { baseline, latencyThreshold, latencyPct })) : request(`/scans/${id}/diff${diffQuery({ baseline, latencyThreshold, latencyPct })}`),

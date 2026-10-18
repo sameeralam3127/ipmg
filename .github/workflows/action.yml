@@ -1,0 +1,93 @@
+name: Action
+
+# Exercises the GitHub Action in action.yml, installing IPMG from this
+# checkout: a scan where everything answers must pass, and one with a host
+# that never answers must fail and still upload its reports.
+on:
+  pull_request:
+    branches: [main, v4]
+    paths:
+      - "action.yml"
+      - ".github/workflows/action.yml"
+      - "src/**"
+      - "pyproject.toml"
+  push:
+    branches: [main, v4]
+    paths:
+      - "action.yml"
+      - ".github/workflows/action.yml"
+      - "src/**"
+      - "pyproject.toml"
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: action-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  action:
+    name: action (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Everything answers
+        id: up
+        uses: ./
+        with:
+          targets: 127.0.0.1
+          version: .
+          fail-on-down: "true"
+          artifact-name: ipmg-up-${{ matrix.os }}
+
+      - name: The step passed, with its outputs and reports
+        shell: bash
+        env:
+          ACTIVE: ${{ steps.up.outputs.active }}
+          TOTAL: ${{ steps.up.outputs.total }}
+          CODE: ${{ steps.up.outputs.exit-code }}
+          REPORTS: ${{ steps.up.outputs.report-path }}
+        run: |
+          echo "active=$ACTIVE total=$TOTAL exit=$CODE reports=$REPORTS"
+          test "$ACTIVE" = 1 && test "$TOTAL" = 1 && test "$CODE" = 0
+          ls "$REPORTS"/scan_*.csv "$REPORTS"/scan_*.json "$REPORTS"/scan_*.md
+
+      - name: A host that never answers
+        id: down
+        continue-on-error: true
+        uses: ./
+        with:
+          # TEST-NET-1 (RFC 5737) never answers.
+          targets: |
+            127.0.0.1
+            192.0.2.1
+          args: --timeout 1
+          version: .
+          fail-on-down: "true"
+          artifact-name: ipmg-down-${{ matrix.os }}
+
+      - name: The step failed, and still kept its reports
+        shell: bash
+        env:
+          OUTCOME: ${{ steps.down.outcome }}
+          ACTIVE: ${{ steps.down.outputs.active }}
+          TOTAL: ${{ steps.down.outputs.total }}
+          CODE: ${{ steps.down.outputs.exit-code }}
+          REPORTS: ${{ steps.down.outputs.report-path }}
+        run: |
+          echo "outcome=$OUTCOME active=$ACTIVE total=$TOTAL exit=$CODE"
+          test "$OUTCOME" = failure && test "$CODE" = 3
+          test "$ACTIVE" = 1 && test "$TOTAL" = 2
+          ls "$REPORTS"/scan_*.csv

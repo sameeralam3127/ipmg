@@ -1,6 +1,6 @@
 // App shell: hash router, theme toggle, and WebSocket bootstrap.
 
-import { connect } from "./api.js?v=20260920.1";
+import { connect } from "./api.js?v=20261017.1";
 import {
   aboutView,
   changesView,
@@ -10,7 +10,8 @@ import {
   monitorView,
   newScanView,
   scanDetailView,
-} from "./views.js?v=20260920.1";
+  schedulesView,
+} from "./views.js?v=20261017.1";
 
 // The GitHub Pages demo opens on the seeded dashboard so visitors see data
 // immediately; a real local dashboard opens straight into a new scan.
@@ -24,6 +25,7 @@ const routes = [
   { pattern: /^#\/dashboard$/, name: "dashboard", view: dashboardView },
   { pattern: /^#\/new$/, name: "new", view: newScanView },
   { pattern: /^#\/monitor(?:\/(\d+))?$/, name: "monitor", view: monitorView },
+  { pattern: /^#\/schedules$/, name: "schedules", view: schedulesView },
   { pattern: /^#\/history$/, name: "history", view: historyView },
   { pattern: /^#\/scan\/(\d+)$/, name: "history", view: scanDetailView },
   { pattern: /^#\/changes(?:\/(\d+))?(?:\/(\d+))?$/, name: "changes", view: changesView },

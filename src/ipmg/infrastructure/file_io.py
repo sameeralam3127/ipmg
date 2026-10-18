@@ -386,7 +386,16 @@ def build_markdown_report(table: ReportTable) -> str:
 
     preview_columns = [
         column
-        for column in ["IP Address", "Status", "Latency", "Hostname", "Open Ports"]
+        for column in [
+            "IP Address",
+            "Status",
+            "Latency",
+            "Hostname",
+            "Open Ports",
+            "Probe",
+            "MAC Address",
+            "Vendor",
+        ]
         if column in table.columns
     ]
     if preview_columns:
@@ -424,16 +433,22 @@ def _xlsx_cell(value: Any) -> Any:
 
 def _render_xlsx(table: ReportTable) -> bytes:
     from openpyxl import Workbook
+    from openpyxl.cell import WriteOnlyCell
 
-    workbook = Workbook()
-    sheet = workbook.active
-    sheet.title = "Sheet1"
+    # Write-only mode streams rows out. A normal sheet rescans every cell for
+    # max_row, which made a /16 take minutes to write (#102).
+    workbook = Workbook(write_only=True)
+    sheet = workbook.create_sheet("Sheet1")
     sheet.append(list(table.columns))
     for row in sanitize_table(table).rows:
-        sheet.append([_xlsx_cell(row.get(column)) for column in table.columns])
-        for cell in sheet[sheet.max_row]:
-            if isinstance(cell.value, datetime):
-                cell.number_format = _XLSX_DATETIME_FORMAT
+        cells = []
+        for column in table.columns:
+            value = _xlsx_cell(row.get(column))
+            if isinstance(value, datetime):
+                value = WriteOnlyCell(sheet, value=value)
+                value.number_format = _XLSX_DATETIME_FORMAT
+            cells.append(value)
+        sheet.append(cells)
     buffer = io.BytesIO()
     workbook.save(buffer)
     return buffer.getvalue()
@@ -499,6 +514,94 @@ def write_report(table: ReportTable, path: str, fmt: str) -> None:
     format so callers can tell "not written" from "silently skipped".
     """
     atomic_write_bytes(path, render_report(table, fmt))
+
+
+#: Columns of an HTTP check report, one row per URL.
+HTTP_COLUMNS = (
+    "URL",
+    "Result",
+    "Status Code",
+    "Response Time (ms)",
+    "Final URL",
+    "Failure",
+    "Error",
+    "Certificate Expires",
+    "Batch Timestamp",
+)
+
+
+def http_results_table(results, batch_timestamp: Any) -> ReportTable:
+    """``--http-check`` results as a report table."""
+    return ReportTable(
+        [
+            {
+                "URL": check.url,
+                "Result": check.outcome,
+                "Status Code": check.status_code,
+                "Response Time (ms)": check.response_ms,
+                "Final URL": check.final_url,
+                "Failure": check.failure,
+                "Error": check.error,
+                "Certificate Expires": check.cert_expires,
+                "Batch Timestamp": batch_timestamp,
+            }
+            for check in results
+        ],
+        columns=HTTP_COLUMNS,
+    )
+
+
+def _http_markdown(table: ReportTable) -> str:
+    failed = sum(1 for row in table.rows if row.get("Result") != "OK")
+    lines = [
+        "# IPMG HTTP Check Report",
+        "",
+        f"- Batch timestamp: {table.rows[0].get('Batch Timestamp') if table.rows else 'Unknown'}",
+        f"- URLs checked: {len(table)}",
+        f"- Failed: {failed}",
+        "",
+        "| Result | URL | Status | Time (ms) | Detail |",
+        "| --- | --- | ---: | ---: | --- |",
+    ]
+    for row in table.rows:
+        detail = row.get("Error") or (
+            row["Final URL"] if row.get("Final URL") != row.get("URL") else ""
+        )
+        lines.append(
+            "| "
+            + " | ".join(
+                _format_markdown_value(row.get(column))
+                for column in ("Result", "URL", "Status Code", "Response Time (ms)")
+            )
+            + f" | {_format_markdown_value(detail)} |"
+        )
+    lines.append("")
+    return "\n".join(lines)
+
+
+def save_http_results(
+    results,
+    base: str,
+    formats: list[str],
+    batch_timestamp: Any,
+    timestamp: str | None = None,
+) -> list[str]:
+    """Write ``--http-check`` results in every report format, beside the host reports."""
+    table = http_results_table(results, batch_timestamp)
+    ts = timestamp or timestamp_str()
+    saved: list[str] = []
+    for fmt in formats:
+        path = f"{base}_{ts}.{fmt}"
+        content = _http_markdown(table).encode("utf-8") if fmt == "md" else None
+        try:
+            atomic_write_bytes(path, content if content is not None else render_report(table, fmt))
+        except ValueError:
+            continue
+        saved.append(path)
+    if saved:
+        ui.blank()
+        ui.field_list("Saved", saved)
+    return saved
 
 
 def save_results(

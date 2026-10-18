@@ -39,7 +39,41 @@ class ErrorResponse(ApiModel):
 # ---------------------------------------------------------------------- scans
 
 
-class ScanRequest(BaseModel):
+class ScanSettings(BaseModel):
+    """How to scan: the settings a scan and a schedule share."""
+
+    timeout: int = Field(default=2, description="Seconds to wait per ping (clamped to 1-60)")
+    count: int = Field(default=1, description="Pings per host (clamped to 1-10)")
+    threads: int = Field(default=50, description="Concurrent workers (clamped to 1-500)")
+    resolve: bool = Field(default=False, description="Reverse-resolve hostnames")
+    dns_cache_ttl: int = Field(
+        default=300, description="Seconds to cache DNS lookups (clamped to 0-86400)"
+    )
+    dns_timeout: float = Field(
+        default=2.0,
+        description="Seconds a reverse DNS lookup may take before the host is recorded "
+        "as Unresolvable (clamped to 0.1-60)",
+    )
+    resolve_active_only: bool = Field(
+        default=False, description="Only reverse-resolve hosts that answered"
+    )
+    mac_lookup: bool = Field(
+        default=False,
+        description="Add each responding host's MAC address and vendor, from the server's "
+        "ARP/neighbour table (hosts on its local network only)",
+    )
+    probe: Literal["icmp", "tcp", "icmp,tcp"] = Field(
+        default="icmp",
+        description="How to tell a host is up: ping, a TCP connection to a common port, "
+        "or TCP only for hosts that did not answer the ping",
+    )
+
+    def scan_settings(self) -> Dict[str, Any]:
+        """These settings alone, as a ScanConfig takes them."""
+        return {name: getattr(self, name) for name in ScanSettings.model_fields}
+
+
+class ScanRequest(ScanSettings):
     """Start a scan. Provide ``targets`` text or an ``ips`` list."""
 
     targets: Optional[str] = Field(
@@ -51,13 +85,6 @@ class ScanRequest(BaseModel):
         default=None, description="Pre-parsed target list; takes precedence over 'targets'"
     )
     source: str = Field(default="manual", description="Label stored with the scan")
-    timeout: int = Field(default=2, description="Seconds to wait per ping (clamped to 1-60)")
-    count: int = Field(default=1, description="Pings per host (clamped to 1-10)")
-    threads: int = Field(default=50, description="Concurrent workers (clamped to 1-500)")
-    resolve: bool = Field(default=False, description="Reverse-resolve hostnames")
-    dns_cache_ttl: int = Field(
-        default=300, description="Seconds to cache DNS lookups (clamped to 0-86400)"
-    )
 
 
 class ScanCreated(ApiModel):
@@ -80,9 +107,14 @@ class ScanRecord(ApiModel):
     source: str = Field(description="Where the targets came from, e.g. 'manual' or a filename")
     total: int = Field(description="Number of targets")
     completed: int = Field(description="Targets checked so far")
-    status: str = Field(description="'running', 'complete', 'cancelled', or 'failed'")
+    status: str = Field(
+        description="'running', 'complete', 'cancelled', 'failed', or 'interrupted' "
+        "(IPMG Web stopped before the scan finished)"
+    )
     config: Dict[str, Any] = Field(description="Scan settings used (timeout, count, threads, ...)")
-    error: Optional[str] = Field(description="Failure reason when status is 'failed'")
+    error: Optional[str] = Field(
+        description="Failure reason when status is 'failed' or 'interrupted'"
+    )
 
 
 class ScanSummary(ScanRecord):
@@ -101,6 +133,30 @@ class HostResultRow(ApiModel):
     hostname: str = Field(description="Resolved hostname; empty when not resolved")
     open_ports: str = Field(description="Comma-separated open TCP ports; empty when none")
     checked_at: str = Field(description="Local time the result was stored")
+    method: str = Field(
+        default="",
+        description="Which probe found the host, 'icmp' or 'tcp', when the scan used TCP "
+        "probing; empty otherwise",
+    )
+    mac: str = Field(default="", description="MAC address, with mac_lookup; empty if unknown")
+    vendor: str = Field(default="", description="Vendor of the MAC address's prefix")
+
+
+class HttpCheckRow(ApiModel):
+    """One ``--http-check`` URL as a scan checked it."""
+
+    url: str
+    ok: bool = Field(description="Whether the status was one the check expected")
+    status_code: Optional[int] = Field(description="Final HTTP status; null if none came back")
+    response_ms: Optional[float] = Field(description="Time to the final response, in ms")
+    final_url: str = Field(description="Where redirects ended; the URL itself without any")
+    failure: str = Field(
+        description="Why it failed: dns, connect, tls, timeout, status, protocol, redirects, "
+        "or invalid; empty when it passed"
+    )
+    error: str = Field(description="Human-readable failure reason")
+    cert_expires: str = Field(description="Certificate expiry date (UTC) for verified HTTPS")
+    checked_at: str
 
 
 # ------------------------------------------------------------------- overview
@@ -128,11 +184,80 @@ class Asset(ApiModel):
     ip: str
     hostname: Optional[str] = Field(description="Most recent non-empty hostname")
     status: str = Field(description="Status in the most recent scan")
+    mac: Optional[str] = Field(default=None, description="Most recent MAC address seen")
+    vendor: Optional[str] = Field(default=None, description="Vendor of that MAC address")
     avg_latency: Optional[float] = Field(description="Mean latency when active, in ms")
     last_seen: Optional[str] = Field(description="Last time the host was active")
     last_checked: str
     last_scan_id: int
     scan_count: int
+
+
+# ------------------------------------------------------------------ schedules
+
+
+class ScheduleRequest(ScanSettings):
+    """Create a schedule: scan ``targets`` every ``interval_minutes``, or on ``cron``."""
+
+    name: str = Field(
+        min_length=1,
+        max_length=100,
+        description="Unique name; the scans are stored under the source 'schedule:<name>'",
+    )
+    targets: str = Field(description="Target text, as for a scan; parsed again for every run")
+    interval_minutes: Optional[int] = Field(
+        default=None, ge=1, le=10080, description="Run every N minutes (1 minute to 1 week)"
+    )
+    cron: Optional[str] = Field(
+        default=None,
+        description="Or a five-field cron expression in the server's local time, "
+        "such as '*/15 * * * *' or '@daily'",
+    )
+    paused: bool = Field(default=False, description="Create it paused")
+
+
+class SchedulePatch(BaseModel):
+    paused: Optional[bool] = Field(default=None, description="Pause or resume the schedule")
+
+
+class Schedule(ApiModel):
+    """A stored schedule and how its runs have gone."""
+
+    id: int
+    name: str
+    source: str = Field(description="History source of its scans: 'schedule:<name>'")
+    targets: str
+    interval_minutes: Optional[int]
+    cron: Optional[str]
+    paused: bool
+    config: Dict[str, Any] = Field(description="Scan settings each run uses")
+    created_at: str
+    next_run_at: Optional[str] = Field(description="Local time of the next run; null if paused")
+    last_run_at: Optional[str]
+    last_scan_id: Optional[int]
+    last_status: Optional[str] = Field(description="Status of the last scan it started")
+    last_skipped_at: Optional[str] = Field(description="When a run was last skipped")
+    last_skip_reason: Optional[str] = Field(
+        description="Why: the previous run was still going, --max-scans was reached, ..."
+    )
+
+
+class WakeRequest(BaseModel):
+    """Send a Wake-on-LAN magic packet."""
+
+    mac: str = Field(description="MAC address: AA:BB:CC:DD:EE:FF, AA-BB-..., or AABBCCDDEEFF")
+    broadcast: str = Field(
+        default="255.255.255.255",
+        description="IPv4 broadcast address; a directed one such as 192.168.1.255 "
+        "reaches another subnet",
+    )
+    port: int = Field(default=9, description="UDP port (1-65535)")
+
+
+class WakeSent(ApiModel):
+    mac: str = Field(description="The MAC address the packet was built for")
+    broadcast: str
+    port: int
 
 
 class UploadResult(ApiModel):
@@ -171,11 +296,12 @@ class DiffSummary(ApiModel):
 class HostChangeModel(ApiModel):
     type: str = Field(
         description="new_host, host_removed, host_offline, host_online, ip_changed, "
-        "hostname_changed, latency_changed, or service_changed"
+        "hostname_changed, latency_changed, service_changed, mac_changed, http_failing, "
+        "http_recovered, or http_status_changed"
     )
     label: str
     severity: str = Field(description="'critical', 'warning', or 'info'")
-    ip: str
+    ip: str = Field(description="The host's IP; for http_* changes, the checked URL")
     hostname: str
     previous: Optional[str]
     current: Optional[str]
@@ -200,6 +326,9 @@ class HostResultModel(ApiModel):
     latency: Optional[float] = Field(description="Round-trip time in ms; null if no reply")
     hostname: str
     open_ports: List[int] = Field(description="Open TCP ports, when port scanning was on")
+    method: str = Field(default="", description="Which probe found the host, as in results")
+    mac: str = Field(default="", description="MAC address, with mac_lookup")
+    vendor: str = Field(default="", description="Vendor of the MAC address's prefix")
 
 
 class ScanStartedEvent(ApiModel):

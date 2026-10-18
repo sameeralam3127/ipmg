@@ -6,16 +6,20 @@ import logging
 import sys
 from typing import Callable, Dict, List, Optional
 
-from ipmg.cli import config
+from ipmg.cli import completion, config
 from ipmg.cli.parser import (
+    build_completion_parser,
     build_diff_parser,
     build_history_parser,
     build_parser,
+    build_prune_parser,
+    build_wake_parser,
     build_web_parser,
 )
 from ipmg.core.diff import DiffOptions
 from ipmg.core.health import HostsDownError
 from ipmg.core.security import print_disclaimer_once
+from ipmg.core.wake import parse_mac, send_magic_packet
 from ipmg.exceptions import IPMGError
 from ipmg.infrastructure.notify import notify_options, send_notifications
 from ipmg.reporting import ui
@@ -57,9 +61,24 @@ def _scan_command(argv: List[str]) -> int:
         # and nothing else, so every line a person reads goes to stderr.
         ui.use_stderr()
     ui.header("scan")
-    print_disclaimer_once()
+    print_disclaimer_once(_probe_kinds(args))
     run_scan(args)
     return EXIT_OK
+
+
+def _probe_kinds(args) -> List[str]:
+    """What a scan will send, for the authorization notice."""
+    kinds = []
+    if getattr(args, "http_check", None) and not (args.input or args.discover):
+        return ["HTTP"]
+    probe = (getattr(args, "probe", None) or "icmp").split(",")
+    if "icmp" in probe:
+        kinds.append("ICMP")
+    if "tcp" in probe or getattr(args, "scan_ports", False):
+        kinds.append("TCP connect")
+    if getattr(args, "http_check", None):
+        kinds.append("HTTP")
+    return kinds
 
 
 def _web_command(argv: List[str]) -> int:
@@ -83,11 +102,67 @@ def _web_command(argv: List[str]) -> int:
         open_browser=not args.no_browser,
         db_path=args.db,
         metrics_sources=max(args.metrics_sources, 1) if args.metrics else None,
+        max_scans=max(args.max_scans, 1),
     )
     return EXIT_OK
 
 
+def _format_bytes(size: int) -> str:
+    value = float(size)
+    for unit in ("B", "KB", "MB", "GB"):
+        if value < 1024 or unit == "GB":
+            return f"{value:.0f} {unit}" if unit == "B" else f"{value:.1f} {unit}"
+        value /= 1024
+    return f"{value:.1f} GB"  # pragma: no cover - the loop always returns
+
+
+def _prune_command(argv: List[str]) -> int:
+    parser = build_prune_parser()
+    args = parser.parse_args(argv)
+    if args.keep is None and args.older_than is None:
+        parser.error("give --keep N, --older-than AGE, or both")
+    if args.keep is not None and args.keep < 0:
+        parser.error("--keep cannot be negative")
+    configure_logging(args.verbose)
+    ui.header("history prune")
+
+    history = HistoryService.open(args.db)
+    plan = history.plan_prune(keep=args.keep, older_than=args.older_than, source=args.source)
+
+    ui.blank()
+    if not plan.scans:
+        ui.note("Nothing to prune: the policy keeps every stored scan.")
+        return EXIT_OK
+
+    summary = (
+        f"{ui.plural(len(plan.scans), 'scan')} {ui.glyph('sep')} "
+        f"{ui.plural(plan.result_count, 'result')}"
+    )
+    sources = [f"{source} ({count})" for source, count in sorted(plan.by_source().items())]
+    if args.dry_run:
+        ui.field("Prunable", summary)
+        ui.field_list("From", sources)
+        ui.blank()
+        ui.note("Dry run: nothing was deleted. Run it again without --dry-run to delete.")
+        return EXIT_OK
+
+    size_before = history.database.size_bytes()
+    history.prune(plan)
+    ui.field("Deleted", summary)
+    ui.field_list("From", sources)
+    if args.vacuum:
+        history.database.vacuum()
+        ui.field(
+            "Database",
+            f"{_format_bytes(size_before)} {ui.glyph('arrow')} "
+            f"{_format_bytes(history.database.size_bytes())}",
+        )
+    return EXIT_OK
+
+
 def _history_command(argv: List[str]) -> int:
+    if argv and argv[0] == "prune":
+        return _prune_command(argv[1:])
     args = build_history_parser().parse_args(argv)
     configure_logging(args.verbose)
     ui.header("history")
@@ -131,11 +206,37 @@ def _diff_command(argv: List[str]) -> int:
     return EXIT_OK
 
 
+def _wake_command(argv: List[str]) -> int:
+    args = build_wake_parser().parse_args(argv)
+    configure_logging(args.verbose)
+    ui.header("wake")
+
+    # Every address is checked before any packet goes out.
+    for mac in args.macs:
+        parse_mac(mac)
+    ui.blank()
+    for mac in args.macs:
+        sent = send_magic_packet(mac, broadcast=args.broadcast, port=args.port)
+        ui.success(f"Magic packet sent to {sent} via {args.broadcast}:{args.port}")
+    ui.blank()
+    ui.note("A host that wakes takes a little while to answer pings.")
+    return EXIT_OK
+
+
+def _completion_command(argv: List[str]) -> int:
+    args = build_completion_parser().parse_args(argv)
+    # Only the script on stdout, no banner: it is eval'd or saved to a file.
+    sys.stdout.write(completion.script(args.shell))
+    return EXIT_OK
+
+
 _COMMANDS: Dict[str, Callable[[List[str]], int]] = {
     "web": _web_command,
     "history": _history_command,
     "diff": _diff_command,
     "compare": _diff_command,
+    "wake": _wake_command,
+    "completion": _completion_command,
 }
 
 #: Flag spellings of a command. Reaching for "--web" before "web" is the

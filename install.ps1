@@ -12,10 +12,10 @@
 
     To pass options, run it as a script block instead:
 
-        & ([scriptblock]::Create((irm https://raw.githubusercontent.com/sameeralam3127/ipmg/main/install.ps1))) -Version 2.3.0
+        & ([scriptblock]::Create((irm https://raw.githubusercontent.com/sameeralam3127/ipmg/main/install.ps1))) -Version X.Y.Z
 
 .PARAMETER Version
-    Install this IPMG release (for example 2.3.0) instead of the latest.
+    Install this IPMG release (X.Y.Z, any version on PyPI) instead of the latest.
     The IPMG_VERSION environment variable does the same.
 
 .PARAMETER Help
@@ -72,7 +72,7 @@ if ($Help) {
     Get-Help $PSCommandPath -Detailed -ErrorAction SilentlyContinue
     if (-not $PSCommandPath) {
         Write-Host 'Usage: irm https://raw.githubusercontent.com/sameeralam3127/ipmg/main/install.ps1 | iex'
-        Write-Host '       & ([scriptblock]::Create((irm <that URL>))) -Version 2.3.0'
+        Write-Host '       & ([scriptblock]::Create((irm <that URL>))) -Version X.Y.Z'
     }
     return
 }

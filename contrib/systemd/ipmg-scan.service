@@ -1,0 +1,45 @@
+# IPMG network monitor: scan every 15 minutes, compare each pass with the one
+# before it, and send changes to the destinations in /etc/ipmg/notify.env.
+#
+# Install and configure: docs/SERVICES.md. Lines marked CHANGE are
+# placeholders for your own paths and targets.
+
+[Unit]
+Description=IPMG network monitor (scan every 15 minutes and report changes)
+Documentation=https://github.com/sameeralam3127/ipmg/blob/main/docs/SERVICES.md
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+# A dedicated account without a login shell: useradd --system --home-dir /var/lib/ipmg ipmg
+User=ipmg
+Group=ipmg
+# /var/lib/ipmg, created and owned by the ipmg user: history and reports live here.
+StateDirectory=ipmg
+WorkingDirectory=/var/lib/ipmg
+# Webhook URLs and SMTP settings (IPMG_NOTIFY_SLACK=..., see COMMANDS.md); optional.
+EnvironmentFile=-/etc/ipmg/notify.env
+# CHANGE: the ipmg executable (`command -v ipmg`) and the target file.
+ExecStart=/usr/local/bin/ipmg \
+    --input /etc/ipmg/targets.txt \
+    --interval 15 --compare \
+    --db /var/lib/ipmg/history.db \
+    --output /var/lib/ipmg/reports/scan --formats csv \
+    --keep-reports 96 --keep-scans 2000
+# The monitor rides out a pass that cannot scan; this covers the process itself.
+Restart=on-failure
+RestartSec=60
+
+# Read-only everywhere except its own state directory.
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+# Not NoNewPrivileges: on systems where ping is setuid or has file
+# capabilities, it would stop ping from working.
+
+[Install]
+WantedBy=multi-user.target

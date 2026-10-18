@@ -56,6 +56,9 @@ def test_status_change_between_unreachable_states_is_a_service_change():
     change = only(diff, ChangeType.SERVICE_CHANGED)
     assert (change.previous, change.current) == ("Timeout", "Unreachable")
     assert ChangeType.HOST_OFFLINE not in types(diff)
+    # Only the display text was renamed; exports keep the original key.
+    assert change.label == "Status changed"
+    assert change.to_dict()["type"] == "service_changed"
 
 
 def test_detects_hostname_change_but_ignores_first_resolution():

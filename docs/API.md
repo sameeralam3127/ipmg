@@ -94,9 +94,10 @@ list each problem in `errors`:
 | `400` | The request is well-formed but can't be used, e.g. no valid targets or an unsupported report format |
 | `401` | Missing or invalid access token |
 | `404` | No scan with that ID, or no earlier scan to compare with |
-| `409` | Cancelling a scan that isn't running |
+| `409` | Cancelling a scan that isn't running, or deleting one that still is |
 | `413` | Upload larger than 5 MB |
 | `422` | A field has the wrong type, e.g. `"threads": "many"` |
+| `429` | Starting a scan while `--max-scans` scans (default 2) are already running |
 
 ## Endpoints
 
@@ -105,15 +106,23 @@ list each problem in `errors`:
 | `GET` | `/stats` | Dashboard overview: counts, latest scan, running scans, trend |
 | `GET` | `/assets` | Every host ever scanned, with its latest status |
 | `GET` | `/scans?limit=50` | Recent scans, newest first (`limit` 1-500) |
-| `POST` | `/scans` | Start a scan; returns `201` with `{"id", "total"}` |
+| `POST` | `/scans` | Start a scan; returns `201` with `{"id", "total"}`, or `429` when `--max-scans` scans are already running |
 | `GET` | `/scans/{id}` | One scan, with status counts and average latency |
 | `GET` | `/scans/{id}/results?status=&search=` | Per-host results, optionally filtered by status (`Active`, `Inactive`, `Timeout`, `Error`) or IP/hostname substring |
 | `POST` | `/scans/{id}/cancel` | Stop a running scan |
-| `DELETE` | `/scans/{id}` | Delete a scan and its results; returns `204` |
+| `DELETE` | `/scans/{id}` | Delete a scan and its results; returns `204`, or `409` while the scan is still running (cancel it first) |
+| `GET` | `/scans/{id}/http` | The HTTP checks the scan made (`ipmg --http-check`): status, time, final URL, failure |
 | `GET` | `/scans/{id}/report?fmt=csv` | Download results as `xlsx`, `csv`, `json`, or `md` |
 | `GET` | `/scans/{id}/diff?baseline=` | Changes since `baseline` (default: the previous scan) |
 | `GET` | `/scans/{id}/diff/report?fmt=md` | Download the changes as `md`, `json`, or `csv` |
 | `POST` | `/upload` | Parse targets from an uploaded file (multipart field `file`) |
+| `GET` | `/schedules` | Every scheduled scan, with its next run and how its last run went |
+| `POST` | `/schedules` | Create one: `{"name", "targets", "interval_minutes"}` or `{..., "cron"}`, plus any scan setting; `409` if the name is taken |
+| `GET` | `/schedules/{id}` | One scheduled scan |
+| `PATCH` | `/schedules/{id}` | Pause or resume it: `{"paused": true}` |
+| `DELETE` | `/schedules/{id}` | Delete it; its scans stay in the history. Returns `204` |
+| `POST` | `/schedules/{id}/run` | Run it now; `409` while its previous run is still going, `429` at `--max-scans` |
+| `POST` | `/wake` | Send a Wake-on-LAN packet: `{"mac", "broadcast"?, "port"?}`; `400` for an invalid MAC or address |
 | WebSocket | `/ws` | Live scan events |
 
 The exact fields of every request and response are in the
@@ -135,8 +144,16 @@ blocks, ranges, and hostnames separated by newlines, commas, or spaces) or
 | `threads` | `50` | Concurrent workers, clamped to 1-500 |
 | `resolve` | `false` | Reverse-resolve hostnames |
 | `dns_cache_ttl` | `300` | Seconds, clamped to 0-86400 |
+| `dns_timeout` | `2.0` | Seconds a reverse DNS lookup may take before the host is `Unresolvable`, clamped to 0.1-60 |
+| `resolve_active_only` | `false` | Only reverse-resolve hosts that answered |
+| `probe` | `"icmp"` | `icmp`, `tcp`, or `icmp,tcp`: how a host counts as up (TCP connects to the default port list) |
+| `mac_lookup` | `false` | Add each responding host's MAC address and vendor, read from the server's neighbour table |
 
-A scan's `status` is `running`, then `complete`, `cancelled`, or `failed`.
+A scan's `status` is `running`, then `complete`, `cancelled`, or `failed`. A scan
+that IPMG Web could not finish because it was stopped (Ctrl+C, a container
+restart, a crash) is `interrupted`, with the reason in `error`: running scans
+are stopped and recorded on shutdown, and any left `running` by a process
+that died are marked when IPMG Web next starts.
 
 ## Examples
 
