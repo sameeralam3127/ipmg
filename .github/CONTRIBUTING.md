@@ -159,19 +159,28 @@ secret, it is fine to update the baseline in your pull request.
 
 ```text
 src/ipmg/
-  cli/             argument parsing and the `ipmg` command
-  core/            ping, discovery, port scanning, change detection
-  infrastructure/  SQLite history and file input/output
-  reporting/       terminal output, live streaming, reports
+  cli/             argument parsing, the `ipmg` commands, ipmg.toml, completion
+  core/            the scan engine, ping, TCP and HTTP checks, MAC lookup,
+                   discovery, change detection, cron, Wake-on-LAN
+  infrastructure/  SQLite history, report files, notifications, retention
+  reporting/       terminal output, live streaming, report tables, metrics
   services/        scan and history orchestration
   web/             IPMG Web (FastAPI); schemas.py is the API contract,
                    static/ holds its HTML, CSS, and JS
+  data/            the bundled MAC vendor database
 tests/             pytest suite (one file per module, roughly); snapshots/
                    holds the committed API contract
+contrib/           systemd and launchd service templates
+docs/              command reference, API, architecture, troubleshooting
 site/              project website published to GitHub Pages
+action.yml         the GitHub Action
 install.sh         one-line installer for Linux and macOS
 .github/workflows  CI: tests, security scan, release, Pages deploy
 ```
+
+How the pieces fit together (the layers, the life of a scan, the history
+database, IPMG Web, and where new features plug in) is in
+[docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md).
 
 ---
 

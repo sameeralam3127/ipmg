@@ -170,7 +170,7 @@ def _probe_host(
     mac = vendor = ""
     if neighbours is not None and status == "Active":
         # The probe just made the OS resolve the host's MAC, if it is on a local link.
-        mac, vendor = mac_and_vendor(neighbours, ip, time.monotonic())
+        mac, vendor = mac_and_vendor(neighbours, ip, time.perf_counter())
 
     resolve = cache is not None and (status == "Active" or not config.resolve_active_only)
     hostname = cache.resolve(ip) if resolve else ""

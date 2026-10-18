@@ -1028,7 +1028,9 @@ Contributions are welcome.
 [CONTRIBUTING.md](https://github.com/sameeralam3127/ipmg/blob/main/.github/CONTRIBUTING.md)
 covers setting up a development environment, running the tests, the commit
 message format that drives automated releases, and how the project website and
-IPMG Web demo are built. Everyone taking part is expected to follow the
+IPMG Web demo are built.
+[docs/ARCHITECTURE.md](https://github.com/sameeralam3127/ipmg/blob/main/docs/ARCHITECTURE.md)
+explains how the code fits together. Everyone taking part is expected to follow the
 [Code of Conduct](https://github.com/sameeralam3127/ipmg/blob/main/.github/CODE_OF_CONDUCT.md).
 
 ---

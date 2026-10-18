@@ -171,9 +171,9 @@ def test_the_cache_rereads_the_table_for_a_host_that_answered_after_the_last_rea
         return tables[min(len(reads) - 1, 1)]
 
     cache = NeighbourCache(reader, min_interval_s=0)
-    first = time.monotonic()
+    first = time.perf_counter()
     assert cache.lookup("10.0.0.2", first) == ""
-    assert cache.lookup("10.0.0.1", time.monotonic()) == "B8:27:EB:12:34:56"
+    assert cache.lookup("10.0.0.1", time.perf_counter()) == "B8:27:EB:12:34:56"
     # Answered before the second read: no third read needed.
     assert cache.lookup("10.0.0.1", first) == "B8:27:EB:12:34:56"
     assert len(reads) == 2
@@ -189,7 +189,7 @@ def test_hosts_answering_together_share_one_read():
         return {f"10.0.0.{n}": f"02:00:00:00:00:{n:02X}" for n in range(1, 9)}
 
     cache = NeighbourCache(slow_reader, min_interval_s=0)
-    answered = time.monotonic()
+    answered = time.perf_counter()
     found = []
     threads = [
         threading.Thread(target=lambda n=n: found.append(cache.lookup(f"10.0.0.{n}", answered)))

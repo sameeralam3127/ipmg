@@ -40,8 +40,13 @@ def test_an_accepted_connection_is_open_with_a_time(listening_port):
     assert latency is not None and latency >= 0
 
 
+#: Windows retries a connection the other end reset, twice, before it reports
+#: the refusal: about 2 s, even on loopback. Elsewhere it is immediate.
+REFUSAL_TIMEOUT_S = 5.0
+
+
 def test_a_refused_connection_still_answered(closed_port):
-    outcome, latency = connect("127.0.0.1", closed_port, 1.0)
+    outcome, latency = connect("127.0.0.1", closed_port, REFUSAL_TIMEOUT_S)
 
     assert outcome == portscan.REFUSED
     assert latency is not None
@@ -49,7 +54,7 @@ def test_a_refused_connection_still_answered(closed_port):
 
 def test_tcp_probe_counts_a_refusal_as_up(closed_port):
     # A reset is an answer: the host is there, the service is not.
-    assert tcp_probe("127.0.0.1", [closed_port], 1.0)[0] == "Active"
+    assert tcp_probe("127.0.0.1", [closed_port], REFUSAL_TIMEOUT_S)[0] == "Active"
 
 
 def test_tcp_probe_is_up_if_any_port_answers(monkeypatch):

@@ -249,6 +249,12 @@ Its latency is then the connect time. With `tcp` or `icmp,tcp`, reports gain a
 connections, so they need no extra privileges, and they share the bounded
 connection pool `--scan-ports` uses.
 
+On Windows, a refused connection is only reported after about two seconds:
+Windows tries a connection the other end reset twice more before giving up.
+To count hosts that refuse every probed port as up there, give
+`--port-timeout 3`. A port that accepts the connection is found at once on
+every system.
+
 ---
 
 ## HTTP checks
