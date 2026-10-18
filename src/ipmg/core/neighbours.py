@@ -199,8 +199,8 @@ class NeighbourCache:
     """The neighbour table, shared by a scan's workers and re-read as hosts answer.
 
     A host's entry appears once its probe has finished, so :meth:`lookup`
-    takes the time the probe ended and re-reads the table when the copy held
-    is older than that. Workers that need a fresh copy at the same moment
+    takes the time the probe ended (on :func:`time.perf_counter`) and re-reads
+    the table when the copy held is older than that. Workers that need a fresh copy at the same moment
     share one read, and reads are at least ``min_interval_s`` apart, so a big
     scan runs the system tool a few times a second at most.
     """
@@ -219,18 +219,21 @@ class NeighbourCache:
 
     def lookup(self, ip: str, answered_at: Optional[float] = None) -> str:
         """The MAC of ``ip``, or "" when the table has none for it."""
-        answered_at = time.monotonic() if answered_at is None else answered_at
+        answered_at = time.perf_counter() if answered_at is None else answered_at
         with self._condition:
             while self._read_at < answered_at:
                 if self._reading:
                     self._condition.wait()
                     continue
-                wait = self._read_at + self._min_interval_s - time.monotonic()
+                wait = self._read_at + self._min_interval_s - time.perf_counter()
                 if wait > 0:
                     self._condition.wait(wait)
                     continue
                 self._reading = True
-                started = time.monotonic()
+                # perf_counter, not monotonic: on Windows monotonic ticks every
+                # ~16 ms, so a probe that ended just after a read started looked
+                # no newer than it, and its MAC was never read.
+                started = time.perf_counter()
                 self._condition.release()
                 try:
                     table = self._reader()
