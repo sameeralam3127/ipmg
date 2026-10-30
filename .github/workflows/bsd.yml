@@ -54,7 +54,7 @@ jobs:
           persist-credentials: false
 
       - name: Probe with OpenBSD ping
-        uses: vmactions/openbsd-vm@5f7b2c933b8846a138361d6843c52af4bef5d945 # v1.4.8
+        uses: vmactions/openbsd-vm@f1ca8bc8ecc5b6ef7218e5b914836e067e1546d3 # v1.4.9
         with:
           usesh: true
           # There is no "python3" package; the %3 branch picks the current one.
