@@ -371,13 +371,13 @@ jobs:
           fi
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: env.DOCKERHUB_ENABLED == 'true' && !contains(needs.release.outputs.version, '-')
+        if: env.DOCKERHUB_ENABLED == 'true'
         with:
           ref: ${{ needs.release.outputs.tag }}
           persist-credentials: false
 
       - name: Sync the Docker Hub description from the README
-        if: env.DOCKERHUB_ENABLED == 'true' && !contains(needs.release.outputs.version, '-')
+        if: env.DOCKERHUB_ENABLED == 'true'
         uses: peter-evans/dockerhub-description@1b9a80c056b620d92cedb9d9b5a223409c68ddfa # v5.0.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
