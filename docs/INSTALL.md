@@ -118,6 +118,8 @@ replace `X.Y.Z` with any version listed on
 **Docker (amd64 and arm64):**
 
 ```bash
+docker run --rm sameeralam3127/ipmg --input 10.0.0.0/24
+# or from GitHub Container Registry
 docker run --rm ghcr.io/sameeralam3127/ipmg --input 10.0.0.0/24
 ```
 
@@ -128,6 +130,10 @@ ipmg --version
 ```
 
 ## Running in Docker
+
+The image is published to both Docker Hub (`sameeralam3127/ipmg`) and GitHub
+Container Registry (`ghcr.io/sameeralam3127/ipmg`). They serve the same image,
+with the same tags and digest; use whichever you prefer.
 
 The image carries `ping`, runs as an unprivileged user (uid 10001), and keeps
 everything a scan writes (reports and the history database) in `/data`. Mount
