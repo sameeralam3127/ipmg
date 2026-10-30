@@ -2,6 +2,31 @@
 
 <!-- version list -->
 
+## v4.2.0 (2026-10-30)
+
+### Continuous Integration
+
+- Bump the actions group across 1 directory with 5 updates
+  ([#140](https://github.com/sameeralam3127/ipmg/pull/140),
+  [`168799f`](https://github.com/sameeralam3127/ipmg/commit/168799f03c72a8684b53169e942285c9b82aaa26))
+
+### Documentation
+
+- A PyPI badge that updates within minutes of a release
+  ([#136](https://github.com/sameeralam3127/ipmg/pull/136),
+  [`31cb5d4`](https://github.com/sameeralam3127/ipmg/commit/31cb5d4fdaa37e0a29b2b805fb719eea8500d0b7))
+
+- The v4 plan's remaining architecture work is not scheduled
+  ([#138](https://github.com/sameeralam3127/ipmg/pull/138),
+  [`91346b4`](https://github.com/sameeralam3127/ipmg/commit/91346b4c5b4eb624f722e7e85f90f1974e4f5d8b))
+
+### Features
+
+- Publish the container image to Docker Hub as well as GHCR
+  ([#141](https://github.com/sameeralam3127/ipmg/pull/141),
+  [`9759aa6`](https://github.com/sameeralam3127/ipmg/commit/9759aa6a0e6719efc4c4eb880377db34aa52fb13))
+
+
 ## v4.1.0 (2026-10-18)
 
 ### Bug Fixes
