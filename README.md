@@ -91,7 +91,7 @@ uv tool install --python ">=3.10" "ipmg[web]"
 Also on:
 
 - **Homebrew:** `brew install sameeralam3127/tap/ipmg`
-- **Docker:** `docker run --rm ghcr.io/sameeralam3127/ipmg --input 10.0.0.0/24`
+- **Docker:** `docker run --rm sameeralam3127/ipmg --input 10.0.0.0/24`, or from GHCR: `ghcr.io/sameeralam3127/ipmg`
 
 > **Tip:** `[web]` adds IPMG Web; `pip install ipmg` alone is the command line.
 > Where the system Python is older than 3.10 (RHEL 9, Ubuntu 20.04, SLES 15),

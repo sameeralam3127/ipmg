@@ -1,7 +1,9 @@
 # IPMG in a container: the CLI, IPMG Web, and the ping it needs.
 #
-#   docker run --rm ghcr.io/sameeralam3127/ipmg --input 10.0.0.0/24
-#   docker run --rm -v ipmg-data:/data ghcr.io/sameeralam3127/ipmg --input targets.txt
+#   docker run --rm sameeralam3127/ipmg --input 10.0.0.0/24
+#   docker run --rm -v ipmg-data:/data sameeralam3127/ipmg --input targets.txt
+#
+# Also published as ghcr.io/sameeralam3127/ipmg, the same image.
 #
 # Everything a scan writes (reports and the history database) goes to /data,
 # so mount a volume there to keep it. See compose.yaml for IPMG Web.

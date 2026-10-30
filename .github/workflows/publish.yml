@@ -292,6 +292,12 @@ jobs:
       contents: read
       packages: write
 
+    env:
+      # Secrets cannot be read in a step's `if:`, so expose whether they are set.
+      # Forks have neither, and skip Docker Hub.
+      DOCKERHUB_ENABLED: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+      DOCKERHUB_IMAGE: docker.io/${{ secrets.DOCKERHUB_USERNAME }}/ipmg
+
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -309,11 +315,24 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Log in to Docker Hub
+        if: env.DOCKERHUB_ENABLED == 'true'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Docker Hub skipped
+        if: env.DOCKERHUB_ENABLED != 'true'
+        run: echo "::notice::DOCKERHUB_USERNAME or DOCKERHUB_TOKEN is not set, so the image is published to GHCR only."
+
       - name: Image tags
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: |
+            ghcr.io/${{ github.repository }}
+            name=${{ env.DOCKERHUB_IMAGE }},enable=${{ env.DOCKERHUB_ENABLED == 'true' }}
           tags: |
             type=semver,pattern={{version}},value=${{ needs.release.outputs.version }}
             type=semver,pattern={{major}}.{{minor}},value=${{ needs.release.outputs.version }}
@@ -338,4 +357,31 @@ jobs:
         env:
           IMAGE: ghcr.io/${{ github.repository }}
           VERSION: ${{ needs.release.outputs.version }}
-        run: docker buildx imagetools inspect "$IMAGE:$VERSION"
+        run: |
+          docker buildx imagetools inspect "$IMAGE:$VERSION"
+          if [ "$DOCKERHUB_ENABLED" = "true" ]; then
+            docker buildx imagetools inspect "$DOCKERHUB_IMAGE:$VERSION"
+            # Both registries must serve the same manifest list.
+            ghcr=$(docker buildx imagetools inspect "$IMAGE:$VERSION" --format '{{ .Manifest.Digest }}')
+            hub=$(docker buildx imagetools inspect "$DOCKERHUB_IMAGE:$VERSION" --format '{{ .Manifest.Digest }}')
+            if [ "$ghcr" != "$hub" ]; then
+              echo "::error::GHCR ($ghcr) and Docker Hub ($hub) digests differ for $VERSION"
+              exit 1
+            fi
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: env.DOCKERHUB_ENABLED == 'true' && !contains(needs.release.outputs.version, '-')
+        with:
+          ref: ${{ needs.release.outputs.tag }}
+          persist-credentials: false
+
+      - name: Sync the Docker Hub description from the README
+        if: env.DOCKERHUB_ENABLED == 'true' && !contains(needs.release.outputs.version, '-')
+        uses: peter-evans/dockerhub-description@1b9a80c056b620d92cedb9d9b5a223409c68ddfa # v5.0.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ secrets.DOCKERHUB_USERNAME }}/ipmg
+          readme-filepath: ./README.md
+          short-description: Find out which hosts on your network are up, and what changed since last time.
