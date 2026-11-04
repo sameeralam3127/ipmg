@@ -43,9 +43,9 @@ $MaxRetries = 3
 # CI fails when they no longer match what astral publishes.
 $UvVersion = '0.13.7'
 $UvArchiveSha256 = @{
-    'x86_64-pc-windows-msvc'  = '0cdc5b38fe5a8168ed6a25814f5ba43c21d313dd3187314fccb37b7cec46e021'
-    'aarch64-pc-windows-msvc' = '505d9e65e7692bac3ddf98c66754aa26c5050c409c184af30a881a0a72cc85e3'
-    'i686-pc-windows-msvc'    = 'fa2abbf16f7d12cb01c9b7f313d843218fbd91a9d3fab487cc06a1d6765b27bf'
+    'x86_64-pc-windows-msvc'  = '0cdc5b38fe5a8168ed6a25814f5ba43c21d313dd3187314fccb37b7cec46e021'  # pragma: allowlist secret
+    'aarch64-pc-windows-msvc' = '505d9e65e7692bac3ddf98c66754aa26c5050c409c184af30a881a0a72cc85e3'  # pragma: allowlist secret
+    'i686-pc-windows-msvc'    = 'fa2abbf16f7d12cb01c9b7f313d843218fbd91a9d3fab487cc06a1d6765b27bf'  # pragma: allowlist secret
 }
 
 # TEST ONLY: a directory or URL holding SHA256SUMS and the release files, in

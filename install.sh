@@ -44,7 +44,7 @@ MAX_RETRIES=3
 #   curl -fsSL https://github.com/astral-sh/uv/releases/download/<version>/uv-installer.sh | sha256sum
 # CI fails when the hash no longer matches what astral publishes.
 UV_VERSION="0.13.7"
-UV_INSTALLER_SHA256="d263ee68314cf5bea36b08e6bd9e2c4563240d7adb73756cf33af5c199b92db4"
+UV_INSTALLER_SHA256="d263ee68314cf5bea36b08e6bd9e2c4563240d7adb73756cf33af5c199b92db4"  # pragma: allowlist secret
 
 # TEST ONLY: a directory or URL holding SHA256SUMS and the release files, in
 # place of the GitHub release. CI points it at a deliberately corrupted copy.

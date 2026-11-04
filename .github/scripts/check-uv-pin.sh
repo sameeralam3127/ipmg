@@ -8,7 +8,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 
 sh_version="$(sed -n 's/^UV_VERSION="\(.*\)"$/\1/p' install.sh)"
-sh_installer_hash="$(sed -n 's/^UV_INSTALLER_SHA256="\(.*\)"$/\1/p' install.sh)"
+sh_installer_hash="$(sed -n 's/^UV_INSTALLER_SHA256="\([0-9a-f]*\)".*$/\1/p' install.sh)"
 ps_version="$(sed -n "s/^\\\$UvVersion = '\\(.*\\)'\$/\\1/p" install.ps1)"
 
 if [ -z "$sh_version" ] || [ -z "$sh_installer_hash" ] || [ -z "$ps_version" ]; then
@@ -36,7 +36,7 @@ while read -r target hash; do
     echo "::error::install.ps1 has $hash for uv-$target.zip $sh_version, but astral publishes ${want:-nothing}"
     failed=1
   fi
-done < <(sed -n "s/^    '\\([a-z0-9_-]*\\)' *= '\\([0-9a-f]\\{64\\}\\)'\$/\\1 \\2/p" install.ps1)
+done < <(sed -n "s/^    '\\([a-z0-9_-]*\\)' *= '\\([0-9a-f]\\{64\\}\\)'.*\$/\\1 \\2/p" install.ps1)
 
 [ "$failed" -eq 0 ] && echo "uv $sh_version: the hashes in both installers match what astral publishes."
 exit "$failed"
