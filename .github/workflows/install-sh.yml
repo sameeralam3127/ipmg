@@ -4,16 +4,30 @@ name: Installer (install.sh)
 # (curl ... | bash), and it runs as root with --with-deps on minimal images.
 # This runs the checked-out script everywhere the README says it works, on
 # every change to it and weekly, since distributions and PyPI change under it.
+#
+# The script installs a release and checks it against that release's SHA256SUMS.
+# Releases cut before checksums existed have none, so these jobs build a release
+# from the checked-out tree with the script the release job runs, and point the
+# installer at it with IPMG_RELEASE_BASE_URL. The weekly run also installs the
+# real latest release.
 on:
   pull_request:
     branches: [main, v4]
     paths:
       - "install.sh"
+      - "install.ps1"
+      - ".github/scripts/release-assets.sh"
+      - ".github/scripts/tamper-release.py"
+      - ".github/scripts/check-uv-pin.sh"
       - ".github/workflows/install-sh.yml"
   push:
     branches: [main, v4]
     paths:
       - "install.sh"
+      - "install.ps1"
+      - ".github/scripts/release-assets.sh"
+      - ".github/scripts/tamper-release.py"
+      - ".github/scripts/check-uv-pin.sh"
       - ".github/workflows/install-sh.yml"
   schedule:
     - cron: "23 5 * * 1"
@@ -30,7 +44,50 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  fixture:
+    # A release as the release job would publish it: wheel, sdist, installers,
+    # hash-pinned requirements, and SHA256SUMS. The jobs below install from it.
+    name: build a release to install
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+
+      - name: Build and collect the release
+        run: |
+          uv build --out-dir dist
+          .github/scripts/release-assets.sh dist release
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release
+          path: release
+          if-no-files-found: error
+          retention-days: 1
+
+  uv-pin:
+    # The uv version and hashes written into both installers are still what
+    # astral publishes for that release.
+    name: pinned uv hashes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - run: .github/scripts/check-uv-pin.sh
+
   containers:
+    needs: fixture
     # As root, with --with-deps: the minimal-image path, where the installer
     # has to fetch curl, tar, gzip, and ping itself.
     name: ${{ matrix.image }} (root)
@@ -54,11 +111,17 @@ jobs:
         with:
           persist-credentials: false
 
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release
+          path: ${{ runner.temp }}/release
+
       - name: Install and scan in the image
         env:
           IMAGE: ${{ matrix.image }}
         run: |
-          docker run --rm -v "$PWD:/src:ro" "$IMAGE" sh -c '
+          docker run --rm -v "$PWD:/src:ro" -v "$RUNNER_TEMP/release:/release:ro" \
+            -e IPMG_RELEASE_BASE_URL=/release "$IMAGE" sh -c '
             set -e
             # Alpine has no bash; the README says to install it first.
             if ! command -v bash >/dev/null 2>&1; then apk add --no-cache bash; fi
@@ -70,6 +133,7 @@ jobs:
           '
 
   runners:
+    needs: fixture
     # As a normal user, without --with-deps: checks the ~/.local/bin path and
     # the PATH handling, with whatever the runner already has.
     name: ${{ matrix.os }} (user)
@@ -84,7 +148,14 @@ jobs:
         with:
           persist-credentials: false
 
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release
+          path: ${{ runner.temp }}/release
+
       - name: Install as a normal user
+        env:
+          IPMG_RELEASE_BASE_URL: ${{ runner.temp }}/release
         run: bash install.sh
 
       - name: Installed into ~/.local/bin, and it scans
@@ -95,6 +166,7 @@ jobs:
 
   versions:
     # --version, then a second run over that install, which must upgrade it.
+    needs: fixture
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -102,16 +174,120 @@ jobs:
         with:
           persist-credentials: false
 
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release
+          path: ${{ runner.temp }}/release
+
       - name: A pinned release
         run: |
-          bash install.sh --version 3.0.0
+          echo "IPMG_RELEASE_BASE_URL=$RUNNER_TEMP/release" >> "$GITHUB_ENV"
+          export IPMG_RELEASE_BASE_URL="$RUNNER_TEMP/release"
+          version="$(sed -n 's/.* ipmg-\(.*\)-py3-none-any\.whl$/\1/p' "$IPMG_RELEASE_BASE_URL/SHA256SUMS")"
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          bash install.sh --version "$version"
           "$HOME/.local/bin/ipmg" --version | tee version.txt
-          grep -q " 3\.0\.0$" version.txt
+          grep -qF " $version" version.txt
 
-      - name: Over an existing install, the latest release
+      - name: Over an older install, the latest release
         run: |
-          latest="$(curl -fsSL https://pypi.org/pypi/ipmg/json \
-            | python3 -c 'import json, sys; print(json.load(sys.stdin)["info"]["version"])')"
+          # The first step installed uv; this shell does not have it on PATH.
+          "$HOME/.local/bin/uv" tool install --force "ipmg==3.0.0"
+          "$HOME/.local/bin/ipmg" --version | grep -qF " 3.0.0"
           bash install.sh
           "$HOME/.local/bin/ipmg" --version | tee version.txt
-          grep -qF " $latest" version.txt
+          grep -qF " $VERSION" version.txt
+
+      - name: A version with no published checksums is refused
+        run: |
+          if bash install.sh --version 0.0.1 > refused.txt 2>&1; then
+            cat refused.txt; echo "::error::installed a version that is not in SHA256SUMS"; exit 1
+          fi
+          cat refused.txt
+
+  tamper:
+    # The installer must refuse a release that does not match its checksums,
+    # and leave nothing behind: no ipmg, and not even uv, since the files are
+    # checked before anything is installed.
+    name: refuses ${{ matrix.case }}
+    needs: fixture
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - case: a corrupted wheel
+            mode: wheel
+            message: "Checksum mismatch for ipmg-"
+          - case: a corrupted requirements file
+            mode: requirements
+            message: "Checksum mismatch for requirements-web.txt"
+          - case: a wheel missing from SHA256SUMS
+            mode: drop-wheel
+            message: "Expected one ipmg wheel in SHA256SUMS"
+          - case: a requirements file missing from SHA256SUMS
+            mode: drop-requirements
+            message: "has no entry for requirements-web.txt"
+          - case: a dependency whose hash does not match
+            mode: dependency-hash
+            message: "did not match its pinned hash"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release
+          path: ${{ runner.temp }}/release
+
+      - name: Run the installer against the tampered release
+        env:
+          MODE: ${{ matrix.mode }}
+          MESSAGE: ${{ matrix.message }}
+        run: |
+          python3 -I .github/scripts/tamper-release.py "$MODE" "$RUNNER_TEMP/release" "$RUNNER_TEMP/tampered"
+          export IPMG_RELEASE_BASE_URL="$RUNNER_TEMP/tampered"
+          if bash install.sh > refused.txt 2>&1; then
+            cat refused.txt; echo "::error::the installer accepted a tampered release"; exit 1
+          fi
+          cat refused.txt
+          grep -qF "$MESSAGE" refused.txt
+
+      - name: A mismatch names the file and both hashes
+        if: matrix.mode == 'wheel' || matrix.mode == 'requirements'
+        run: |
+          grep -q "expected: [0-9a-f]\{64\}" refused.txt
+          grep -q "actual: *[0-9a-f]\{64\}" refused.txt
+
+      - name: Nothing was left installed
+        run: |
+          if command -v ipmg; then echo "::error::ipmg is on PATH"; exit 1; fi
+          test ! -e "$HOME/.local/bin/ipmg"
+          test ! -e /usr/local/bin/ipmg
+          if [ "${{ matrix.mode }}" != dependency-hash ]; then
+            # Checked before uv is installed, so a bad download costs nothing.
+            test ! -e "$HOME/.local/bin/uv"
+          fi
+          if command -v uv >/dev/null && uv tool list | grep -q '^ipmg '; then
+            echo "::error::uv still has ipmg installed"; exit 1
+          fi
+
+  latest-release:
+    # The real thing, with no override: the latest GitHub release, its
+    # checksums, and PyPI for the pinned dependencies. Weekly, since it
+    # depends on a published release rather than on this change.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - run: bash install.sh
+
+      - run: |
+          "$HOME/.local/bin/ipmg" --version
+          "$HOME/.local/bin/ipmg" --input 127.0.0.1 --no-history --formats csv --fail-on-down

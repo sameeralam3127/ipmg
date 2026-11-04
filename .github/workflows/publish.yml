@@ -133,18 +133,55 @@ jobs:
           fi
           grep -q "ipmg\[web\]" web.txt
 
+  release-assets:
+    # The release job's checksums step, run on every change: the script that
+    # collects the assets and writes SHA256SUMS must work before a release
+    # depends on it, and the installer workflows test against its output.
+    name: release assets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+
+      - name: Build and collect the release assets
+        run: |
+          uv build --out-dir dist
+          .github/scripts/release-assets.sh dist release-assets
+
+      - name: SHA256SUMS covers every asset and every hash matches
+        working-directory: release-assets
+        run: |
+          sha256sum -c SHA256SUMS
+          for asset in install.sh install.ps1 requirements-web.txt ipmg-*.whl ipmg-*.tar.gz; do
+            grep -q "  $asset\$" SHA256SUMS || { echo "::error::SHA256SUMS does not list $asset"; exit 1; }
+          done
+          test "$(wc -l < SHA256SUMS)" -eq "$(find . -type f ! -name SHA256SUMS | wc -l)"
+
   release:
-    needs: [test, core-install]
+    needs: [test, core-install, release-assets]
     # main cuts releases; v4 cuts 4.0.0 betas (the branch groups in pyproject.toml).
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/v4')
     runs-on: ubuntu-latest
     environment: pypi
 
     # contents: push the release commit, tag and GitHub release.
-    # id-token: PyPI trusted publishing (OIDC).
+    # id-token: PyPI trusted publishing (OIDC), and the signing identity for
+    # the build attestations.
+    # attestations: record those attestations against the release's files.
     permissions:
       contents: write
       id-token: write
+      attestations: write
 
     steps:
       - name: Checkout repository
@@ -181,12 +218,44 @@ jobs:
         if: steps.release.outputs.released == 'true'
         run: python -m build
 
+      # The wheel and sdist, both installers as they are at the release tag,
+      # a hash-pinned dependency list, and SHA256SUMS over all of them. The
+      # installers check what they download against this file.
+      - name: Set up uv
+        if: steps.release.outputs.released == 'true'
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+
+      - name: Collect the release assets and write SHA256SUMS
+        if: steps.release.outputs.released == 'true'
+        run: .github/scripts/release-assets.sh dist release-assets
+
+      # Proves each file was built by this workflow, which a checksum hosted
+      # next to the file cannot: `gh attestation verify FILE --repo ...`.
+      - name: Attest the release assets
+        if: steps.release.outputs.released == 'true'
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: release-assets/*
+
       - name: Upload GitHub release assets
         uses: python-semantic-release/publish-action@99d4062dd393b5a7a62c5fe9ed78fb364b5674f2 # v10.7.0
         if: steps.release.outputs.released == 'true'
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           tag: ${{ steps.release.outputs.tag }}
+
+      # The wheel and sdist are already attached by the step above.
+      - name: Upload the installers and checksums
+        if: steps.release.outputs.released == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          gh release upload "$TAG" --clobber \
+            release-assets/install.sh \
+            release-assets/install.ps1 \
+            release-assets/requirements-web.txt \
+            release-assets/SHA256SUMS
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
