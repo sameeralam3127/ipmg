@@ -2,16 +2,25 @@ name: Installer
 
 # Runs install.ps1 for real on Windows, under both Windows PowerShell 5.1
 # (`powershell`) and PowerShell 7 (`pwsh`), the way a user would.
+#
+# The script installs a release and checks it against that release's SHA256SUMS.
+# Releases cut before checksums existed have none, so this builds a release from
+# the checked-out tree with the script the release job runs, and points the
+# installer at it with IPMG_RELEASE_BASE_URL.
 on:
   pull_request:
     branches: [main, v4]
     paths:
       - install.ps1
+      - .github/scripts/release-assets.sh
+      - .github/scripts/tamper-release.py
       - .github/workflows/installer.yml
   push:
     branches: [main, v4]
     paths:
       - install.ps1
+      - .github/scripts/release-assets.sh
+      - .github/scripts/tamper-release.py
       - .github/workflows/installer.yml
 
 permissions:
@@ -22,8 +31,38 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  fixture:
+    # A release as the release job would publish it: wheel, sdist, installers,
+    # hash-pinned requirements, and SHA256SUMS.
+    name: build a release to install
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+
+      - name: Build and collect the release
+        run: |
+          uv build --out-dir dist
+          .github/scripts/release-assets.sh dist release
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release
+          path: release
+          if-no-files-found: error
+          retention-days: 1
+
   windows:
     name: install.ps1 (${{ matrix.shell }})
+    needs: fixture
     runs-on: windows-latest
 
     strategy:
@@ -41,6 +80,11 @@ jobs:
         with:
           persist-credentials: false
 
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release
+          path: ${{ runner.temp }}/release
+
       # The runner ships uv; hide it, so the installer's own uv install runs.
       - name: Hide the runner's uv
         run: |
@@ -49,9 +93,74 @@ jobs:
           }
           if (Get-Command uv -ErrorAction SilentlyContinue) { throw 'uv is still on PATH' }
 
+      # Each tampered release must be refused with a thrown error, before uv
+      # or ipmg is installed. They run first, on a machine with nothing yet.
+      - name: Refuse a tampered release
+        run: |
+          $cases = @(
+            @{ Mode = 'wheel';             Message = 'Checksum mismatch for ipmg-' },
+            @{ Mode = 'requirements';      Message = 'Checksum mismatch for requirements-web.txt' },
+            @{ Mode = 'drop-wheel';        Message = 'Expected one ipmg wheel in SHA256SUMS' },
+            @{ Mode = 'drop-requirements'; Message = 'has no entry for requirements-web.txt' }
+          )
+          foreach ($case in $cases) {
+            $tampered = Join-Path $env:RUNNER_TEMP "tampered-$($case.Mode)"
+            python -I .github/scripts/tamper-release.py $case.Mode "$env:RUNNER_TEMP\release" $tampered
+            if ($LASTEXITCODE -ne 0) { throw "could not build the $($case.Mode) release" }
+
+            $env:IPMG_RELEASE_BASE_URL = $tampered
+            $failure = $null
+            try {
+              Get-Content -Raw ./install.ps1 | Invoke-Expression
+            } catch {
+              $failure = $_.Exception.Message
+            }
+            Remove-Item Env:IPMG_RELEASE_BASE_URL
+
+            if (-not $failure) { throw "the installer accepted a release with $($case.Mode) tampered" }
+            Write-Host "[$($case.Mode)] $failure"
+            if (-not $failure.Contains($case.Message)) {
+              throw "expected the error to say '$($case.Message)'"
+            }
+            if ($case.Mode -in 'wheel', 'requirements') {
+              if ($failure -notmatch 'expected: [0-9a-f]{64}' -or $failure -notmatch 'actual: +[0-9a-f]{64}') {
+                throw 'a mismatch should name both hashes'
+              }
+            }
+
+            # Nothing was installed, and uv was not even fetched.
+            if (Get-Command ipmg -ErrorAction SilentlyContinue) { throw 'ipmg is on PATH' }
+            if (Get-Command uv -ErrorAction SilentlyContinue) { throw 'uv was installed before the checks passed' }
+            if (Test-Path (Join-Path $HOME '.local\bin\ipmg.exe')) { throw 'ipmg.exe was left behind' }
+          }
+
+      # A dependency whose pinned hash does not match is caught after the
+      # install, by --require-hashes, and IPMG is removed again.
+      - name: Refuse a dependency with the wrong hash
+        run: |
+          $tampered = Join-Path $env:RUNNER_TEMP 'tampered-dependency'
+          python -I .github/scripts/tamper-release.py dependency-hash "$env:RUNNER_TEMP\release" $tampered
+          if ($LASTEXITCODE -ne 0) { throw 'could not build the release' }
+
+          $env:IPMG_RELEASE_BASE_URL = $tampered
+          $failure = $null
+          try {
+            Get-Content -Raw ./install.ps1 | Invoke-Expression
+          } catch {
+            $failure = $_.Exception.Message
+          }
+          Remove-Item Env:IPMG_RELEASE_BASE_URL
+
+          if (-not $failure) { throw 'the installer accepted a dependency with the wrong hash' }
+          Write-Host $failure
+          if (-not $failure.Contains('did not match its pinned hash')) { throw 'wrong error' }
+          if (Test-Path (Join-Path $HOME '.local\bin\ipmg.exe')) { throw 'ipmg.exe was left behind' }
+
       # As the README says to run it: piped into iex, with no arguments.
       - name: Install with irm | iex
-        run: Get-Content -Raw ./install.ps1 | Invoke-Expression
+        run: |
+          $env:IPMG_RELEASE_BASE_URL = "$env:RUNNER_TEMP\release"
+          Get-Content -Raw ./install.ps1 | Invoke-Expression
 
       - name: A new session finds ipmg on the user PATH
         run: |
@@ -62,9 +171,34 @@ jobs:
 
       - name: Pin a release with -Version
         run: |
-          & ([scriptblock]::Create((Get-Content -Raw ./install.ps1))) -Version 2.3.0
+          $env:IPMG_RELEASE_BASE_URL = "$env:RUNNER_TEMP\release"
+          $wheel = (Get-ChildItem "$env:RUNNER_TEMP\release\ipmg-*.whl").Name
+          $release = $wheel -replace '^ipmg-(.+)-py3-none-any\.whl$', '$1'
+          & ([scriptblock]::Create((Get-Content -Raw ./install.ps1))) -Version $release
           $version = (& (Join-Path (uv tool dir --bin) 'ipmg.exe') --version | Out-String)
-          if ($version -notmatch '2\.3\.0') { throw "expected 2.3.0, got $version" }
+          if ($version -notmatch [regex]::Escape($release)) { throw "expected $release, got $version" }
 
-      - name: Run it a second time (an upgrade over an existing install)
-        run: Get-Content -Raw ./install.ps1 | Invoke-Expression
+      - name: A version with no published checksums is refused
+        run: |
+          $env:IPMG_RELEASE_BASE_URL = "$env:RUNNER_TEMP\release"
+          $failure = $null
+          try {
+            & ([scriptblock]::Create((Get-Content -Raw ./install.ps1))) -Version 0.0.1
+          } catch {
+            $failure = $_.Exception.Message
+          }
+          if (-not $failure) { throw 'the installer accepted a version that is not in SHA256SUMS' }
+          Write-Host $failure
+
+      - name: Run it over an older install (an upgrade)
+        run: |
+          $env:IPMG_RELEASE_BASE_URL = "$env:RUNNER_TEMP\release"
+          # An earlier step installed uv; this new session does not have it on PATH.
+          $env:Path = "$HOME\.local\bin;$env:Path"
+          uv tool install --force "ipmg==2.3.0"
+          if ((& (Join-Path (uv tool dir --bin) 'ipmg.exe') --version | Out-String) -notmatch '2\.3\.0') { throw 'expected 2.3.0' }
+          Get-Content -Raw ./install.ps1 | Invoke-Expression
+          $wheel = (Get-ChildItem "$env:RUNNER_TEMP\release\ipmg-*.whl").Name
+          $release = $wheel -replace '^ipmg-(.+)-py3-none-any\.whl$', '$1'
+          $version = (& (Join-Path (uv tool dir --bin) 'ipmg.exe') --version | Out-String)
+          if ($version -notmatch [regex]::Escape($release)) { throw "expected $release, got $version" }

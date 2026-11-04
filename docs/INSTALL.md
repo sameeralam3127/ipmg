@@ -5,6 +5,7 @@
 [Requirements](#requirements-and-platform-support) ·
 [Python 3.10 or newer](#python-310-or-newer) ·
 [One-line installers](#one-line-installers) ·
+[Verify before you run](#verify-before-you-run) ·
 [Docker](#running-in-docker) ·
 [pip](#installing-with-pip) ·
 [What gets installed](#what-gets-installed) ·
@@ -108,8 +109,8 @@ irm https://raw.githubusercontent.com/sameeralam3127/ipmg/main/install.ps1 | iex
 It works in Windows PowerShell 5.1 and PowerShell 7 and needs no
 administrator rights: it installs uv if it is missing, installs IPMG, adds it
 to your user `PATH`, and checks that `ipmg --version` runs. To pin a release,
-replace `X.Y.Z` with any version listed on
-[PyPI](https://pypi.org/project/ipmg/#history):
+replace `X.Y.Z` with a release number, 4.2.1 or newer (see
+[releases](https://github.com/sameeralam3127/ipmg/releases)):
 
 ```powershell
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/sameeralam3127/ipmg/main/install.ps1))) -Version X.Y.Z
@@ -128,6 +129,101 @@ Then check it works, on any platform:
 ```bash
 ipmg --version
 ```
+
+## Verify before you run
+
+Piping a script into a shell trusts whatever is at that URL right now. If you
+would rather read the installer and check it first, use the copy attached to a
+release. Every release (4.2.1 and newer) carries these files:
+
+| File | What it is |
+| --- | --- |
+| `install.sh`, `install.ps1` | The installers, as they were at that release's tag |
+| `ipmg-X.Y.Z-py3-none-any.whl`, `ipmg-X.Y.Z.tar.gz` | The wheel and the source distribution |
+| `requirements-web.txt` | Every dependency of `ipmg[web]`, pinned to one version and its SHA256 hashes |
+| `SHA256SUMS` | The SHA256 of every file above |
+
+**Linux and macOS:**
+
+```bash
+VERSION=X.Y.Z   # a release from https://github.com/sameeralam3127/ipmg/releases
+BASE=https://github.com/sameeralam3127/ipmg/releases/download/v$VERSION
+curl -fsSLO $BASE/install.sh -O $BASE/SHA256SUMS
+
+sha256sum -c SHA256SUMS --ignore-missing      # macOS: shasum -a 256 -c SHA256SUMS --ignore-missing
+less install.sh                               # read it
+bash install.sh --version $VERSION
+```
+
+**Windows (PowerShell):**
+
+```powershell
+$Version = 'X.Y.Z'
+$Base = "https://github.com/sameeralam3127/ipmg/releases/download/v$Version"
+Invoke-WebRequest "$Base/install.ps1" -OutFile install.ps1
+Invoke-WebRequest "$Base/SHA256SUMS" -OutFile SHA256SUMS
+
+# The line for install.ps1 must show the same hash as Get-FileHash.
+Select-String 'install.ps1' SHA256SUMS
+(Get-FileHash install.ps1 -Algorithm SHA256).Hash.ToLower()
+
+Get-Content install.ps1   # read it
+.\install.ps1 -Version $Version
+```
+
+If you have the [GitHub CLI](https://cli.github.com/), you can also check that
+GitHub's own build produced a file, which a checksum fetched from the same
+place cannot show:
+
+```bash
+gh attestation verify install.sh --repo sameeralam3127/ipmg
+```
+
+Each release's files are attested with GitHub artifact attestations, signed by
+the release workflow (`.github/workflows/publish.yml`). The wheel and sdist
+uploaded to PyPI carry [PEP 740](https://peps.python.org/pep-0740/) attestations
+as well, made by PyPI trusted publishing; PyPI shows them on each file's page.
+
+### What the installers check
+
+Once running, `install.sh` and `install.ps1` fetch the release's `SHA256SUMS`
+and then check every file against it before installing anything:
+
+- **IPMG itself.** The wheel is downloaded from the release, not from PyPI,
+  and installed only if its SHA256 is the one listed.
+- **Its dependencies.** They are installed from `requirements-web.txt` with
+  `--require-hashes`, at the exact versions and hashes of the release. uv's
+  `tool install` does not check hashes, so the installer places the verified
+  wheel with the pinned versions and then reinstalls every dependency with
+  hashes enforced; if one does not match, IPMG is removed again.
+- **uv**, when it is not installed already. The installers fetch one pinned
+  uv version, and check it against a SHA256 written in the installer
+  itself. They never fetch "the latest uv".
+
+A file that does not match, a file `SHA256SUMS` does not list, or a release with
+no `SHA256SUMS` stops the install with an error naming the file (and, for a
+mismatch, both hashes). It never falls back to an unverified install. For that
+reason the installers refuse releases before 4.2.1, which have no checksums:
+install those with `uv tool install "ipmg[web]==X.Y.Z"`.
+
+### What it cannot check
+
+- **The one-liner trusts the repository.** `curl ... /main/install.sh | bash`
+  runs whatever is on the `main` branch at that moment, over TLS. The checks
+  above start only once that script is running. That is the reason for the
+  steps above: a script from a tagged release, whose hash you compared, is
+  the same file every time.
+- **`SHA256SUMS` is not signed.** It arrives from the same release as the files
+  it lists, so it catches a corrupt or mismatched download, not an attacker
+  who can rewrite the whole release. For that, use `gh attestation verify`.
+- **Python.** When no suitable Python is installed, uv downloads one and
+  verifies it itself; IPMG does not check it further.
+
+The installers install a wheel they downloaded to a temporary folder, so
+`uv tool upgrade ipmg` has nothing to fetch afterwards. Upgrade by running the
+installer again, as in [Upgrading from 3.x](#upgrading-from-3x).
+
+---
 
 ## Running in Docker
 
@@ -285,8 +381,8 @@ one of them.
 uv tool install ipmg
 ```
 
-**Pin a specific version** (any release listed on
-[PyPI](https://pypi.org/project/ipmg/#history)):
+**Pin a specific version** (4.2.1 or newer, the releases that publish
+checksums; install older ones with `uv tool install "ipmg[web]==X.Y.Z"`):
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/sameeralam3127/ipmg/main/install.sh | bash -s -- --version X.Y.Z
@@ -303,9 +399,12 @@ pip install -e ".[dev]"
 **Upgrade or remove:**
 
 ```bash
-uv tool upgrade ipmg
+uv tool upgrade ipmg        # if you installed with uv tool install
 uv tool uninstall ipmg
 ```
+
+If you installed with the one-line installer, upgrade by running it again: it
+installs a downloaded wheel, so `uv tool upgrade` has nothing to fetch.
 
 ---
 

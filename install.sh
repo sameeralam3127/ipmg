@@ -14,6 +14,12 @@
 #   --help             show this help
 #
 # Environment: IPMG_VERSION, IPMG_WITH_DEPS=1 do the same as the flags.
+#
+# What it verifies: IPMG's wheel and its hash-pinned dependency list are
+# downloaded from a GitHub release and checked against that release's
+# SHA256SUMS before anything is installed; uv's installer is pinned to one
+# version and checked against a hash written in this script. A mismatch or a
+# missing checksum stops the install. See docs/INSTALL.md, "Verify before you run".
 
 # busybox sh (Alpine) and dash (Debian's /bin/sh) cannot parse what follows,
 # so hand the script to bash when it was started some other way.
@@ -29,7 +35,20 @@ fi
 set -Eeuo pipefail
 
 PACKAGE="ipmg"
+REPO="sameeralam3127/ipmg"
 MAX_RETRIES=3
+
+# The uv this installer fetches when uv is missing, and the SHA256 of its
+# uv-installer.sh (which in turn checks the uv archive against hashes written
+# inside it). To move to a newer uv, change both together:
+#   curl -fsSL https://github.com/astral-sh/uv/releases/download/<version>/uv-installer.sh | sha256sum
+# CI fails when the hash no longer matches what astral publishes.
+UV_VERSION="0.13.7"
+UV_INSTALLER_SHA256="d263ee68314cf5bea36b08e6bd9e2c4563240d7adb73756cf33af5c199b92db4"
+
+# TEST ONLY: a directory or URL holding SHA256SUMS and the release files, in
+# place of the GitHub release. CI points it at a deliberately corrupted copy.
+IPMG_RELEASE_BASE_URL="${IPMG_RELEASE_BASE_URL:-}"
 IPMG_VERSION="${IPMG_VERSION:-}"
 WITH_DEPS="${IPMG_WITH_DEPS:-0}"
 
@@ -51,6 +70,10 @@ Options (pass them after `| bash -s --`):
   --help             show this help
 
 Environment: IPMG_VERSION, IPMG_WITH_DEPS=1 do the same as the flags.
+
+Every download is checked against a published SHA256 before it is installed.
+To read and check this script first, see "Verify before you run" in
+https://github.com/sameeralam3127/ipmg/blob/main/docs/INSTALL.md
 USAGE
   exit 0
 }
@@ -69,6 +92,68 @@ retry() {
   done
 }
 
+# -------------------------------------------------------------- verified downloads
+WORK=""
+cleanup() { [[ -z "$WORK" ]] || rm -rf "$WORK"; }
+trap cleanup EXIT
+
+# download SOURCE DEST. SOURCE is an https URL, or (for the test override) a
+# local path or file:// URL.
+download() {
+  local source="$1" dest="$2"
+  case "$source" in
+    file://*) cp "${source#file://}" "$dest" ;;
+    /*)       cp "$source" "$dest" ;;
+    *)
+      if have curl; then curl -fsSL -o "$dest" "$source"
+      else wget -qO "$dest" "$source"
+      fi
+      ;;
+  esac
+}
+
+sha256_of() {
+  if have sha256sum; then sha256sum "$1" | cut -d' ' -f1
+  elif have shasum;  then shasum -a 256 "$1" | cut -d' ' -f1
+  else openssl dgst -sha256 "$1" | sed 's/^.*= *//'
+  fi
+}
+
+# verify FILE LABEL EXPECTED: stops the install unless FILE hashes to EXPECTED.
+verify_sha256() {
+  local file="$1" label="$2" expected="$3" actual
+  actual="$(sha256_of "$file")"
+  if [[ "$actual" != "$expected" ]]; then
+    error "Checksum mismatch for ${label}; nothing was installed.
+  expected: ${expected}
+  actual:   ${actual}
+The download is corrupt or has been tampered with. Try again, and if it keeps
+failing, report it at https://github.com/${REPO}/issues"
+  fi
+}
+
+# The hash SHA256SUMS lists for NAME; empty when it has no such entry.
+checksum_for() {
+  local want="$1" hash name
+  while read -r hash name; do
+    name="${name#\*}"
+    if [[ "$name" == "$want" ]]; then printf '%s' "$hash"; return 0; fi
+  done < "${WORK}/SHA256SUMS"
+  return 0
+}
+
+# fetch_checked NAME: downloads NAME from the release and verifies it against
+# SHA256SUMS. A file the checksums do not list is refused, not skipped.
+fetch_checked() {
+  local name="$1" expected
+  expected="$(checksum_for "$name")"
+  [[ -n "$expected" ]] || error "SHA256SUMS in ${RELEASE_BASE} has no entry for ${name}; nothing was installed.
+Refusing to install a file that has no published checksum."
+  retry download "${RELEASE_BASE}/${name}" "${WORK}/${name}" \
+    || error "Could not download ${RELEASE_BASE}/${name}"
+  verify_sha256 "${WORK}/${name}" "$name" "$expected"
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --with-deps|--with-ping) WITH_DEPS=1; shift ;;
@@ -78,6 +163,8 @@ while [[ $# -gt 0 ]]; do
     *) error "Unknown option: $1  (try --help)" ;;
   esac
 done
+
+IPMG_VERSION="${IPMG_VERSION#v}"
 
 # -------------------------------------------------------------- platform
 OS="$(uname -s)"
@@ -172,6 +259,11 @@ then re-run this installer (or re-run it with --with-deps to have it do this for
   fi
 fi
 
+if ! have sha256sum && ! have shasum && ! have openssl; then
+  error "Cannot verify downloads: none of sha256sum, shasum, or openssl is installed.
+Install coreutils (or openssl), then re-run this installer."
+fi
+
 # -------------------------------------------------------------- install target
 if [[ "${EUID}" -eq 0 ]]; then
   # Root usually means a server or a container image build, where a
@@ -191,22 +283,73 @@ export UV_INSTALL_DIR="$BIN_DIR"
 export UV_TOOL_BIN_DIR="$BIN_DIR"
 export PATH="${BIN_DIR}:${PATH}"
 
+# -------------------------------------------------------------- release files
+# Fetched and checked before anything is installed, uv included, so a bad
+# download leaves nothing behind. SHA256SUMS comes from the release (over
+# TLS), and every other file must match the hash it lists.
+WORK="$(mktemp -d)"
+
+if [[ -n "$IPMG_VERSION" ]]; then
+  RELEASE_BASE="${IPMG_RELEASE_BASE_URL:-https://github.com/${REPO}/releases/download/v${IPMG_VERSION}}"
+else
+  RELEASE_BASE="${IPMG_RELEASE_BASE_URL:-https://github.com/${REPO}/releases/latest/download}"
+fi
+
+log "Fetching the checksums for IPMG ${IPMG_VERSION:-(latest release)}..."
+retry download "${RELEASE_BASE}/SHA256SUMS" "${WORK}/SHA256SUMS" \
+  || error "Could not download ${RELEASE_BASE}/SHA256SUMS
+Releases before 4.2.1 have no checksums, so this installer will not install them.
+For those, install by hand: uv tool install '${PACKAGE}[web]==${IPMG_VERSION:-X.Y.Z}'"
+
+# The wheel is the one file named ipmg-<version>-py3-none-any.whl.
+WHEEL_NAME=""
+WHEEL_COUNT=0
+while read -r _hash _name; do
+  _name="${_name#\*}"
+  case "$_name" in
+    "${PACKAGE}"-*-py3-none-any.whl) WHEEL_NAME="$_name"; WHEEL_COUNT=$((WHEEL_COUNT + 1)) ;;
+  esac
+done < "${WORK}/SHA256SUMS"
+[[ "$WHEEL_COUNT" -eq 1 ]] \
+  || error "Expected one ${PACKAGE} wheel in SHA256SUMS, found ${WHEEL_COUNT}; nothing was installed."
+
+if [[ -n "$IPMG_VERSION" && "$WHEEL_NAME" != "${PACKAGE}-${IPMG_VERSION}-py3-none-any.whl" ]]; then
+  error "SHA256SUMS lists ${WHEEL_NAME}, not IPMG ${IPMG_VERSION}; nothing was installed.
+--version takes a release number such as 4.2.1."
+fi
+
+if [[ -z "$IPMG_VERSION" ]]; then
+  # "Latest" was only used to find the version. Everything else comes from
+  # that release's own tag, so a release cut in between cannot mix files.
+  IPMG_VERSION="${WHEEL_NAME#"${PACKAGE}"-}"
+  IPMG_VERSION="${IPMG_VERSION%%-*}"
+  if [[ -z "$IPMG_RELEASE_BASE_URL" ]]; then
+    RELEASE_BASE="https://github.com/${REPO}/releases/download/v${IPMG_VERSION}"
+  fi
+fi
+
+REQUIREMENTS_NAME="requirements-web.txt"
+fetch_checked "$WHEEL_NAME"
+fetch_checked "$REQUIREMENTS_NAME"
+log "Verified ${WHEEL_NAME} and ${REQUIREMENTS_NAME} against SHA256SUMS."
+
 # -------------------------------------------------------------- uv
 if have uv; then
   log "uv is already installed."
 else
-  log "Installing uv (it brings its own Python, so no system Python is needed)..."
-  if have curl; then
-    fetch_uv() { curl -LsSf https://astral.sh/uv/install.sh | sh; }
-  else
-    fetch_uv() { wget -qO- https://astral.sh/uv/install.sh | sh; }
-  fi
-
-  if ! retry fetch_uv; then
-    error "Could not download and run the uv installer.
-Check that this machine can reach https://astral.sh, or install uv by hand:
+  log "Installing uv ${UV_VERSION} (it brings its own Python, so no system Python is needed)..."
+  UV_INSTALLER_URL="https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-installer.sh"
+  retry download "$UV_INSTALLER_URL" "${WORK}/uv-installer.sh" \
+    || error "Could not download ${UV_INSTALLER_URL}
+Check that this machine can reach https://github.com, or install uv by hand:
   https://docs.astral.sh/uv/getting-started/installation/"
-  fi
+  verify_sha256 "${WORK}/uv-installer.sh" "uv-installer.sh (uv ${UV_VERSION})" "$UV_INSTALLER_SHA256"
+
+  # uv's installer then checks the uv archive against hashes written inside it.
+  retry sh "${WORK}/uv-installer.sh" \
+    || error "The uv installer failed.
+Install uv by hand, then re-run this installer:
+  https://docs.astral.sh/uv/getting-started/installation/"
 
   if [[ -f "${BIN_DIR}/env" ]]; then
     # shellcheck disable=SC1090,SC1091
@@ -218,10 +361,8 @@ fi
 
 # -------------------------------------------------------------- ipmg
 # The web extra too: someone running the one-liner expects `ipmg web` to work.
-TARGET="${PACKAGE}[web]"
-if [[ -n "$IPMG_VERSION" ]]; then
-  TARGET="${PACKAGE}[web]==${IPMG_VERSION}"
-fi
+TARGET="${PACKAGE}[web] @ file://${WORK}/${WHEEL_NAME}"
+REQUIREMENTS="${WORK}/${REQUIREMENTS_NAME}"
 
 # IPMG 4 needs Python 3.10 or newer. Asked for explicitly, uv uses a system
 # Python that new enough or downloads one; left to itself on RHEL 9 or
@@ -229,15 +370,27 @@ fi
 # older IPMG release that still supports it.
 PYTHON_REQUEST=">=3.10"
 
-log "Installing ${TARGET} from PyPI..."
-if ! retry uv tool install --python "$PYTHON_REQUEST" --upgrade "$TARGET"; then
+# uv tool install does not check hashes (a wrong one in a constraints file is
+# ignored), so it only places the verified wheel and the pinned versions;
+# the dependencies are then reinstalled with --require-hashes below.
+# --no-build: a source distribution would run code no hash has vouched for.
+log "Installing ${PACKAGE} ${IPMG_VERSION} from the verified wheel..."
+if ! retry uv tool install --python "$PYTHON_REQUEST" --no-build --constraints "$REQUIREMENTS" --upgrade "$TARGET"; then
   warn "Upgrade failed; retrying with a clean reinstall (this recovers from a previous
 install of '${PACKAGE}' from a different source, e.g. an older Git-based install)."
-  if ! retry uv tool install --python "$PYTHON_REQUEST" --force "$TARGET"; then
-    error "Could not install '${TARGET}'.
+  if ! retry uv tool install --python "$PYTHON_REQUEST" --no-build --constraints "$REQUIREMENTS" --force "$TARGET"; then
+    error "Could not install '${PACKAGE}' ${IPMG_VERSION} from ${WHEEL_NAME}.
 Try it by hand to see the full error:
-  uv tool install --python '${PYTHON_REQUEST}' --force ${TARGET}"
+  uv tool install --python '${PYTHON_REQUEST}' --no-build --force '${TARGET}'"
   fi
+fi
+
+log "Checking every dependency against its pinned hash..."
+TOOL_PYTHON="$(uv tool dir)/${PACKAGE}/bin/python"
+if ! uv pip install --python "$TOOL_PYTHON" --reinstall --require-hashes --no-build --requirement "$REQUIREMENTS"; then
+  uv tool uninstall "$PACKAGE" >/dev/null 2>&1 || true
+  error "A dependency did not match its pinned hash in ${REQUIREMENTS_NAME}; IPMG was removed again.
+See the uv error above for the package. Nothing unverified was left installed."
 fi
 
 # -------------------------------------------------------------- PATH

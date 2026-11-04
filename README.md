@@ -70,6 +70,10 @@ curl -sSL https://raw.githubusercontent.com/sameeralam3127/ipmg/main/install.sh 
 irm https://raw.githubusercontent.com/sameeralam3127/ipmg/main/install.ps1 | iex
 ```
 
+Both installers check every file they download against the release's published
+checksums. To read and verify the installer before running it, see
+[Verify before you run](https://github.com/sameeralam3127/ipmg/blob/main/docs/INSTALL.md#verify-before-you-run).
+
 Or from PyPI, with Python 3.10 or newer:
 
 ```bash
