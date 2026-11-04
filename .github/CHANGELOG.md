@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v4.2.1 (2026-11-04)
+
+### Bug Fixes
+
+- Verify what the installers download and publish release checksums
+  ([#143](https://github.com/sameeralam3127/ipmg/pull/143),
+  [`c308c44`](https://github.com/sameeralam3127/ipmg/commit/c308c440482040a3475b3e0b98683373a3d754da))
+
+### Continuous Integration
+
+- Allowlist the pinned uv hashes in the secret scan
+  ([#143](https://github.com/sameeralam3127/ipmg/pull/143),
+  [`c308c44`](https://github.com/sameeralam3127/ipmg/commit/c308c440482040a3475b3e0b98683373a3d754da))
+
+- Sync the Docker Hub description on prereleases too
+  ([#142](https://github.com/sameeralam3127/ipmg/pull/142),
+  [`080a064`](https://github.com/sameeralam3127/ipmg/commit/080a064960cb95f06fc4b261fcd0522bab3c2966))
+
+
 ## v4.2.0 (2026-10-30)
 
 ### Continuous Integration
