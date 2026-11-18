@@ -544,7 +544,9 @@ def test_duplicate_timestamps_are_ordered_by_scan_id():
         Sample(at(10), "Active", 5.0, 3),
     ]
     (outage,) = analyse(samples)["outage_list"]
+    # Read in input order the failure would start after the reply and never recover.
     assert outage["started_at"] == "2026-11-01 00:00:00" and not outage["ongoing"]
+    assert outage["ended_at"] == "2026-11-01 00:10:00" and outage["duration_s"] == 600
 
 
 def test_analyse_attaches_sla_status_only_when_there_is_a_target():
@@ -610,3 +612,28 @@ def test_random_histories_agree_with_a_plain_reference():
         for key in ("mttr_s", "mtbf_s", "longest_s"):
             value = report["outages"][key]
             assert value is None or math.isfinite(value)
+
+
+# ----------------------------------------- limits compare unrounded latencies
+
+
+def test_a_p95_that_only_rounds_to_the_limit_still_breaks_it():
+    samples = [Sample(at(i), "Active", 10.004) for i in range(5)]
+    report = analyse(samples, sla=SlaTarget(99, 10.0))
+    assert report["latency"]["p95"] == 10.0  # displayed rounded
+    assert report["sla"]["latency_met"] is False
+    assert [v["kind"] for v in report["sla"]["violations"]] == ["latency"]
+    assert report["sla"]["violations"][0]["observed"] == 10.0
+
+
+def test_a_latency_exactly_on_the_limit_stays_compliant():
+    samples = [Sample(at(i), "Active", 10.0) for i in range(5)]
+    sla = analyse(samples, sla=SlaTarget(99, 10.0))["sla"]
+    assert sla["latency_met"] is True and sla["violations"] == []
+
+
+def test_the_overall_and_daily_verdicts_use_the_same_unrounded_figure():
+    day_one = [Sample(datetime(2026, 11, 1, 1, i), "Active", 9.996) for i in range(5)]
+    day_two = [Sample(datetime(2026, 11, 2, 1, i), "Active", 10.004) for i in range(5)]
+    sla = analyse(day_one + day_two, sla=SlaTarget(99, 10.0))["sla"]
+    assert [v["date"] for v in sla["violations"]] == ["2026-11-02"]

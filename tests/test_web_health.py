@@ -764,3 +764,31 @@ def test_deleting_a_scan_removes_its_checks_from_the_figures(client, database):
     client.delete(f"/api/v1/scans/{ids[-1]}")
 
     assert health(client)["checks"] == 3
+
+
+def test_an_empty_host_on_a_window_is_refused_not_read_as_every_host(client):
+    now = datetime.now()
+    response = client.post(
+        "/api/v1/maintenance", json=window_body(now, now + timedelta(hours=1), ip="")
+    )
+    assert response.status_code == 400
+    assert client.get("/api/v1/maintenance").json() == []
+    assert client.get("/api/v1/maintenance?ip=").status_code == 400
+
+
+def test_an_explicit_null_host_still_means_every_host(client):
+    now = datetime.now()
+    row = client.post(
+        "/api/v1/maintenance", json=window_body(now, now + timedelta(hours=1), ip=None)
+    ).json()
+    assert row["ip"] is None
+
+
+def test_the_latency_limit_is_judged_on_the_unrounded_p95(client, database):
+    seed(database, "UUUUU", latency=10.004)
+    client.put(f"/api/v1/hosts/{IP}/sla", json={"availability_target": 99, "latency_p95_ms": 10})
+
+    sla = health(client)["sla"]
+
+    assert health(client)["latency"]["p95"] == 10.0
+    assert sla["latency_met"] is False and sla["violations"][0]["kind"] == "latency"

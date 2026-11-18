@@ -132,3 +132,59 @@ def test_changes_limit_bounds_how_many_scans_are_compared(client):
     changes = client.get("/api/v1/hosts/10.0.0.5/changes?limit=1").json()
 
     assert {c["scan_id"] for c in changes} == {3}
+
+
+# -------------------------------------------------- IP moves and IPv6 forms
+
+
+def test_an_ip_move_shows_on_both_the_old_and_the_new_address(tmp_path):
+    db = Database(tmp_path / "moves.db")
+    db.record_scan(
+        "lab", [HostResult("10.0.0.5", "Active", 4.0, "alpha", mac="AA:BB:CC:00:00:05")], {}, 1.0
+    )
+    db.record_scan(
+        "lab", [HostResult("10.0.0.8", "Active", 4.0, "alpha", mac="AA:BB:CC:00:00:05")], {}, 1.0
+    )
+    with TestClient(create_app(db, token="t"), headers={"Authorization": "Bearer t"}) as client:
+        new = client.get("/api/v1/hosts/10.0.0.8/changes").json()
+        old = client.get("/api/v1/hosts/10.0.0.5/changes").json()
+
+    assert [(c["type"], c["scan_id"], c["baseline_id"]) for c in new] == [("ip_changed", 2, 1)]
+    assert [(c["type"], c["scan_id"], c["baseline_id"]) for c in old] == [("ip_changed", 2, 1)]
+    assert new[0]["previous"] == "10.0.0.5" and new[0]["current"] == "10.0.0.8"
+
+
+def test_a_host_that_was_simply_not_in_a_scan_is_not_a_change(tmp_path):
+    db = Database(tmp_path / "gaps.db")
+    db.record_scan("lab", [HostResult("10.0.0.5", "Active", 4.0)], {}, 1.0)
+    db.record_scan("lab", [HostResult("10.0.0.9", "Active", 4.0)], {}, 1.0)
+    db.record_scan("lab", [HostResult("10.0.0.5", "Active", 4.0)], {}, 1.0)
+    with TestClient(create_app(db, token="t"), headers={"Authorization": "Bearer t"}) as client:
+        assert client.get("/api/v1/hosts/10.0.0.5/changes").json() == []
+        assert client.get("/api/v1/hosts/10.0.0.9/changes").json() == []
+
+
+def test_an_expanded_ipv6_target_is_found_by_its_canonical_address(tmp_path):
+    db = Database(tmp_path / "v6.db")
+    db.record_scan("lab", [HostResult("2001:0db8:0:0:0:0:0:1", "Active", 2.0, "v6")], {}, 1.0)
+    with TestClient(create_app(db, token="t"), headers={"Authorization": "Bearer t"}) as client:
+        for form in ("2001:db8::1", "2001:0db8:0:0:0:0:0:1", "2001:DB8::1"):
+            assert client.get(f"/api/v1/hosts/{form}").json()["ip"] == "2001:db8::1"
+        assert client.get("/api/v1/assets").json()[0]["ip"] == "2001:db8::1"
+
+
+def test_a_database_with_expanded_ipv6_rows_is_repaired_when_opened(tmp_path):
+    import sqlite3
+
+    path = tmp_path / "old.db"
+    db = Database(path)
+    db.record_scan("lab", [HostResult("::1", "Active", 1.0)], {}, 1.0)
+    with sqlite3.connect(path) as conn:
+        conn.execute("UPDATE results SET ip = '0:0:0:0:0:0:0:1'")
+
+    reopened = Database(path)
+
+    assert reopened.host_summary("::1") is not None
+    assert [row["ip"] for row in reopened.inventory()] == ["::1"]
+    Database(path)  # a second open changes nothing
+    assert reopened.host_summary("::1")["scan_count"] == 1

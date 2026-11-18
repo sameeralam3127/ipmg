@@ -579,7 +579,7 @@ def _register_maintenance_routes(
             None, description="Only windows that apply to this host: its own and every-host ones"
         ),
     ) -> list[dict[str, Any]]:
-        return database.list_maintenance(ip=_host_address(ip) if ip else None)
+        return database.list_maintenance(ip=_host_address(ip) if ip is not None else None)
 
     @api.post(
         "/maintenance",
@@ -589,7 +589,7 @@ def _register_maintenance_routes(
         summary="Plan a maintenance window",
     )
     def create_maintenance(request: MaintenanceRequest) -> dict[str, Any]:
-        ip = _host_address(request.ip) if request.ip else None
+        ip = _host_address(request.ip) if request.ip is not None else None
         try:
             return availability.add_maintenance(
                 ip, request.starts_at, request.ends_at, request.reason

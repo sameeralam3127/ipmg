@@ -13,7 +13,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
-from ipmg.core.diff import DiffOptions, ScanDiff, ScanRef, compare_snapshots
+from ipmg.core.diff import ChangeType, DiffOptions, ScanDiff, ScanRef, compare_snapshots
 from ipmg.core.engine import HostResult, ScanConfig
 from ipmg.exceptions import HistoryError
 from ipmg.infrastructure.database import DEFAULT_DB_PATH, Database
@@ -141,22 +141,46 @@ class HistoryService:
     ) -> list[dict[str, Any]]:
         """What changed for one host, newest first.
 
-        Takes the scans that recorded ``ip`` and compares each with the scan of
-        the same source before it, so a source that stopped including the host
-        for a while is not read as the host vanishing. ``limit`` bounds how
-        many scans are compared, each a whole-scan comparison.
+        Each scan that recorded ``ip`` is compared with the scan of the same
+        source just before it, and a scan just after one that recorded it is
+        compared with that one. Where the host is in both, every change to it
+        counts. Where it is in only one, only an IP move does (the same
+        hostname or MAC now at a different address), so a host that simply was
+        not in a scan is not read as vanishing. ``limit`` bounds how many scan
+        pairs are compared, each a whole-scan comparison.
         """
-        scans = self._db.host_comparable_scans(ip, HOST_SCAN_WINDOW)
+        seen = self._db.host_comparable_scans(ip, HOST_SCAN_WINDOW)
+        if not seen:
+            return []
+        recorded = {scan["id"] for scan in seen}
+        # Start one scan early per source, so the first appearance has a baseline.
+        starts = []
+        for source in {scan["source"] for scan in seen}:
+            first = min(scan["id"] for scan in seen if scan["source"] == source)
+            starts.append(self._db.previous_scan_id(first, source=source) or first)
+        sequence = self._db.comparable_scan_sequence(
+            sorted({scan["source"] for scan in seen}), min(starts)
+        )
         previous_by_source: dict[str, dict[str, Any]] = {}
-        pairs: list[tuple[dict[str, Any], dict[str, Any]]] = []
-        for scan in reversed(scans):
+        pairs: list[tuple[dict[str, Any], dict[str, Any], bool]] = []
+        for scan in sequence:
             earlier = previous_by_source.get(scan["source"])
             if earlier is not None:
-                pairs.append((earlier, scan))
+                both = earlier["id"] in recorded and scan["id"] in recorded
+                if both or earlier["id"] in recorded or scan["id"] in recorded:
+                    pairs.append((earlier, scan, both))
             previous_by_source[scan["source"]] = scan
 
+        newest_first = sorted(pairs, key=lambda pair: -pair[1]["id"])
+        full = [pair for pair in newest_first if pair[2]][:limit]
+        # Boundary pairs only matter for IP moves; keep those within the same
+        # stretch of history as the full comparisons, and no more than ``limit``.
+        cutoff = full[-1][1]["id"] if len(full) == limit and full else 0
+        edges = [pair for pair in newest_first if not pair[2] and pair[1]["id"] >= cutoff][:limit]
+        chosen = sorted(full + edges, key=lambda pair: -pair[1]["id"])
+
         rows: list[dict[str, Any]] = []
-        for baseline, current in reversed(pairs[-limit:] if limit else []):
+        for baseline, current, both in chosen:
             diff = self.compare(baseline["id"], current["id"], options=options)
             rows.extend(
                 {
@@ -167,7 +191,7 @@ class HistoryService:
                     "source": current["source"],
                 }
                 for change in diff.changes
-                if change.ip == ip
+                if _concerns_host(change, ip, both)
             )
         return rows
 
@@ -178,3 +202,13 @@ class HistoryService:
         if ref is None:
             raise HistoryError(f"Scan #{scan_id} was not found in the history database.")
         return ref
+
+
+def _concerns_host(change: Any, ip: str, in_both: bool) -> bool:
+    """Whether a change belongs on ``ip``'s page, given whether both scans recorded it."""
+    if in_both and change.ip == ip:
+        return True
+    if change.type is ChangeType.IP_CHANGED:
+        # Reported on the address gained; ``previous`` names the ones given up.
+        return change.ip == ip or ip in (change.previous or "").split(", ")
+    return False

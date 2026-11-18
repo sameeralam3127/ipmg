@@ -159,7 +159,8 @@ to where you were.
   offline and online, hostname, MAC, IP moves, latency, and, for `ipmg --snmp`
   devices, reboots and interfaces going down or up. A different source never
   counts as a baseline, so scanning one host from two lists does not look like
-  flapping.
+  flapping. A host that moved to another address (same hostname or MAC) shows
+  the move on both pages; one that was simply left out of a scan shows nothing.
 - **SNMP**: for a polled device, the latest system group and interface table,
   and its uptime across polls.
 - **Export** the host's records as CSV or JSON.

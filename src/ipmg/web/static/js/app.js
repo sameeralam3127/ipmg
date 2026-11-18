@@ -1,6 +1,6 @@
 // App shell: hash router, theme toggle, and WebSocket bootstrap.
 
-import { connect } from "./api.js?v=20261118.2";
+import { connect } from "./api.js?v=20261118.3";
 import {
   aboutView,
   changesView,
@@ -12,7 +12,7 @@ import {
   newScanView,
   scanDetailView,
   schedulesView,
-} from "./views.js?v=20261118.2";
+} from "./views.js?v=20261118.3";
 
 // The GitHub Pages demo opens on the seeded dashboard so visitors see data
 // immediately; a real local dashboard opens straight into a new scan.

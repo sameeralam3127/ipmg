@@ -11,6 +11,7 @@ connection waits up to :data:`BUSY_TIMEOUT_S` for a lock instead of failing.
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import sqlite3
 import threading
@@ -211,6 +212,17 @@ def _now() -> str:
     return datetime.now().isoformat(sep=" ", timespec="seconds")
 
 
+def _canonical_ip(text: str) -> str:
+    """An IP address in its one canonical form, so ``2001:0db8::1`` and ``2001:db8::1`` meet.
+
+    Anything that is not an address is returned as it was.
+    """
+    try:
+        return str(ipaddress.ip_address(text))
+    except ValueError:
+        return text
+
+
 def _counter(value: int | None) -> int | None:
     return value if value is not None and value <= _SQLITE_MAX_INT else None
 
@@ -218,7 +230,7 @@ def _counter(value: int | None) -> int | None:
 def _snmp_device_row(scan_id: int, device: Any, polled_at: str) -> tuple:
     return (
         scan_id,
-        device.ip,
+        _canonical_ip(device.ip),
         int(device.ok),
         device.version,
         device.sys_name,
@@ -237,7 +249,7 @@ def _snmp_interface_rows(scan_id: int, device: Any) -> list[tuple]:
     return [
         (
             scan_id,
-            device.ip,
+            _canonical_ip(device.ip),
             interface.index,
             interface.name,
             interface.description,
@@ -286,6 +298,33 @@ class Database:
         ):
             if column not in columns:
                 conn.execute(statement)
+        Database._canonicalise_ipv6(conn)
+
+    @staticmethod
+    def _canonicalise_ipv6(conn: sqlite3.Connection) -> None:
+        """Rewrite IPv6 addresses stored in an expanded form, so lookups find them.
+
+        A target typed as ``2001:0db8:0:0:0:0:0:1`` used to be stored as typed.
+        Only addresses that are not already canonical are touched, so on an
+        up-to-date database this reads and changes nothing.
+        """
+        for ip in {
+            row[0] for row in conn.execute("SELECT DISTINCT ip FROM results WHERE ip LIKE '%:%'")
+        }:
+            if (canonical := _canonical_ip(ip)) != ip:
+                conn.execute("UPDATE results SET ip = ? WHERE ip = ?", (canonical, ip))
+        for ip in {
+            row[0]
+            for row in conn.execute("SELECT DISTINCT ip FROM snmp_devices WHERE ip LIKE '%:%'")
+        }:
+            if (canonical := _canonical_ip(ip)) != ip:
+                conn.execute("UPDATE snmp_devices SET ip = ? WHERE ip = ?", (canonical, ip))
+        for ip in {
+            row[0]
+            for row in conn.execute("SELECT DISTINCT ip FROM snmp_interfaces WHERE ip LIKE '%:%'")
+        }:
+            if (canonical := _canonical_ip(ip)) != ip:
+                conn.execute("UPDATE snmp_interfaces SET ip = ? WHERE ip = ?", (canonical, ip))
 
     @property
     def path(self) -> str:
@@ -329,7 +368,7 @@ class Database:
         rows = [
             (
                 scan_id,
-                result.ip,
+                _canonical_ip(result.ip),
                 result.status,
                 result.latency,
                 result.hostname,
@@ -830,9 +869,12 @@ class Database:
                 "latency_p95_ms = excluded.latency_p95_ms, updated_at = excluded.updated_at",
                 (ip, availability_target, latency_p95_ms, _now()),
             )
-        saved = self.get_sla(ip)
-        assert saved is not None
-        return saved
+            row = conn.execute(
+                "SELECT ip, availability_target, latency_p95_ms, updated_at "
+                "FROM host_sla WHERE ip = ?",
+                (ip,),
+            ).fetchone()
+        return dict(row)
 
     def delete_sla(self, ip: str) -> bool:
         with self._session() as conn:
@@ -880,6 +922,17 @@ class Database:
                 conn.execute("DELETE FROM maintenance_windows WHERE id = ?", (window_id,)).rowcount
                 > 0
             )
+
+    def comparable_scan_sequence(self, sources: Sequence[str], min_id: int) -> list[dict[str, Any]]:
+        """Comparable scans of ``sources`` from ``min_id`` on, oldest first."""
+        wanted = set(sources)
+        with self._session() as conn:
+            rows = conn.execute(
+                "SELECT id, source, started_at FROM scans "
+                "WHERE status IN (?, ?) AND id >= ? ORDER BY id",
+                (*COMPARABLE_STATUSES, min_id),
+            ).fetchall()
+        return [dict(row) for row in rows if row["source"] in wanted]
 
     def host_snmp(self, ip: str, limit: int = 50) -> list[dict[str, Any]]:
         """The host's SNMP polls, newest first, each with the interfaces it saw."""

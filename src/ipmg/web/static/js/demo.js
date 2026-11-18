@@ -101,12 +101,18 @@ let maintenanceWindows = [];
 let slaTargets = {};
 
 function demoHealth(ip, days) {
-  const asset = demo.assets().find((candidate) => candidate.ip === ip);
-  if (!asset) throw notSeen();
   const rows = hostHistory(ip);
+  if (!rows.length) throw notSeen();
   const end = demoTime(rows[rows.length - 1].checked_at);
   const start = new Date(end.getTime() - days * 86400000);
   const windows = maintenanceWindows.filter((w) => w.ip === null || w.ip === ip);
+  // Maintenance time inside [from, to), counting overlapping windows once.
+  const merged = windows.map((w) => [demoTime(w.starts_at).getTime(), demoTime(w.ends_at).getTime()]).sort((a, b) => a[0] - b[0]).reduce((out, [from, to]) => {
+    if (out.length && from <= out[out.length - 1][1]) out[out.length - 1][1] = Math.max(out[out.length - 1][1], to);
+    else out.push([from, to]);
+    return out;
+  }, []);
+  const overlapS = (from, to) => merged.reduce((n, [a, b]) => n + Math.max(0, Math.min(to.getTime(), b) - Math.max(from.getTime(), a)), 0) / 1000;
   const inWindow = (date) => windows.some((w) => demoTime(w.starts_at) <= date && date < demoTime(w.ends_at));
   const all = rows.map((row) => ({ ...row, at: demoTime(row.checked_at) })).filter((row) => row.at >= start && row.at <= end);
   const counted = all.filter((row) => !inWindow(row.at));
@@ -116,12 +122,12 @@ function demoHealth(ip, days) {
   let failed = 0;
   for (const row of counted) {
     if (row.status !== "Active") { if (!open) { open = row; failed = 0; } failed += 1; }
-    else if (open) { outages.push({ started_at: open.checked_at, ended_at: row.checked_at, duration_s: (row.at - open.at) / 1000, checks: failed, ongoing: false }); open = null; }
+    else if (open) { outages.push({ started_at: open.checked_at, ended_at: row.checked_at, duration_s: Math.max(0, (row.at - open.at) / 1000 - overlapS(open.at, row.at)), checks: failed, ongoing: false }); open = null; }
   }
-  if (open) outages.push({ started_at: open.checked_at, ended_at: null, duration_s: (counted[counted.length - 1].at - open.at) / 1000, checks: failed, ongoing: true });
+  if (open) outages.push({ started_at: open.checked_at, ended_at: null, duration_s: Math.max(0, (counted[counted.length - 1].at - open.at) / 1000 - overlapS(open.at, counted[counted.length - 1].at)), checks: failed, ongoing: true });
   const recovered = outages.filter((o) => !o.ongoing);
   const downtime = outages.reduce((n, o) => n + o.duration_s, 0);
-  const span = counted.length ? (counted[counted.length - 1].at - counted[0].at) / 1000 : 0;
+  const span = counted.length ? (counted[counted.length - 1].at - counted[0].at) / 1000 - overlapS(counted[0].at, counted[counted.length - 1].at) : 0;
   const latencies = up.map((row) => row.latency).filter((v) => v != null);
   const byDay = new Map();
   for (const row of counted) byDay.set(row.checked_at.slice(0, 10), [...(byDay.get(row.checked_at.slice(0, 10)) || []), row]);
@@ -155,10 +161,19 @@ function demoHealth(ip, days) {
 
 export const demo = {
   host: (ip) => {
+    const rows = hostHistory(ip);
+    if (!rows.length) throw notSeen();
     const asset = demo.assets().find((candidate) => candidate.ip === ip);
-    if (!asset) throw notSeen();
-    const active = hostHistory(ip).filter((row) => row.status === "Active");
-    return { ...asset, mac: null, vendor: null, snmp_descr: null, first_seen: active[0]?.checked_at || null, last_scan_id: scans[0].id };
+    const latest = rows[rows.length - 1];
+    const active = rows.filter((row) => row.status === "Active");
+    const latencies = active.map((row) => row.latency).filter((value) => value != null);
+    return {
+      ip, hostname: [...rows].reverse().find((row) => row.hostname)?.hostname || null, status: latest.status,
+      mac: null, vendor: null, snmp_name: asset?.snmp_name || null, snmp_descr: null,
+      avg_latency: latencies.length ? Number((latencies.reduce((n, v) => n + v, 0) / latencies.length).toFixed(2)) : null,
+      first_seen: active[0]?.checked_at || null, last_seen: active[active.length - 1]?.checked_at || null,
+      last_checked: latest.checked_at, last_scan_id: latest.scan_id, scan_count: rows.length,
+    };
   },
   health: demoHealth,
   maintenance: (ip) => maintenanceWindows.filter((w) => w.ip === null || w.ip === ip),
@@ -174,17 +189,26 @@ export const demo = {
   deleteMaintenance: (id) => { maintenanceWindows = maintenanceWindows.filter((w) => w.id !== id); return null; },
   setSla: (ip, payload) => { slaTargets = { ...slaTargets, [ip]: { ip, ...payload } }; return slaTargets[ip]; },
   clearSla: (ip) => { const { [ip]: _removed, ...rest } = slaTargets; slaTargets = rest; return null; },
-  availabilityReportUrl: (ip, _fmt, days) => `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(demoHealth(ip, days), null, 2))}`,
+  availabilityReportUrl: (ip, fmt, days) => {
+    const health = demoHealth(ip, days);
+    const rows = [["Availability", `${health.availability_pct ?? "n/a"}%`], ["Checks", health.checks], ["Latency P50 (ms)", health.latency.p50 ?? "n/a"], ["Latency P95 (ms)", health.latency.p95 ?? "n/a"], ["Latency P99 (ms)", health.latency.p99 ?? "n/a"], ["Outages", health.outages.count], ["MTTR (s)", health.outages.mttr_s ?? "n/a"], ["MTBF (s)", health.outages.mtbf_s ?? "n/a"]];
+    if (fmt === "csv") return `data:text/csv;charset=utf-8,${encodeURIComponent(["Metric,Value", ...rows.map(([name, value]) => `"${name}","${value}"`)].join("\n"))}`;
+    if (fmt === "md") return `data:text/markdown;charset=utf-8,${encodeURIComponent([`# Availability report: ${ip}`, "", `${health.window.starts_at} to ${health.window.ends_at}`, "", "| Metric | Value |", "| --- | --- |", ...rows.map(([name, value]) => `| ${name} | ${value} |`), "", `_${health.note}_`].join("\n"))}`;
+    return `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(health, null, 2))}`;
+  },
   hostResults: (ip) => hostHistory(ip).reverse(),
   hostChanges: (ip) => {
-    const rows = hostHistory(ip);
-    return rows.flatMap((row, index) => {
-      const before = rows.slice(0, index).reverse().find((earlier) => earlier.source === row.source);
+    const chronological = [...scans].reverse();
+    return hostHistory(ip).flatMap((row) => {
+      // The scan just before this one from the same source, whether or not it had the host.
+      const index = chronological.findIndex((scan) => scan.id === row.scan_id);
+      const previous = chronological.slice(0, index).reverse().find((scan) => scan.source === row.source);
+      const before = previous && scanRows(previous).find((candidate) => candidate.ip === ip);
       if (!before) return [];
-      const base = { ip, hostname: row.hostname, scan_id: row.scan_id, baseline_id: before.scan_id, started_at: row.started_at, source: row.source, delta: null };
+      const base = { ip, hostname: row.hostname, scan_id: row.scan_id, baseline_id: previous.id, started_at: row.started_at, source: row.source, delta: null };
       if (before.status !== row.status) {
-        const online = row.status === "Active";
-        return [{ ...base, type: online ? "host_online" : "host_offline", label: online ? "Host back online" : "Host offline", severity: online ? "info" : "critical", previous: before.status, current: row.status }];
+        const [type, label, severity] = before.status === "Active" ? ["host_offline", "Host offline", "critical"] : row.status === "Active" ? ["host_online", "Host back online", "info"] : ["service_changed", "Status changed", "warning"];
+        return [{ ...base, type, label, severity, previous: before.status, current: row.status }];
       }
       if (row.latency && before.latency && Math.abs(row.latency - before.latency) >= 5) {
         return [{ ...base, type: "latency_changed", label: "Latency changed", severity: "info", previous: `${before.latency} ms`, current: `${row.latency} ms`, delta: row.latency - before.latency }];

@@ -137,6 +137,15 @@ def latency_stats(latencies: Iterable[float | None]) -> dict[str, Any]:
     }
 
 
+def reply_latencies(samples: Iterable[Sample]) -> list[float]:
+    """Latencies of the checks that were answered and measured, finite only."""
+    return [
+        float(sample.latency)
+        for sample in samples
+        if sample.reachable and sample.latency is not None and math.isfinite(float(sample.latency))
+    ]
+
+
 def _round(value: float | None, places: int = 2) -> float | None:
     return None if value is None else round(value, places)
 
@@ -310,11 +319,22 @@ def _percent(up: int, checks: int) -> float | None:
 
 
 def sla_status(
-    target: SlaTarget, up: int, checks: int, latency_p95: float | None, days: Sequence[dict]
+    target: SlaTarget,
+    up: int,
+    checks: int,
+    latency_p95: float | None,
+    days: Sequence[dict],
+    daily_p95: dict[str, float | None] | None = None,
 ) -> dict[str, Any]:
-    """Whether the window met ``target``, and the days that broke it."""
+    """Whether the window met ``target``, and the days that broke it.
+
+    ``latency_p95`` and ``daily_p95`` are the *unrounded* percentiles: a P95 of
+    10.004 ms is over a 10 ms limit even though it displays as 10.0. Without
+    ``daily_p95`` the days' own (rounded) figures are used.
+    """
     violations: list[dict[str, Any]] = []
     for day in days:
+        day_p95 = day["latency_p95"] if daily_p95 is None else daily_p95.get(day["date"])
         if day["checks"] and _below_target(day["up"], day["checks"], target.availability):
             violations.append(
                 {
@@ -325,12 +345,12 @@ def sla_status(
                 }
             )
         limit = target.latency_p95_ms
-        if limit is not None and day["latency_p95"] is not None and day["latency_p95"] > limit:
+        if limit is not None and day_p95 is not None and day_p95 > limit:
             violations.append(
                 {
                     "date": day["date"],
                     "kind": "latency",
-                    "observed": day["latency_p95"],
+                    "observed": _round(day_p95),
                     "target": limit,
                 }
             )
@@ -374,6 +394,10 @@ def analyse(
     outages = find_outages(counted, maintenance)
     latency = latency_stats(sample.latency for sample in counted if sample.reachable)
     daily = daily_breakdown(counted)
+    by_day: dict[str, list[Sample]] = {}
+    for sample in counted:
+        by_day.setdefault(sample.at.date().isoformat(), []).append(sample)
+    daily_p95 = {day: percentile(reply_latencies(group), 0.95) for day, group in by_day.items()}
 
     return {
         "checks": len(counted),
@@ -385,7 +409,13 @@ def analyse(
         "outages": outage_summary(outages, counted, maintenance),
         "outage_list": [outage.to_dict() for outage in reversed(outages)],
         "daily": daily,
-        "sla": sla_status(sla, up, len(counted), latency["p95"], daily) if sla else None,
+        "sla": (
+            sla_status(
+                sla, up, len(counted), percentile(reply_latencies(counted), 0.95), daily, daily_p95
+            )
+            if sla
+            else None
+        ),
     }
 
 

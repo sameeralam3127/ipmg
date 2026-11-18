@@ -1,6 +1,6 @@
 // REST + WebSocket client for the local IPMG API. No external dependencies.
 
-import { demo } from "./demo.js?v=20261118.2";
+import { demo } from "./demo.js?v=20261118.3";
 
 const BASE = "/api/v1";
 // Pages has no Python process. `?demo=1` is also useful for reviewing the

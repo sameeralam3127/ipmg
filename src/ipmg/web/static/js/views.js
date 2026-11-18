@@ -1,7 +1,7 @@
 // Page views for the IPMG dashboard. Each view renders into the <main> node.
 
-import { api, onEvent } from "./api.js?v=20261118.2";
-import { STATUS_COLORS, latencyTrend, statusDonut, statusTimeline } from "./charts.js?v=20261118.2";
+import { api, onEvent } from "./api.js?v=20261118.3";
+import { STATUS_COLORS, latencyTrend, statusDonut, statusTimeline } from "./charts.js?v=20261118.3";
 
 const REPORT_FORMATS = ["xlsx", "csv", "json", "md"];
 
@@ -1009,6 +1009,21 @@ function scanLink(scanId) {
   return h("a", { href: `#/scan/${scanId}` }, `#${scanId}`);
 }
 
+// Matches the limit api.hostResults asks for; a full page means older scans may exist.
+const HOST_HISTORY_LIMIT = 500;
+
+// A section whose request failed: say so and offer to try again, rather than showing it empty.
+function sectionError(title, error) {
+  const retry = h("button", { class: "ghost-btn", type: "button" }, "Retry");
+  retry.addEventListener("click", () => window.dispatchEvent(new HashChangeEvent("hashchange")));
+  return h(
+    "div",
+    { class: "card", style: "margin-top:14px" },
+    h("h3", {}, title),
+    h("div", { class: "banner err" }, `Could not load: ${error.message} `, retry)
+  );
+}
+
 function hostHistoryTable(rows) {
   const showMac = rows.some((row) => row.mac);
   const showProbe = rows.some((row) => row.method);
@@ -1190,6 +1205,33 @@ function dailyTable(days, violations) {
   );
 }
 
+// One word for the tile: any miss is a miss; a configured limit with nothing to judge is no data.
+function slaVerdict(sla) {
+  if (!sla) return "No target";
+  if (sla.availability_met === false || sla.latency_met === false) return "Not met";
+  if (sla.availability_met == null || (sla.latency_p95_ms != null && sla.latency_met == null)) return "No data";
+  return "Met";
+}
+
+// Runs a write and then a refresh, and says which of the two failed. A refresh
+// that fails after a good write must not look like the write failed, or invite
+// a retry that would repeat it. Returns whether the write went through.
+async function writeThenRefresh(write, done, failure, refresh) {
+  try {
+    await write();
+  } catch (err) {
+    toast(`${failure}: ${err.message}`, "error");
+    return false;
+  }
+  toast(done);
+  try {
+    await refresh();
+  } catch (err) {
+    toast(`${done.replace(/\.$/, "")}, but the page could not refresh (${err.message}). Reload to see it.`, "error");
+  }
+  return true;
+}
+
 function slaCard(ip, health, onChange) {
   const sla = health.sla;
   const target = h("input", { type: "number", step: "any", min: "0", max: "100", placeholder: "99.9", required: "", value: sla ? sla.availability_target : "", "aria-label": "Availability target in percent" });
@@ -1204,28 +1246,31 @@ function slaCard(ip, health, onChange) {
   );
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
-    save.disabled = true;
-    try {
-      await api.setSla(ip, {
-        availability_target: Number(target.value),
-        latency_p95_ms: limit.value === "" ? null : Number(limit.value),
-      });
-      toast("SLA target saved.");
-      await onChange();
-    } catch (err) {
-      toast(`Could not save the target: ${err.message}`, "error");
-      save.disabled = false;
+    const availability = Number(target.value);
+    const p95 = limit.value === "" ? null : Number(limit.value);
+    // The same rules as the API: above 0 and at most 100; a limit above 0.
+    if (!(availability > 0 && availability <= 100)) {
+      toast("The availability target must be above 0 and at most 100.", "error");
+      return;
     }
+    if (p95 !== null && !(p95 > 0)) {
+      toast("The latency limit must be above 0 ms.", "error");
+      return;
+    }
+    save.disabled = true;
+    const written = await writeThenRefresh(
+      () => api.setSla(ip, { availability_target: availability, latency_p95_ms: p95 }),
+      "SLA target saved.",
+      "Could not save the target",
+      onChange
+    );
+    if (!written) save.disabled = false;
   });
   const clear = h("button", { class: "ghost-btn", type: "button" }, "Remove target");
   clear.addEventListener("click", async () => {
-    try {
-      await api.clearSla(ip);
-      toast("SLA target removed.");
-      await onChange();
-    } catch (err) {
-      toast(`Could not remove the target: ${err.message}`, "error");
-    }
+    clear.disabled = true;
+    const removed = await writeThenRefresh(() => api.clearSla(ip), "SLA target removed.", "Could not remove the target", onChange);
+    if (!removed) clear.disabled = false;
   });
   if (sla) form.append(clear);
 
@@ -1292,31 +1337,28 @@ function maintenanceCard(ip, windows, onChange) {
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     add.disabled = true;
-    try {
-      await api.addMaintenance({
-        ip: scope.value === "host" ? ip : null,
-        starts_at: starts.value,
-        ends_at: ends.value,
-        reason: reason.value,
-      });
-      toast("Maintenance window added.");
-      await onChange();
-    } catch (err) {
-      toast(`Could not add the window: ${err.message}`, "error");
-      add.disabled = false;
-    }
+    const written = await writeThenRefresh(
+      () =>
+        api.addMaintenance({
+          ip: scope.value === "host" ? ip : null,
+          starts_at: starts.value,
+          ends_at: ends.value,
+          reason: reason.value,
+        }),
+      "Maintenance window added.",
+      "Could not add the window",
+      onChange
+    );
+    // After a good write the form stays off, so a failed refresh cannot be answered with a duplicate.
+    if (!written) add.disabled = false;
   });
 
   const rows = windows.map((window) => {
     const remove = h("button", { class: "ghost-btn", type: "button" }, "Delete");
     remove.addEventListener("click", async () => {
-      try {
-        await api.deleteMaintenance(window.id);
-        toast("Maintenance window deleted.");
-        await onChange();
-      } catch (err) {
-        toast(`Could not delete the window: ${err.message}`, "error");
-      }
+      remove.disabled = true;
+      const deleted = await writeThenRefresh(() => api.deleteMaintenance(window.id), "Maintenance window deleted.", "Could not delete the window", onChange);
+      if (!deleted) remove.disabled = false;
     });
     return h(
       "tr",
@@ -1345,26 +1387,35 @@ function maintenanceCard(ip, windows, onChange) {
 }
 
 // Long-term availability, latency percentiles, outages, SLA, and maintenance.
-// It redraws itself when the period changes or a target or window is edited.
+// The period picker and the report links stay mounted while the figures are
+// replaced, so keyboard focus survives a change. A reply that arrives after a
+// newer request was made is dropped, and the picker, the links, and the
+// figures only move to a period once its figures have loaded.
 function hostHealthSection(ip) {
   const section = h("div", { style: "margin-top:14px" });
-  let days = 30;
+  const select = h("select", { "aria-label": "Period" }, ...HEALTH_WINDOWS.map((value) => h("option", { value }, `Last ${value} days`)));
+  const reports = h("span", { class: "exports" });
+  const body = h("div");
+  section.append(h("div", { class: "toolbar" }, h("h3", { style: "margin:0" }, "Health"), select, h("span", { class: "spacer" }), reports), body);
 
-  async function draw() {
+  let shown = 30;
+  let latest = 0;
+  select.value = String(shown);
+
+  function showReports(days) {
+    reports.replaceChildren(...["csv", "json", "md"].map((fmt) => downloadLink(api.availabilityReportUrl(ip, fmt, days), `Report ${fmt.toUpperCase()}`)));
+  }
+
+  async function load(days) {
+    const ticket = (latest += 1);
     const [health, windows] = await Promise.all([api.health(ip, days), api.maintenance(ip)]);
-    const select = h("select", { "aria-label": "Period" }, ...HEALTH_WINDOWS.map((value) => h("option", { value }, `Last ${value} days`)));
+    if (ticket !== latest) return; // a newer request has been made
+    shown = days;
     select.value = String(days);
-    select.addEventListener("change", () => {
-      days = Number(select.value);
-      draw().catch((err) => toast(`Could not load health: ${err.message}`, "error"));
-    });
-    const toolbar = h("div", { class: "toolbar" }, h("h3", { style: "margin:0" }, "Health"), select, h("span", { class: "spacer" }));
-    for (const fmt of ["csv", "json", "md"]) toolbar.append(downloadLink(api.availabilityReportUrl(ip, fmt, days), `Report ${fmt.toUpperCase()}`));
+    showReports(days);
 
     const { latency, outages } = health;
-    const slaTile = health.sla ? (health.sla.availability_met === false || health.sla.latency_met === false ? "Not met" : health.sla.availability_met == null ? "No data" : "Met") : "No target";
-    section.replaceChildren(
-      toolbar,
+    body.replaceChildren(
       h(
         "div",
         { class: "grid tiles" },
@@ -1375,7 +1426,7 @@ function hostHealthSection(ip) {
         tile(fmtSpan(outages.mttr_s), "MTTR"),
         tile(fmtSpan(outages.mtbf_s), "MTBF"),
         tile(`${outages.count}${outages.ongoing ? " (1 ongoing)" : ""}`, "Outages"),
-        tile(slaTile, "SLA")
+        tile(slaVerdict(health.sla), "SLA")
       ),
       h(
         "p",
@@ -1385,12 +1436,22 @@ function hostHealthSection(ip) {
       ),
       h("div", { class: "card" }, h("h3", {}, `Outages (${outages.count})`), outagesTable(health.outage_list, health.outages_truncated)),
       h("div", { class: "card", style: "margin-top:14px" }, h("h3", {}, "By day"), dailyTable(health.daily, health.sla?.violations || [])),
-      slaCard(ip, health, draw),
-      maintenanceCard(ip, windows, draw)
+      slaCard(ip, health, refresh),
+      maintenanceCard(ip, windows, refresh)
     );
   }
 
-  draw().catch((err) => section.replaceChildren(h("div", { class: "banner err" }, `Could not load health: ${err.message}`)));
+  const refresh = () => load(shown);
+  select.addEventListener("change", () => {
+    const wanted = Number(select.value);
+    load(wanted).catch((err) => {
+      select.value = String(shown); // still showing the last period that loaded
+      toast(`Could not load ${wanted} days: ${err.message}`, "error");
+    });
+  });
+
+  showReports(shown);
+  load(shown).catch((err) => body.replaceChildren(h("div", { class: "banner err" }, `Could not load health: ${err.message}`)));
   return section;
 }
 
@@ -1409,11 +1470,16 @@ export async function hostView(root, ip) {
     return;
   }
 
-  const [history, changes, polls] = await Promise.all([
+  // History is the page's core, so its failure is the page's failure. Changes
+  // and SNMP fail on their own: an error there must not read as "nothing".
+  const [history, changesResult, snmpResult] = await Promise.all([
     api.hostResults(ip),
-    api.hostChanges(ip).catch(() => []),
-    api.hostSnmp(ip).catch(() => []),
+    api.hostChanges(ip).then((value) => ({ value }), (error) => ({ error })),
+    api.hostSnmp(ip).then((value) => ({ value }), (error) => ({ error })),
   ]);
+  const changes = changesResult.value ?? null;
+  const polls = snmpResult.value ?? null;
+  const capped = history.length >= HOST_HISTORY_LIMIT;
 
   root.append(
     h("p", { class: "page-sub" }, [host.hostname || host.snmp_name || "No hostname recorded", " · ", statusPill(host.status)])
@@ -1428,11 +1494,32 @@ export async function hostView(root, ip) {
     const lines = history.map((row) =>
       [row.scan_id, row.checked_at, row.source, row.status, row.latency, row.method, row.hostname, row.mac, row.open_ports].map(csvCell).join(",")
     );
-    saveText([header, ...lines].join("\n"), "text/csv", `ipmg_host_${ip.replaceAll(":", "-")}.csv`);
+    saveText([header, ...lines].join("\n"), "text/csv", `ipmg_host_${ip.replaceAll(":", "-")}${capped ? `_latest${HOST_HISTORY_LIMIT}` : ""}.csv`);
   });
   exportJson.addEventListener("click", () =>
-    saveText(JSON.stringify({ host, results: history, changes, snmp: polls }, null, 2), "application/json", `ipmg_host_${ip.replaceAll(":", "-")}.json`)
+    saveText(
+      JSON.stringify(
+        {
+          host,
+          results: history,
+          // True when older scans exist that this file leaves out.
+          results_truncated: capped,
+          changes,
+          snmp: polls,
+          errors: { changes: changesResult.error?.message ?? null, snmp: snmpResult.error?.message ?? null },
+        },
+        null,
+        2
+      ),
+      "application/json",
+      `ipmg_host_${ip.replaceAll(":", "-")}${capped ? `_latest${HOST_HISTORY_LIMIT}` : ""}.json`
+    )
   );
+  if (capped) {
+    exportCsv.title = exportJson.title = `Only the latest ${HOST_HISTORY_LIMIT} scans are exported`;
+    exportCsv.textContent = `Export CSV (latest ${HOST_HISTORY_LIMIT})`;
+    exportJson.textContent = `Export JSON (latest ${HOST_HISTORY_LIMIT})`;
+  }
   toolbar.append(exportCsv, exportJson);
   root.append(toolbar);
 
@@ -1485,10 +1572,18 @@ export async function hostView(root, ip) {
   );
 
   root.append(
-    h("div", { class: "card" }, h("h3", {}, `History (${history.length} ${history.length === 1 ? "scan" : "scans"}, newest first)`), hostHistoryTable(history)),
-    h("div", { class: "card", style: "margin-top:14px" }, h("h3", {}, `Changes (${changes.length})`), hostChangesTable(changes))
+    h(
+      "div",
+      { class: "card" },
+      h("h3", {}, capped ? `History (latest ${HOST_HISTORY_LIMIT} scans, newest first)` : `History (${history.length} ${history.length === 1 ? "scan" : "scans"}, newest first)`),
+      hostHistoryTable(history)
+    ),
+    changes
+      ? h("div", { class: "card", style: "margin-top:14px" }, h("h3", {}, `Changes (${changes.length})`), hostChangesTable(changes))
+      : sectionError("Changes", changesResult.error)
   );
-  if (polls.length) root.append(hostSnmpCard(polls));
+  if (polls === null) root.append(sectionError("SNMP", snmpResult.error));
+  else if (polls.length) root.append(hostSnmpCard(polls));
   root.append(hostHealthSection(ip));
 }
 
