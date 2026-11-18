@@ -361,3 +361,11 @@ tr.click { cursor: pointer; }
 td.truncate { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 td.actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 td.actions .btn { padding: 4px 10px; }
+
+/* An IP address that opens the host page. */
+.ip-link { color: var(--accent); text-decoration: none; font-variant-numeric: tabular-nums; }
+.ip-link:hover, .ip-link:focus-visible { text-decoration: underline; }
+
+.timeline { display: block; max-width: 100%; height: auto; }
+.host-charts { grid-template-columns: minmax(0, 1fr); margin-bottom: 14px; }
+.tile.compact .value { font-size: 15px; line-height: 1.7; }

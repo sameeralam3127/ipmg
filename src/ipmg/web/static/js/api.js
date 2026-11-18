@@ -1,6 +1,6 @@
 // REST + WebSocket client for the local IPMG API. No external dependencies.
 
-import { demo } from "./demo.js?v=20261018.2";
+import { demo } from "./demo.js?v=20261118.2";
 
 const BASE = "/api/v1";
 // Pages has no Python process. `?demo=1` is also useful for reviewing the
@@ -45,11 +45,16 @@ async function request(path, options = {}) {
     } catch {
       /* non-JSON error body */
     }
-    throw new Error(detail);
+    const error = new Error(detail);
+    error.status = response.status;
+    throw error;
   }
   if (response.status === 204) return null;
   return response.json();
 }
+
+// The demo answers synchronously; a thrown error becomes a rejection, as with fetch.
+const demoCall = (fn) => new Promise((resolve) => resolve(fn()));
 
 export const api = {
   stats: () => useDemo ? demo.stats() : request("/stats"),
@@ -63,6 +68,29 @@ export const api = {
     const suffix = params.toString() ? `?${params}` : "";
     return useDemo ? Promise.resolve(demo.results(id, { status, search })) : request(`/scans/${id}/results${suffix}`);
   },
+  // An address goes in the path, so a colon in an IPv6 one is encoded.
+  host: (ip) => useDemo ? demoCall(() => demo.host(ip)) : request(`/hosts/${encodeURIComponent(ip)}`),
+  hostResults: (ip) => useDemo ? demoCall(() => demo.hostResults(ip)) : request(`/hosts/${encodeURIComponent(ip)}/results?limit=500`),
+  hostChanges: (ip) => useDemo ? demoCall(() => demo.hostChanges(ip)) : request(`/hosts/${encodeURIComponent(ip)}/changes?limit=50`),
+  hostSnmp: (ip) => useDemo ? demoCall(() => demo.hostSnmp(ip)) : request(`/hosts/${encodeURIComponent(ip)}/snmp?limit=100`),
+  health: (ip, days = 30) => useDemo ? demoCall(() => demo.health(ip, days)) : request(`/hosts/${encodeURIComponent(ip)}/health?days=${days}`),
+  maintenance: (ip) => useDemo ? demoCall(() => demo.maintenance(ip)) : request(`/maintenance?ip=${encodeURIComponent(ip)}`),
+  addMaintenance: (payload) =>
+    useDemo ? demoCall(() => demo.addMaintenance(payload)) : request("/maintenance", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
+  deleteMaintenance: (id) => useDemo ? demoCall(() => demo.deleteMaintenance(id)) : request(`/maintenance/${id}`, { method: "DELETE" }),
+  setSla: (ip, payload) =>
+    useDemo ? demoCall(() => demo.setSla(ip, payload)) : request(`/hosts/${encodeURIComponent(ip)}/sla`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
+  clearSla: (ip) => useDemo ? demoCall(() => demo.clearSla(ip)) : request(`/hosts/${encodeURIComponent(ip)}/sla`, { method: "DELETE" }),
+  availabilityReportUrl: (ip, fmt, days) =>
+    useDemo ? demo.availabilityReportUrl(ip, fmt, days) : `${BASE}/hosts/${encodeURIComponent(ip)}/availability/report?fmt=${fmt}&days=${days}`,
   schedules: () => useDemo ? Promise.resolve(demo.schedules()) : request("/schedules"),
   createSchedule: (payload) =>
     useDemo ? Promise.resolve(demo.createSchedule(payload)) : request("/schedules", {

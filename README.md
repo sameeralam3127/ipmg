@@ -51,7 +51,9 @@ webhook, or email, or fail your cron job or CI step.
 - **Made for automation:** exit codes for cron and CI, a GitHub Action,
   `--json` for scripts, systemd and launchd templates, Prometheus metrics.
 - **IPMG Web**, a local dashboard: live scans, history, changes, inventory,
-  and scheduled scans.
+  and scheduled scans. Click any IP for its host page: full history, latency
+  percentiles (P50/P95/P99), availability, outages with MTTR and MTBF, SLA
+  targets, maintenance windows, and downloadable availability reports.
 - **Reports** in Excel, CSV, JSON, JSON Lines, and Markdown, written as the
   scan runs, so an interrupted scan keeps its results.
 
@@ -95,7 +97,7 @@ uv tool install --python ">=3.10" "ipmg[web]"
 Also on:
 
 - **Homebrew:** `brew install sameeralam3127/tap/ipmg`
-- **Docker:** `docker run --rm sameeralam3127/ipmg --input 10.0.0.0/24`, or from GHCR: `ghcr.io/sameeralam3127/ipmg`
+- **Docker:** `docker run --rm ghcr.io/sameeralam3127/ipmg --input 10.0.0.0/24`, also on Docker Hub as `sameeralam3127/ipmg`
 
 > **Tip:** `[web]` adds IPMG Web; `pip install ipmg` alone is the command line.
 > Where the system Python is older than 3.10 (RHEL 9, Ubuntu 20.04, SLES 15),
@@ -176,8 +178,9 @@ IPMG Web runs). Every request needs the token in that link.
   <img src="https://raw.githubusercontent.com/sameeralam3127/ipmg/main/docs/assets/ipmg-web.png" alt="IPMG Web dashboard: scan totals, a status donut of 16 active, 1 timeout and 1 inactive host, a latency trend chart, and a list of recent scans" width="820">
 </p>
 
-Dashboard, live monitor, history, changes, inventory with Wake-on-LAN, and
-scheduled scans; see the
+Dashboard, live monitor, history, changes, inventory with Wake-on-LAN, scheduled
+scans, and a page for every host with its availability, latency percentiles,
+outages, SLA targets, and maintenance windows; see the
 [IPMG Web guide](https://github.com/sameeralam3127/ipmg/blob/main/docs/WEB.md),
 or try it first in the [live demo](https://sameeralam3127.github.io/ipmg/demo/).
 

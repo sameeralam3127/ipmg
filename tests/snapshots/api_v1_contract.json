@@ -1,5 +1,56 @@
 {
   "paths": {
+    "DELETE /api/v1/hosts/{ip}/sla": {
+      "parameters": {
+        "ip": {
+          "in": "path",
+          "required": true,
+          "type": "string"
+        }
+      },
+      "responses": {
+        "204": {},
+        "400": {
+          "application/json": "ErrorResponse"
+        },
+        "401": {
+          "application/json": "ErrorResponse"
+        },
+        "404": {
+          "application/json": "ErrorResponse"
+        },
+        "422": {
+          "application/json": "ErrorResponse"
+        }
+      },
+      "security": [
+        "HTTPBearer"
+      ]
+    },
+    "DELETE /api/v1/maintenance/{window_id}": {
+      "parameters": {
+        "window_id": {
+          "in": "path",
+          "required": true,
+          "type": "integer"
+        }
+      },
+      "responses": {
+        "204": {},
+        "401": {
+          "application/json": "ErrorResponse"
+        },
+        "404": {
+          "application/json": "ErrorResponse"
+        },
+        "422": {
+          "application/json": "ErrorResponse"
+        }
+      },
+      "security": [
+        "HTTPBearer"
+      ]
+    },
     "DELETE /api/v1/scans/{scan_id}": {
       "parameters": {
         "scan_id": {
@@ -56,6 +107,268 @@
       "responses": {
         "200": {
           "application/json": "array[Asset]"
+        },
+        "401": {
+          "application/json": "ErrorResponse"
+        },
+        "422": {
+          "application/json": "ErrorResponse"
+        }
+      },
+      "security": [
+        "HTTPBearer"
+      ]
+    },
+    "GET /api/v1/hosts/{ip}": {
+      "parameters": {
+        "ip": {
+          "in": "path",
+          "required": true,
+          "type": "string"
+        }
+      },
+      "responses": {
+        "200": {
+          "application/json": "HostSummary"
+        },
+        "400": {
+          "application/json": "ErrorResponse"
+        },
+        "401": {
+          "application/json": "ErrorResponse"
+        },
+        "404": {
+          "application/json": "ErrorResponse"
+        },
+        "422": {
+          "application/json": "ErrorResponse"
+        }
+      },
+      "security": [
+        "HTTPBearer"
+      ]
+    },
+    "GET /api/v1/hosts/{ip}/availability/report": {
+      "parameters": {
+        "days": {
+          "in": "query",
+          "required": false,
+          "type": "integer"
+        },
+        "fmt": {
+          "in": "query",
+          "required": false,
+          "type": "string"
+        },
+        "ip": {
+          "in": "path",
+          "required": true,
+          "type": "string"
+        },
+        "source": {
+          "in": "query",
+          "required": false,
+          "type": "null | string"
+        }
+      },
+      "responses": {
+        "200": {
+          "application/json": "string",
+          "text/csv; charset=utf-8": "string",
+          "text/markdown; charset=utf-8": "string"
+        },
+        "400": {
+          "application/json": "ErrorResponse"
+        },
+        "401": {
+          "application/json": "ErrorResponse"
+        },
+        "404": {
+          "application/json": "ErrorResponse"
+        },
+        "422": {
+          "application/json": "ErrorResponse"
+        }
+      },
+      "security": [
+        "HTTPBearer"
+      ]
+    },
+    "GET /api/v1/hosts/{ip}/changes": {
+      "parameters": {
+        "ip": {
+          "in": "path",
+          "required": true,
+          "type": "string"
+        },
+        "limit": {
+          "in": "query",
+          "required": false,
+          "type": "integer"
+        }
+      },
+      "responses": {
+        "200": {
+          "application/json": "array[HostChangeRow]"
+        },
+        "400": {
+          "application/json": "ErrorResponse"
+        },
+        "401": {
+          "application/json": "ErrorResponse"
+        },
+        "422": {
+          "application/json": "ErrorResponse"
+        }
+      },
+      "security": [
+        "HTTPBearer"
+      ]
+    },
+    "GET /api/v1/hosts/{ip}/health": {
+      "parameters": {
+        "days": {
+          "in": "query",
+          "required": false,
+          "type": "integer"
+        },
+        "ip": {
+          "in": "path",
+          "required": true,
+          "type": "string"
+        },
+        "source": {
+          "in": "query",
+          "required": false,
+          "type": "null | string"
+        }
+      },
+      "responses": {
+        "200": {
+          "application/json": "HostHealth"
+        },
+        "400": {
+          "application/json": "ErrorResponse"
+        },
+        "401": {
+          "application/json": "ErrorResponse"
+        },
+        "404": {
+          "application/json": "ErrorResponse"
+        },
+        "422": {
+          "application/json": "ErrorResponse"
+        }
+      },
+      "security": [
+        "HTTPBearer"
+      ]
+    },
+    "GET /api/v1/hosts/{ip}/results": {
+      "parameters": {
+        "ip": {
+          "in": "path",
+          "required": true,
+          "type": "string"
+        },
+        "limit": {
+          "in": "query",
+          "required": false,
+          "type": "integer"
+        }
+      },
+      "responses": {
+        "200": {
+          "application/json": "array[HostHistoryRow]"
+        },
+        "400": {
+          "application/json": "ErrorResponse"
+        },
+        "401": {
+          "application/json": "ErrorResponse"
+        },
+        "422": {
+          "application/json": "ErrorResponse"
+        }
+      },
+      "security": [
+        "HTTPBearer"
+      ]
+    },
+    "GET /api/v1/hosts/{ip}/sla": {
+      "parameters": {
+        "ip": {
+          "in": "path",
+          "required": true,
+          "type": "string"
+        }
+      },
+      "responses": {
+        "200": {
+          "application/json": "SlaRow"
+        },
+        "400": {
+          "application/json": "ErrorResponse"
+        },
+        "401": {
+          "application/json": "ErrorResponse"
+        },
+        "404": {
+          "application/json": "ErrorResponse"
+        },
+        "422": {
+          "application/json": "ErrorResponse"
+        }
+      },
+      "security": [
+        "HTTPBearer"
+      ]
+    },
+    "GET /api/v1/hosts/{ip}/snmp": {
+      "parameters": {
+        "ip": {
+          "in": "path",
+          "required": true,
+          "type": "string"
+        },
+        "limit": {
+          "in": "query",
+          "required": false,
+          "type": "integer"
+        }
+      },
+      "responses": {
+        "200": {
+          "application/json": "array[HostSnmpRow]"
+        },
+        "400": {
+          "application/json": "ErrorResponse"
+        },
+        "401": {
+          "application/json": "ErrorResponse"
+        },
+        "422": {
+          "application/json": "ErrorResponse"
+        }
+      },
+      "security": [
+        "HTTPBearer"
+      ]
+    },
+    "GET /api/v1/maintenance": {
+      "parameters": {
+        "ip": {
+          "in": "query",
+          "required": false,
+          "type": "null | string"
+        }
+      },
+      "responses": {
+        "200": {
+          "application/json": "array[MaintenanceRow]"
+        },
+        "400": {
+          "application/json": "ErrorResponse"
         },
         "401": {
           "application/json": "ErrorResponse"
@@ -423,6 +736,29 @@
         "HTTPBearer"
       ]
     },
+    "POST /api/v1/maintenance": {
+      "parameters": {},
+      "requestBody": {
+        "application/json": "MaintenanceRequest"
+      },
+      "responses": {
+        "201": {
+          "application/json": "MaintenanceRow"
+        },
+        "400": {
+          "application/json": "ErrorResponse"
+        },
+        "401": {
+          "application/json": "ErrorResponse"
+        },
+        "422": {
+          "application/json": "ErrorResponse"
+        }
+      },
+      "security": [
+        "HTTPBearer"
+      ]
+    },
     "POST /api/v1/scans": {
       "parameters": {},
       "requestBody": {
@@ -584,6 +920,35 @@
       "security": [
         "HTTPBearer"
       ]
+    },
+    "PUT /api/v1/hosts/{ip}/sla": {
+      "parameters": {
+        "ip": {
+          "in": "path",
+          "required": true,
+          "type": "string"
+        }
+      },
+      "requestBody": {
+        "application/json": "SlaRequest"
+      },
+      "responses": {
+        "200": {
+          "application/json": "SlaRow"
+        },
+        "400": {
+          "application/json": "ErrorResponse"
+        },
+        "401": {
+          "application/json": "ErrorResponse"
+        },
+        "422": {
+          "application/json": "ErrorResponse"
+        }
+      },
+      "security": [
+        "HTTPBearer"
+      ]
     }
   },
   "schemas": {
@@ -619,6 +984,22 @@
       },
       "required": [
         "file"
+      ]
+    },
+    "DailyRow": {
+      "properties": {
+        "availability_pct": "null | number",
+        "checks": "integer",
+        "date": "string",
+        "latency_p95": "null | number",
+        "up": "integer"
+      },
+      "required": [
+        "availability_pct",
+        "checks",
+        "date",
+        "latency_p95",
+        "up"
       ]
     },
     "DiffOptionsModel": {
@@ -664,6 +1045,18 @@
         "detail"
       ]
     },
+    "HealthWindow": {
+      "properties": {
+        "days": "integer",
+        "ends_at": "string",
+        "starts_at": "string"
+      },
+      "required": [
+        "days",
+        "ends_at",
+        "starts_at"
+      ]
+    },
     "HostChangeModel": {
       "properties": {
         "current": "null | string",
@@ -686,6 +1079,107 @@
         "previous",
         "severity",
         "type"
+      ]
+    },
+    "HostChangeRow": {
+      "properties": {
+        "baseline_id": "integer",
+        "current": "null | string",
+        "delta": "null | number",
+        "description": "string",
+        "hostname": "string",
+        "ip": "string",
+        "label": "string",
+        "previous": "null | string",
+        "scan_id": "integer",
+        "severity": "string",
+        "source": "string",
+        "started_at": "string",
+        "type": "string"
+      },
+      "required": [
+        "baseline_id",
+        "current",
+        "delta",
+        "description",
+        "hostname",
+        "ip",
+        "label",
+        "previous",
+        "scan_id",
+        "severity",
+        "source",
+        "started_at",
+        "type"
+      ]
+    },
+    "HostHealth": {
+      "properties": {
+        "availability_pct": "null | number",
+        "checks": "integer",
+        "daily": "array[DailyRow]",
+        "down": "integer",
+        "excluded": "integer",
+        "ip": "string",
+        "latency": "LatencyStats",
+        "maintenance": "array[MaintenanceRow]",
+        "note": "string",
+        "outage_list": "array[OutageRow]",
+        "outages": "OutageSummary",
+        "outages_truncated": "boolean",
+        "sla": "SlaStatus | null",
+        "source": "null | string",
+        "sources": "array[string]",
+        "up": "integer",
+        "window": "HealthWindow"
+      },
+      "required": [
+        "availability_pct",
+        "checks",
+        "daily",
+        "down",
+        "excluded",
+        "ip",
+        "latency",
+        "maintenance",
+        "note",
+        "outage_list",
+        "outages",
+        "outages_truncated",
+        "sla",
+        "source",
+        "sources",
+        "up",
+        "window"
+      ]
+    },
+    "HostHistoryRow": {
+      "properties": {
+        "checked_at": "string",
+        "hostname": "string",
+        "ip": "string",
+        "latency": "null | number",
+        "mac": "string",
+        "method": "string",
+        "open_ports": "string",
+        "scan_id": "integer",
+        "scan_status": "string",
+        "source": "string",
+        "started_at": "string",
+        "status": "string",
+        "vendor": "string"
+      },
+      "required": [
+        "checked_at",
+        "hostname",
+        "ip",
+        "latency",
+        "open_ports",
+        "scan_id",
+        "scan_status",
+        "source",
+        "started_at",
+        "status"
       ]
     },
     "HostResultModel": {
@@ -728,6 +1222,68 @@
         "status"
       ]
     },
+    "HostSnmpRow": {
+      "properties": {
+        "error": "string",
+        "failure": "string",
+        "interfaces": "array[SnmpInterfaceRow]",
+        "ip": "string",
+        "ok": "boolean",
+        "polled_at": "string",
+        "response_ms": "null | number",
+        "scan_id": "integer",
+        "sys_descr": "string",
+        "sys_location": "string",
+        "sys_name": "string",
+        "sys_object_id": "string",
+        "uptime_s": "null | number",
+        "version": "string"
+      },
+      "required": [
+        "error",
+        "failure",
+        "interfaces",
+        "ip",
+        "ok",
+        "polled_at",
+        "response_ms",
+        "scan_id",
+        "sys_descr",
+        "sys_location",
+        "sys_name",
+        "sys_object_id",
+        "uptime_s",
+        "version"
+      ]
+    },
+    "HostSummary": {
+      "properties": {
+        "avg_latency": "null | number",
+        "first_seen": "null | string",
+        "hostname": "null | string",
+        "ip": "string",
+        "last_checked": "string",
+        "last_scan_id": "integer",
+        "last_seen": "null | string",
+        "mac": "null | string",
+        "scan_count": "integer",
+        "snmp_descr": "null | string",
+        "snmp_name": "null | string",
+        "status": "string",
+        "vendor": "null | string"
+      },
+      "required": [
+        "avg_latency",
+        "first_seen",
+        "hostname",
+        "ip",
+        "last_checked",
+        "last_scan_id",
+        "last_seen",
+        "scan_count",
+        "status"
+      ]
+    },
     "HttpCheckRow": {
       "properties": {
         "cert_expires": "string",
@@ -750,6 +1306,92 @@
         "response_ms",
         "status_code",
         "url"
+      ]
+    },
+    "LatencyStats": {
+      "properties": {
+        "count": "integer",
+        "max": "null | number",
+        "mean": "null | number",
+        "min": "null | number",
+        "p50": "null | number",
+        "p95": "null | number",
+        "p99": "null | number"
+      },
+      "required": [
+        "count",
+        "max",
+        "mean",
+        "min",
+        "p50",
+        "p95",
+        "p99"
+      ]
+    },
+    "MaintenanceRequest": {
+      "properties": {
+        "ends_at": "string",
+        "ip": "null | string",
+        "reason": "string",
+        "starts_at": "string"
+      },
+      "required": [
+        "ends_at",
+        "starts_at"
+      ]
+    },
+    "MaintenanceRow": {
+      "properties": {
+        "created_at": "string",
+        "ends_at": "string",
+        "id": "integer",
+        "ip": "null | string",
+        "reason": "string",
+        "starts_at": "string"
+      },
+      "required": [
+        "created_at",
+        "ends_at",
+        "id",
+        "ip",
+        "reason",
+        "starts_at"
+      ]
+    },
+    "OutageRow": {
+      "properties": {
+        "checks": "integer",
+        "duration_s": "number",
+        "ended_at": "null | string",
+        "ongoing": "boolean",
+        "started_at": "string"
+      },
+      "required": [
+        "checks",
+        "duration_s",
+        "ended_at",
+        "ongoing",
+        "started_at"
+      ]
+    },
+    "OutageSummary": {
+      "properties": {
+        "count": "integer",
+        "downtime_s": "number",
+        "longest_s": "number",
+        "mtbf_s": "null | number",
+        "mttr_s": "null | number",
+        "ongoing": "integer",
+        "recovered": "integer"
+      },
+      "required": [
+        "count",
+        "downtime_s",
+        "longest_s",
+        "mtbf_s",
+        "mttr_s",
+        "ongoing",
+        "recovered"
       ]
     },
     "ResultEvent": {
@@ -976,6 +1618,59 @@
       "required": [
         "name",
         "targets"
+      ]
+    },
+    "SlaRequest": {
+      "properties": {
+        "availability_target": "number",
+        "latency_p95_ms": "null | number"
+      },
+      "required": [
+        "availability_target"
+      ]
+    },
+    "SlaRow": {
+      "properties": {
+        "availability_target": "number",
+        "ip": "string",
+        "latency_p95_ms": "null | number",
+        "updated_at": "string"
+      },
+      "required": [
+        "availability_target",
+        "ip",
+        "latency_p95_ms",
+        "updated_at"
+      ]
+    },
+    "SlaStatus": {
+      "properties": {
+        "availability_met": "boolean | null",
+        "availability_target": "number",
+        "latency_met": "boolean | null",
+        "latency_p95_ms": "null | number",
+        "violations": "array[SlaViolation]"
+      },
+      "required": [
+        "availability_met",
+        "availability_target",
+        "latency_met",
+        "latency_p95_ms",
+        "violations"
+      ]
+    },
+    "SlaViolation": {
+      "properties": {
+        "date": "string",
+        "kind": "string",
+        "observed": "null | number",
+        "target": "number"
+      },
+      "required": [
+        "date",
+        "kind",
+        "observed",
+        "target"
       ]
     },
     "SnmpDeviceRow": {

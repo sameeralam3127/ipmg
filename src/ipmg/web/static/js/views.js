@@ -1,7 +1,7 @@
 // Page views for the IPMG dashboard. Each view renders into the <main> node.
 
-import { api, onEvent } from "./api.js?v=20261018.2";
-import { STATUS_COLORS, latencyTrend, statusDonut } from "./charts.js?v=20261018.2";
+import { api, onEvent } from "./api.js?v=20261118.2";
+import { STATUS_COLORS, latencyTrend, statusDonut, statusTimeline } from "./charts.js?v=20261118.2";
 
 const REPORT_FORMATS = ["xlsx", "csv", "json", "md"];
 
@@ -116,8 +116,14 @@ function activeRate(scan) {
   return scan.total ? `${((active / scan.total) * 100).toFixed(1)}%` : "—";
 }
 
-function tile(value, label) {
-  return h("div", { class: "card tile" }, h("div", { class: "value" }, value), h("div", { class: "label" }, label));
+// An IP address that opens its host page. A real link, so it works from the
+// keyboard, opens in a new tab, and Back returns to where the reader was.
+function ipLink(ip) {
+  return h("a", { class: "ip-link", href: `#/host/${encodeURIComponent(ip)}` }, ip);
+}
+
+function tile(value, label, { compact = false } = {}) {
+  return h("div", { class: compact ? "card tile compact" : "card tile" }, h("div", { class: "value" }, value), h("div", { class: "label" }, label));
 }
 
 function resultsTable(rows) {
@@ -146,7 +152,7 @@ function resultsTable(rows) {
           h(
             "tr",
             {},
-            h("td", {}, row.ip),
+            h("td", {}, ipLink(row.ip)),
             h("td", {}, statusPill(row.status)),
             h("td", {}, fmtLatency(row.latency)),
             showProbe ? h("td", {}, row.method ? row.method.toUpperCase() : "—") : null,
@@ -542,7 +548,8 @@ function changesTable(changes) {
             "tr",
             {},
             h("td", {}, severityPill(change.severity, change.label)),
-            h("td", {}, change.ip),
+            // An HTTP change names a URL, not a host.
+            h("td", {}, String(change.type || "").startsWith("http_") ? change.ip : ipLink(change.ip)),
             h("td", {}, change.hostname || "—"),
             h("td", {}, change.previous ?? "—"),
             h("td", {}, change.current ?? "—"),
@@ -804,7 +811,7 @@ function snmpCard(devices) {
       "tr",
       {},
       h("td", {}, resultPill(device.ok, device.ok ? "OK" : "Failed")),
-      h("td", {}, device.ip),
+      h("td", {}, ipLink(device.ip)),
       h("td", {}, device.sys_name || "—"),
       h("td", {}, device.ok ? fmtUptime(device.uptime_s) : device.failure || "—"),
       h("td", {}, device.interfaces.length ? `${up} up · ${down.length} down` : "—"),
@@ -946,7 +953,7 @@ export async function inventoryView(root) {
               h(
                 "tr",
                 {},
-                h("td", {}, asset.ip),
+                h("td", {}, ipLink(asset.ip)),
                 h("td", {}, asset.hostname || "—"),
                 h("td", { title: asset.snmp_descr || "" }, asset.snmp_name || "—"),
                 h("td", { class: "mono" }, asset.mac || "—"),
@@ -986,6 +993,503 @@ export async function inventoryView(root) {
 
   root.append(toolbar, tableHost);
   draw();
+}
+
+// ----------------------------------------------------------------- host
+
+function saveText(text, type, name) {
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(new Blob([text], { type }));
+  link.download = name;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
+function scanLink(scanId) {
+  return h("a", { href: `#/scan/${scanId}` }, `#${scanId}`);
+}
+
+function hostHistoryTable(rows) {
+  const showMac = rows.some((row) => row.mac);
+  const showProbe = rows.some((row) => row.method);
+  const headings = ["Scan", "Time", "Source", "Status", "Latency", ...(showProbe ? ["Probe"] : []), "Hostname", ...(showMac ? ["MAC Address"] : []), "Open ports"];
+  return h(
+    "div",
+    { class: "table-wrap" },
+    h(
+      "table",
+      {},
+      h("thead", {}, h("tr", {}, ...headings.map((t) => h("th", {}, t)))),
+      h(
+        "tbody",
+        {},
+        rows.map((row) =>
+          h(
+            "tr",
+            {},
+            h("td", {}, scanLink(row.scan_id)),
+            h("td", {}, row.checked_at || row.started_at),
+            h("td", {}, row.source),
+            h("td", {}, statusPill(row.status)),
+            h("td", {}, fmtLatency(row.latency)),
+            showProbe ? h("td", {}, row.method ? row.method.toUpperCase() : "—") : null,
+            h("td", {}, row.hostname || "—"),
+            showMac ? h("td", { class: "mono" }, row.mac || "—") : null,
+            h("td", {}, row.open_ports || "—")
+          )
+        )
+      )
+    )
+  );
+}
+
+function hostChangesTable(changes) {
+  if (!changes.length) return h("div", { class: "empty" }, "No changes between consecutive scans of the same source.");
+  return h(
+    "div",
+    { class: "table-wrap" },
+    h(
+      "table",
+      {},
+      h("thead", {}, h("tr", {}, ...["Scan", "Time", "Change", "Previous", "Current", "Delta"].map((t) => h("th", {}, t)))),
+      h(
+        "tbody",
+        {},
+        changes.map((change) =>
+          h(
+            "tr",
+            {},
+            h("td", { title: `compared with scan #${change.baseline_id}` }, scanLink(change.scan_id)),
+            h("td", {}, change.started_at),
+            h("td", {}, severityPill(change.severity, change.label)),
+            h("td", {}, change.previous ?? "—"),
+            h("td", {}, change.current ?? "—"),
+            h("td", {}, change.delta == null ? "—" : `${change.delta > 0 ? "+" : ""}${change.delta.toFixed(1)} ms`)
+          )
+        )
+      )
+    )
+  );
+}
+
+function hostSnmpCard(polls) {
+  const latest = polls.find((poll) => poll.ok) || polls[0];
+  const facts = [
+    ["Name", latest.sys_name],
+    ["Description", latest.sys_descr],
+    ["Location", latest.sys_location],
+    ["Object ID", latest.sys_object_id],
+    ["Version", latest.version && `SNMP v${latest.version}`],
+    ["Polled", `${latest.polled_at} (scan #${latest.scan_id})`],
+  ].filter(([, value]) => value);
+  const uptimeRows = polls.map((poll) =>
+    h(
+      "tr",
+      {},
+      h("td", {}, scanLink(poll.scan_id)),
+      h("td", {}, poll.polled_at),
+      h("td", {}, resultPill(poll.ok, poll.ok ? "OK" : "Failed")),
+      h("td", {}, poll.ok ? fmtUptime(poll.uptime_s) : poll.failure || "—"),
+      h("td", {}, poll.response_ms == null ? "—" : fmtLatency(poll.response_ms))
+    )
+  );
+  return h(
+    "div",
+    { class: "card", style: "margin-top:14px" },
+    h("h3", {}, `SNMP (${polls.length} ${polls.length === 1 ? "poll" : "polls"})`),
+    h("dl", { class: "details-list" }, facts.flatMap(([term, value]) => [h("dt", {}, term), h("dd", {}, value)])),
+    latest.interfaces.length
+      ? h("details", { class: "snmp-interfaces", open: "" }, h("summary", {}, `Interfaces (${latest.interfaces.length})`), interfacesTable(latest.interfaces))
+      : null,
+    h("h3", { style: "margin-top:16px" }, "Uptime history"),
+    h(
+      "div",
+      { class: "table-wrap" },
+      h(
+        "table",
+        {},
+        h("thead", {}, h("tr", {}, ...["Scan", "Polled", "Result", "Uptime", "Response"].map((t) => h("th", {}, t)))),
+        h("tbody", {}, uptimeRows)
+      )
+    )
+  );
+}
+
+// ---------------------------------------------------------- host health
+
+const HEALTH_WINDOWS = [7, 30, 90, 365];
+
+function fmtSpan(seconds) {
+  return seconds == null ? "—" : fmtUptime(seconds);
+}
+
+function fmtPercent(value) {
+  return value == null ? "—" : `${value}%`;
+}
+
+function outagesTable(outages, truncated) {
+  if (!outages.length) return h("div", { class: "empty" }, "No outages observed in this period.");
+  return h(
+    "div",
+    {},
+    h(
+      "div",
+      { class: "table-wrap" },
+      h(
+        "table",
+        {},
+        h("thead", {}, h("tr", {}, ...["Started", "Ended", "Duration", "Failed checks"].map((t) => h("th", {}, t)))),
+        h(
+          "tbody",
+          {},
+          outages.map((outage) =>
+            h(
+              "tr",
+              {},
+              h("td", {}, outage.started_at),
+              h("td", {}, outage.ongoing ? resultPill(false, "Ongoing", "var(--st-error)") : outage.ended_at),
+              h("td", {}, fmtSpan(outage.duration_s)),
+              h("td", {}, String(outage.checks))
+            )
+          )
+        )
+      )
+    ),
+    truncated ? h("p", { class: "muted small" }, "Only the most recent outages are listed.") : null
+  );
+}
+
+function dailyTable(days, violations) {
+  if (!days.length) return h("div", { class: "empty" }, "No checks in this period.");
+  const missed = new Map();
+  for (const violation of violations) missed.set(violation.date, [...(missed.get(violation.date) || []), violation.kind]);
+  return h(
+    "div",
+    { class: "table-wrap" },
+    h(
+      "table",
+      {},
+      h("thead", {}, h("tr", {}, ...["Day", "Checks", "Up", "Availability", "P95 latency", "SLA"].map((t) => h("th", {}, t)))),
+      h(
+        "tbody",
+        {},
+        [...days].reverse().map((day) =>
+          h(
+            "tr",
+            {},
+            h("td", {}, day.date),
+            h("td", {}, String(day.checks)),
+            h("td", {}, String(day.up)),
+            h("td", {}, fmtPercent(day.availability_pct)),
+            h("td", {}, fmtLatency(day.latency_p95)),
+            h("td", {}, missed.has(day.date) ? `Missed (${missed.get(day.date).join(", ")})` : "")
+          )
+        )
+      )
+    )
+  );
+}
+
+function slaCard(ip, health, onChange) {
+  const sla = health.sla;
+  const target = h("input", { type: "number", step: "any", min: "0", max: "100", placeholder: "99.9", required: "", value: sla ? sla.availability_target : "", "aria-label": "Availability target in percent" });
+  const limit = h("input", { type: "number", step: "any", min: "0", placeholder: "none", value: sla?.latency_p95_ms ?? "", "aria-label": "P95 latency limit in ms" });
+  const save = h("button", { class: "btn", type: "submit" }, sla ? "Update target" : "Set target");
+  const form = h(
+    "form",
+    { class: "toolbar" },
+    h("label", { class: "control" }, "Availability ≥", target, "%"),
+    h("label", { class: "control" }, "P95 latency ≤", limit, "ms"),
+    save
+  );
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    save.disabled = true;
+    try {
+      await api.setSla(ip, {
+        availability_target: Number(target.value),
+        latency_p95_ms: limit.value === "" ? null : Number(limit.value),
+      });
+      toast("SLA target saved.");
+      await onChange();
+    } catch (err) {
+      toast(`Could not save the target: ${err.message}`, "error");
+      save.disabled = false;
+    }
+  });
+  const clear = h("button", { class: "ghost-btn", type: "button" }, "Remove target");
+  clear.addEventListener("click", async () => {
+    try {
+      await api.clearSla(ip);
+      toast("SLA target removed.");
+      await onChange();
+    } catch (err) {
+      toast(`Could not remove the target: ${err.message}`, "error");
+    }
+  });
+  if (sla) form.append(clear);
+
+  let verdict = h("p", { class: "muted" }, "No SLA target is set for this host.");
+  if (sla) {
+    const met = { true: "met", false: "not met", null: "no data" };
+    verdict = h(
+      "p",
+      {},
+      `Availability target ${sla.availability_target}%: `,
+      resultPill(sla.availability_met !== false, met[sla.availability_met], sla.availability_met === false ? "var(--st-error)" : undefined),
+      sla.latency_p95_ms == null ? null : [`  P95 limit ${sla.latency_p95_ms} ms: `, resultPill(sla.latency_met !== false, met[sla.latency_met], sla.latency_met === false ? "var(--st-error)" : undefined)]
+    );
+  }
+  return h(
+    "div",
+    { class: "card", style: "margin-top:14px" },
+    h("h3", {}, `SLA${sla ? ` (${sla.violations.length} ${sla.violations.length === 1 ? "violation" : "violations"})` : ""}`),
+    verdict,
+    form,
+    sla && sla.violations.length
+      ? h(
+          "div",
+          { class: "table-wrap" },
+          h(
+            "table",
+            {},
+            h("thead", {}, h("tr", {}, ...["Day", "Kind", "Observed", "Target"].map((t) => h("th", {}, t)))),
+            h(
+              "tbody",
+              {},
+              sla.violations.map((violation) =>
+                h(
+                  "tr",
+                  {},
+                  h("td", {}, violation.date),
+                  h("td", {}, violation.kind),
+                  h("td", {}, violation.kind === "latency" ? fmtLatency(violation.observed) : fmtPercent(violation.observed)),
+                  h("td", {}, violation.kind === "latency" ? fmtLatency(violation.target) : fmtPercent(violation.target))
+                )
+              )
+            )
+          )
+        )
+      : null
+  );
+}
+
+function maintenanceCard(ip, windows, onChange) {
+  const starts = h("input", { type: "datetime-local", required: "", "aria-label": "Window starts" });
+  const ends = h("input", { type: "datetime-local", required: "", "aria-label": "Window ends" });
+  const reason = h("input", { type: "text", maxlength: "200", placeholder: "Reason (optional)", "aria-label": "Reason" });
+  const scope = h("select", { "aria-label": "Applies to" }, h("option", { value: "host" }, "This host"), h("option", { value: "all" }, "Every host"));
+  const add = h("button", { class: "btn", type: "submit" }, "Add window");
+  const form = h(
+    "form",
+    { class: "toolbar" },
+    h("label", { class: "control" }, "From", starts),
+    h("label", { class: "control" }, "To", ends),
+    reason,
+    scope,
+    add
+  );
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    add.disabled = true;
+    try {
+      await api.addMaintenance({
+        ip: scope.value === "host" ? ip : null,
+        starts_at: starts.value,
+        ends_at: ends.value,
+        reason: reason.value,
+      });
+      toast("Maintenance window added.");
+      await onChange();
+    } catch (err) {
+      toast(`Could not add the window: ${err.message}`, "error");
+      add.disabled = false;
+    }
+  });
+
+  const rows = windows.map((window) => {
+    const remove = h("button", { class: "ghost-btn", type: "button" }, "Delete");
+    remove.addEventListener("click", async () => {
+      try {
+        await api.deleteMaintenance(window.id);
+        toast("Maintenance window deleted.");
+        await onChange();
+      } catch (err) {
+        toast(`Could not delete the window: ${err.message}`, "error");
+      }
+    });
+    return h(
+      "tr",
+      {},
+      h("td", {}, window.starts_at),
+      h("td", {}, window.ends_at),
+      h("td", {}, window.ip || "Every host"),
+      h("td", {}, window.reason || "—"),
+      h("td", {}, remove)
+    );
+  });
+  return h(
+    "div",
+    { class: "card", style: "margin-top:14px" },
+    h("h3", {}, `Maintenance windows (${windows.length})`),
+    h("p", { class: "muted small" }, "Checks inside a window count as neither up nor down. Times are the server's local time."),
+    form,
+    rows.length
+      ? h(
+          "div",
+          { class: "table-wrap" },
+          h("table", {}, h("thead", {}, h("tr", {}, ...["From", "To", "Applies to", "Reason", ""].map((t) => h("th", {}, t)))), h("tbody", {}, rows))
+        )
+      : h("div", { class: "empty" }, "None planned.")
+  );
+}
+
+// Long-term availability, latency percentiles, outages, SLA, and maintenance.
+// It redraws itself when the period changes or a target or window is edited.
+function hostHealthSection(ip) {
+  const section = h("div", { style: "margin-top:14px" });
+  let days = 30;
+
+  async function draw() {
+    const [health, windows] = await Promise.all([api.health(ip, days), api.maintenance(ip)]);
+    const select = h("select", { "aria-label": "Period" }, ...HEALTH_WINDOWS.map((value) => h("option", { value }, `Last ${value} days`)));
+    select.value = String(days);
+    select.addEventListener("change", () => {
+      days = Number(select.value);
+      draw().catch((err) => toast(`Could not load health: ${err.message}`, "error"));
+    });
+    const toolbar = h("div", { class: "toolbar" }, h("h3", { style: "margin:0" }, "Health"), select, h("span", { class: "spacer" }));
+    for (const fmt of ["csv", "json", "md"]) toolbar.append(downloadLink(api.availabilityReportUrl(ip, fmt, days), `Report ${fmt.toUpperCase()}`));
+
+    const { latency, outages } = health;
+    const slaTile = health.sla ? (health.sla.availability_met === false || health.sla.latency_met === false ? "Not met" : health.sla.availability_met == null ? "No data" : "Met") : "No target";
+    section.replaceChildren(
+      toolbar,
+      h(
+        "div",
+        { class: "grid tiles" },
+        tile(fmtPercent(health.availability_pct), `Availability (${health.checks} checks)`),
+        tile(fmtLatency(latency.p50), "Latency P50"),
+        tile(fmtLatency(latency.p95), "Latency P95"),
+        tile(fmtLatency(latency.p99), "Latency P99"),
+        tile(fmtSpan(outages.mttr_s), "MTTR"),
+        tile(fmtSpan(outages.mtbf_s), "MTBF"),
+        tile(`${outages.count}${outages.ongoing ? " (1 ongoing)" : ""}`, "Outages"),
+        tile(slaTile, "SLA")
+      ),
+      h(
+        "p",
+        { class: "muted small" },
+        health.note,
+        health.excluded ? ` ${health.excluded} ${health.excluded === 1 ? "check" : "checks"} fell in maintenance and are left out.` : ""
+      ),
+      h("div", { class: "card" }, h("h3", {}, `Outages (${outages.count})`), outagesTable(health.outage_list, health.outages_truncated)),
+      h("div", { class: "card", style: "margin-top:14px" }, h("h3", {}, "By day"), dailyTable(health.daily, health.sla?.violations || [])),
+      slaCard(ip, health, draw),
+      maintenanceCard(ip, windows, draw)
+    );
+  }
+
+  draw().catch((err) => section.replaceChildren(h("div", { class: "banner err" }, `Could not load health: ${err.message}`)));
+  return section;
+}
+
+export async function hostView(root, ip) {
+  root.append(h("h1", { class: "page-title" }, ip));
+
+  let host;
+  try {
+    host = await api.host(ip);
+  } catch (err) {
+    if (err.status !== 404) throw err;
+    root.append(
+      h("p", { class: "page-sub" }, "Never seen"),
+      h("div", { class: "empty" }, `No scan has recorded ${ip}. Once a scan includes it, its history appears here.`)
+    );
+    return;
+  }
+
+  const [history, changes, polls] = await Promise.all([
+    api.hostResults(ip),
+    api.hostChanges(ip).catch(() => []),
+    api.hostSnmp(ip).catch(() => []),
+  ]);
+
+  root.append(
+    h("p", { class: "page-sub" }, [host.hostname || host.snmp_name || "No hostname recorded", " · ", statusPill(host.status)])
+  );
+
+  const toolbar = h("div", { class: "toolbar" }, h("span", { class: "spacer" }));
+  if (host.mac) toolbar.append(wakeButton(host));
+  const exportCsv = h("button", { class: "ghost-btn", type: "button" }, "Export CSV");
+  const exportJson = h("button", { class: "ghost-btn", type: "button" }, "Export JSON");
+  exportCsv.addEventListener("click", () => {
+    const header = "Scan,Time,Source,Status,Latency,Probe,Hostname,MAC Address,Open Ports";
+    const lines = history.map((row) =>
+      [row.scan_id, row.checked_at, row.source, row.status, row.latency, row.method, row.hostname, row.mac, row.open_ports].map(csvCell).join(",")
+    );
+    saveText([header, ...lines].join("\n"), "text/csv", `ipmg_host_${ip.replaceAll(":", "-")}.csv`);
+  });
+  exportJson.addEventListener("click", () =>
+    saveText(JSON.stringify({ host, results: history, changes, snmp: polls }, null, 2), "application/json", `ipmg_host_${ip.replaceAll(":", "-")}.json`)
+  );
+  toolbar.append(exportCsv, exportJson);
+  root.append(toolbar);
+
+  root.append(
+    h(
+      "div",
+      { class: "grid tiles" },
+      tile(host.status, "Status"),
+      tile(fmtLatency(host.avg_latency), "Avg latency"),
+      tile(String(host.scan_count), host.scan_count === 1 ? "Scan" : "Scans"),
+      tile(host.first_seen || "never", "First seen active", { compact: true }),
+      tile(host.last_seen || "never", "Last seen active", { compact: true })
+    )
+  );
+
+  const facts = [
+    ["Hostname", host.hostname],
+    ["MAC address", host.mac],
+    ["Vendor", host.vendor],
+    ["SNMP name", host.snmp_name],
+    ["SNMP description", host.snmp_descr],
+    ["Last checked", `${host.last_checked} (scan #${host.last_scan_id})`],
+  ].filter(([, value]) => value);
+  root.append(
+    h("div", { class: "card" }, h("h3", {}, "Summary"), h("dl", { class: "details-list" }, facts.flatMap(([term, value]) => [h("dt", {}, term), h("dd", {}, value)])))
+  );
+
+  // Oldest first for the charts, as time reads left to right.
+  const oldestFirst = [...history].reverse();
+  root.append(
+    h(
+      "div",
+      { class: "grid host-charts", style: "margin-top:14px" },
+      h("div", { class: "card" }, h("h3", {}, "Status in each scan, oldest first"), statusTimeline(oldestFirst)),
+      h(
+        "div",
+        { class: "card" },
+        h("h3", {}, "Latency"),
+        latencyTrend(
+          oldestFirst.map((row) => ({ ...row, avg_latency: row.latency })),
+          {
+            label: `Latency of ${ip} in each scan`,
+            empty: "Two or more replies are needed for a latency trend.",
+            axis: (count) => `Latency (ms), last ${count} replies`,
+            tip: (point) => [`${point.avg_latency.toFixed(1)} ms`, `Scan #${point.scan_id} — ${point.started_at}`],
+          }
+        )
+      )
+    )
+  );
+
+  root.append(
+    h("div", { class: "card" }, h("h3", {}, `History (${history.length} ${history.length === 1 ? "scan" : "scans"}, newest first)`), hostHistoryTable(history)),
+    h("div", { class: "card", style: "margin-top:14px" }, h("h3", {}, `Changes (${changes.length})`), hostChangesTable(changes))
+  );
+  if (polls.length) root.append(hostSnmpCard(polls));
+  root.append(hostHealthSection(ip));
 }
 
 // ------------------------------------------------------------ schedules

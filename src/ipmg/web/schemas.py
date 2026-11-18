@@ -354,6 +354,151 @@ class ScanDiffModel(ApiModel):
     changes: list[HostChangeModel]
 
 
+class HostSummary(Asset):
+    """One address as the whole history records it."""
+
+    first_seen: str | None = Field(description="First time the host was active")
+
+
+class HostHistoryRow(HostResultRow):
+    """One scan's result for a single host, with the scan it came from."""
+
+    scan_id: int
+    started_at: str = Field(description="When the scan started")
+    source: str = Field(description="What the scan was run against")
+    scan_status: str = Field(description="State of the scan: complete, cancelled, ...")
+
+
+class HostChangeRow(HostChangeModel):
+    """A change to one host between two scans of the same source."""
+
+    scan_id: int = Field(description="The later scan, in which the change appeared")
+    baseline_id: int = Field(description="The earlier scan it was compared with")
+    started_at: str = Field(description="When the later scan started")
+    source: str
+
+
+class HostSnmpRow(SnmpDeviceRow):
+    """One SNMP poll of a single host, with the scan that made it."""
+
+    scan_id: int
+
+
+class LatencyStats(ApiModel):
+    """Latency of the replies in the window, in ms; every figure is null when there are none."""
+
+    count: int = Field(description="Replies that carried a latency")
+    min: float | None
+    mean: float | None
+    p50: float | None
+    p95: float | None
+    p99: float | None
+    max: float | None
+
+
+class OutageSummary(ApiModel):
+    count: int = Field(description="Outages, an ongoing one included")
+    recovered: int
+    ongoing: int = Field(description="Outages still failing at the last check")
+    downtime_s: float = Field(description="Total outage time, less maintenance")
+    longest_s: float
+    mttr_s: float | None = Field(description="Mean length of recovered outages; null if none")
+    mtbf_s: float | None = Field(
+        description="Operating time divided by outages; null when there were none"
+    )
+
+
+class OutageRow(ApiModel):
+    started_at: str = Field(description="Time of the first failed check")
+    ended_at: str | None = Field(description="Time of the check that succeeded; null if ongoing")
+    duration_s: float = Field(description="Less any maintenance inside it")
+    checks: int = Field(description="Failed checks in a row")
+    ongoing: bool
+
+
+class DailyRow(ApiModel):
+    date: str = Field(description="Local calendar day, YYYY-MM-DD")
+    checks: int
+    up: int
+    availability_pct: float | None
+    latency_p95: float | None
+
+
+class SlaViolation(ApiModel):
+    date: str
+    kind: str = Field(description="'availability' or 'latency'")
+    observed: float | None
+    target: float
+
+
+class SlaStatus(ApiModel):
+    availability_target: float
+    latency_p95_ms: float | None
+    availability_met: bool | None = Field(description="Null when there were no checks")
+    latency_met: bool | None = Field(description="Null with no limit or no replies")
+    violations: list[SlaViolation] = Field(description="Days that broke the target, oldest first")
+
+
+class MaintenanceRow(ApiModel):
+    id: int
+    ip: str | None = Field(description="The host it covers; null for every host")
+    starts_at: str = Field(description="Local time; inside the window")
+    ends_at: str = Field(description="Local time; the first moment after it")
+    reason: str
+    created_at: str
+
+
+class HealthWindow(ApiModel):
+    starts_at: str
+    ends_at: str
+    days: int
+
+
+class HostHealth(ApiModel):
+    """A host's availability, latency, outages, and SLA over a window."""
+
+    ip: str
+    window: HealthWindow
+    source: str | None = Field(description="The source the figures are limited to, if any")
+    sources: list[str] = Field(description="Every source that checked the host in the window")
+    checks: int = Field(description="Checks counted: those outside maintenance")
+    up: int
+    down: int
+    excluded: int = Field(description="Checks left out because they fell in maintenance")
+    availability_pct: float | None = Field(description="Reachable checks over all; null if none")
+    latency: LatencyStats
+    outages: OutageSummary
+    outage_list: list[OutageRow] = Field(description="Newest first, at most 50")
+    outages_truncated: bool
+    daily: list[DailyRow]
+    sla: SlaStatus | None = Field(description="Null when the host has no SLA target")
+    maintenance: list[MaintenanceRow] = Field(description="Windows that touch the period")
+    note: str = Field(description="What the figures can and cannot see")
+
+
+class SlaRequest(BaseModel):
+    availability_target: float = Field(
+        gt=0, le=100, description="Percent of checks that must be reachable, e.g. 99.9"
+    )
+    latency_p95_ms: float | None = Field(
+        default=None, gt=0, le=3_600_000, description="Optional ceiling for P95 latency, in ms"
+    )
+
+
+class SlaRow(ApiModel):
+    ip: str
+    availability_target: float
+    latency_p95_ms: float | None
+    updated_at: str
+
+
+class MaintenanceRequest(BaseModel):
+    ip: str | None = Field(default=None, description="One host; omit it to cover every host")
+    starts_at: str = Field(description="Local time, YYYY-MM-DD HH:MM[:SS]; no UTC offset")
+    ends_at: str = Field(description="Local time; must be after starts_at")
+    reason: str = Field(default="", max_length=200)
+
+
 # ------------------------------------------------------------ WebSocket events
 
 

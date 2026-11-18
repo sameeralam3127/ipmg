@@ -19,6 +19,9 @@ from ipmg.exceptions import HistoryError
 from ipmg.infrastructure.database import DEFAULT_DB_PATH, Database
 from ipmg.infrastructure.retention import PrunePlan, plan_prune
 
+#: The most scans of one host looked at to pair them up. Cheap, since only ids are read.
+HOST_SCAN_WINDOW = 2000
+
 
 class HistoryService:
     """High-level operations over the stored scan history."""
@@ -132,6 +135,41 @@ class HistoryService:
             )
         target_id, baseline_id = recent[0], recent[1]
         return self.compare(baseline_id, target_id, options=options)
+
+    def host_changes(
+        self, ip: str, limit: int = 25, options: DiffOptions | None = None
+    ) -> list[dict[str, Any]]:
+        """What changed for one host, newest first.
+
+        Takes the scans that recorded ``ip`` and compares each with the scan of
+        the same source before it, so a source that stopped including the host
+        for a while is not read as the host vanishing. ``limit`` bounds how
+        many scans are compared, each a whole-scan comparison.
+        """
+        scans = self._db.host_comparable_scans(ip, HOST_SCAN_WINDOW)
+        previous_by_source: dict[str, dict[str, Any]] = {}
+        pairs: list[tuple[dict[str, Any], dict[str, Any]]] = []
+        for scan in reversed(scans):
+            earlier = previous_by_source.get(scan["source"])
+            if earlier is not None:
+                pairs.append((earlier, scan))
+            previous_by_source[scan["source"]] = scan
+
+        rows: list[dict[str, Any]] = []
+        for baseline, current in reversed(pairs[-limit:] if limit else []):
+            diff = self.compare(baseline["id"], current["id"], options=options)
+            rows.extend(
+                {
+                    **change.to_dict(),
+                    "scan_id": current["id"],
+                    "baseline_id": baseline["id"],
+                    "started_at": current["started_at"],
+                    "source": current["source"],
+                }
+                for change in diff.changes
+                if change.ip == ip
+            )
+        return rows
 
     # ------------------------------------------------------------ helpers
 
