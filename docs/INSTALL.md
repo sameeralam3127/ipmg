@@ -119,10 +119,15 @@ replace `X.Y.Z` with a release number, 4.2.1 or newer (see
 **Docker (amd64 and arm64):**
 
 ```bash
-docker run --rm ghcr.io/sameeralam3127/ipmg --input 10.0.0.0/24
-# or from Docker Hub
+# IPMG Web: open the link the log prints
+docker run -d --name ipmg -p 127.0.0.1:8080:8080 -v ipmg-data:/data sameeralam3127/ipmg
+docker logs ipmg
+
+# The CLI: give it arguments
 docker run --rm sameeralam3127/ipmg --input 10.0.0.0/24
 ```
+
+The same image is at `ghcr.io/sameeralam3127/ipmg`.
 
 Then check it works, on any platform:
 
@@ -245,11 +250,23 @@ Docker and containerd enable by default, so it also works with
 scan your LAN rather than the container's network, add `--network host`
 (Linux).
 
-For IPMG Web, use the [`compose.yaml`](https://github.com/sameeralam3127/ipmg/blob/main/compose.yaml)
-in this repository. Inside a container IPMG Web must listen on `0.0.0.0` or
-nothing outside the container could reach it, so the compose file starts it
-with `web --host 0.0.0.0` and publishes the port on the host's `127.0.0.1`
-only. Set a fixed `IPMG_WEB_TOKEN` in `.env`, then:
+**IPMG Web is what the image runs when you give it no arguments.** Publish
+port 8080 and read the link, with its access token, from the log:
+
+```bash
+docker run -d --name ipmg -p 127.0.0.1:8080:8080 -v ipmg-data:/data sameeralam3127/ipmg
+docker logs ipmg    # Open  http://127.0.0.1:8080/#token=...  (on the port you published)
+```
+
+A new token is made each time the container starts. To keep the link the same,
+pin one with `-e IPMG_WEB_TOKEN=<16 or more letters, digits, ., _, ~ or ->`.
+If you publish a different host port (`-p 127.0.0.1:9000:8080`), use that port
+in the link. Any argument replaces the default, so `--input ...` runs a scan and
+`--help` prints the help, as before.
+
+For a setup that survives restarts, use the [`compose.yaml`](https://github.com/sameeralam3127/ipmg/blob/main/compose.yaml)
+in this repository. It publishes the port on the host's `127.0.0.1` only. Set a
+fixed `IPMG_WEB_TOKEN` in `.env`, then:
 
 ```bash
 docker compose up -d                                      # http://127.0.0.1:8080/#token=<your token>

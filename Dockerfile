@@ -1,7 +1,14 @@
 # IPMG in a container: the CLI, IPMG Web, and the ping it needs.
 #
-#   docker run --rm sameeralam3127/ipmg --input 10.0.0.0/24
-#   docker run --rm -v ipmg-data:/data sameeralam3127/ipmg --input targets.txt
+# With no arguments it starts IPMG Web; the link, with its access token, is in
+# the container's log:
+#
+#   docker run -d --name ipmg -p 127.0.0.1:8080:8080 -v ipmg-data:/data sameeralam3127/ipmg
+#   docker logs ipmg
+#
+# With arguments it is the CLI, and the scan lands in the same history:
+#
+#   docker run --rm -v ipmg-data:/data sameeralam3127/ipmg --input 10.0.0.0/24
 #
 # Also published as ghcr.io/sameeralam3127/ipmg, the same image.
 #
@@ -50,8 +57,12 @@ ENV HOME=/data \
     PYTHONUNBUFFERED=1
 VOLUME ["/data"]
 
-# IPMG Web, when started with: web --host 0.0.0.0
 EXPOSE 8080
 
+# Arguments replace CMD, so "docker run IMAGE --input ..." runs a scan, and
+# "docker run IMAGE --help" prints the help. With none, IPMG Web starts. It
+# must listen on 0.0.0.0 inside the container or the published port reaches
+# nothing; which host interfaces see it is decided by -p. Set IPMG_WEB_TOKEN
+# to keep the link the same across restarts.
 ENTRYPOINT ["ipmg"]
-CMD ["--help"]
+CMD ["web", "--host", "0.0.0.0", "--no-browser"]

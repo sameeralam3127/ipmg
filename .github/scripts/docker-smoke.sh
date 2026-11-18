@@ -9,9 +9,10 @@ image="${1:?usage: docker-smoke.sh IMAGE}"
 token="smoke-$RANDOM$RANDOM$RANDOM$RANDOM$RANDOM"
 volume="ipmg-smoke-$$"
 web="ipmg-smoke-web-$$"
+default="ipmg-smoke-default-$$"
 
 cleanup() {
-  docker rm -f "$web" >/dev/null 2>&1 || true
+  docker rm -f "$web" "$default" >/dev/null 2>&1 || true
   docker volume rm -f "$volume" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
@@ -45,5 +46,24 @@ anonymous=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/api/v1
 [ "$anonymous" = "401" ] || { echo "expected 401 without a token, got $anonymous"; exit 1; }
 curl -fsS -H "Authorization: Bearer $token" http://127.0.0.1:18080/api/v1/stats | grep -q scan_count \
   || { echo "stats did not answer"; docker logs "$web"; exit 1; }
+
+echo "== with no arguments, the image starts IPMG Web and logs a working link"
+docker run -d --name "$default" -p 127.0.0.1:18081:8080 "$image" >/dev/null
+for _ in $(seq 1 30); do
+  curl -fsS -o /dev/null http://127.0.0.1:18081/ 2>/dev/null && break
+  sleep 1
+done
+link=$(docker logs "$default" 2>&1 | grep -o 'http://127.0.0.1:8080/#token=[A-Za-z0-9._~-]*' | head -1)
+[ -n "$link" ] || { echo "no link in the log"; docker logs "$default"; exit 1; }
+generated=${link##*#token=}
+curl -fsS -H "Authorization: Bearer $generated" http://127.0.0.1:18081/api/v1/stats | grep -q scan_count \
+  || { echo "the logged token was not accepted"; docker logs "$default"; exit 1; }
+# Not a 172.x container address no one outside could open.
+if docker logs "$default" 2>&1 | grep -q 'from other machines'; then
+  echo "the log offers the container's own address"; docker logs "$default"; exit 1
+fi
+
+echo "== --help still prints the help and exits"
+docker run --rm "$image" --help | grep -q -- '--input'
 
 echo "smoke test passed"
