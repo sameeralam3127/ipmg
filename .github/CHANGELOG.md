@@ -2,6 +2,23 @@
 
 <!-- version list -->
 
+## v4.3.0 (2026-11-18)
+
+### Continuous Integration
+
+- Bump the actions group with 2 updates ([#144](https://github.com/sameeralam3127/ipmg/pull/144),
+  [`f633d99`](https://github.com/sameeralam3127/ipmg/commit/f633d994f6933774f8c5199dbfd913f36ed5a4e5))
+
+### Features
+
+- **web**: Host pages with health analytics, SLA targets, and maintenance windows
+  ([#147](https://github.com/sameeralam3127/ipmg/pull/147),
+  [`35c30ed`](https://github.com/sameeralam3127/ipmg/commit/35c30edc9b2a1254b575b63b95008173a10d5e68))
+
+- **web**: Tighten host pages after review ([#147](https://github.com/sameeralam3127/ipmg/pull/147),
+  [`35c30ed`](https://github.com/sameeralam3127/ipmg/commit/35c30edc9b2a1254b575b63b95008173a10d5e68))
+
+
 ## v4.2.1 (2026-11-04)
 
 ### Bug Fixes
