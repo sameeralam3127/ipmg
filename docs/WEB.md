@@ -311,8 +311,17 @@ input (the same file) so each one updates its source rather than adding one.
 
 ## In Docker
 
+The image starts IPMG Web when you run it without arguments. Publish the port
+and open the link from the log:
+
+```bash
+docker run -d --name ipmg -p 127.0.0.1:8080:8080 -v ipmg-data:/data sameeralam3127/ipmg
+docker logs ipmg
+```
+
+Pin the token with `-e IPMG_WEB_TOKEN=...` so the link survives a restart.
 Inside a container IPMG Web must listen on `0.0.0.0`, or nothing outside the
-container could reach it. The [`compose.yaml`](https://github.com/sameeralam3127/ipmg/blob/main/compose.yaml) in this
+container could reach it; the default command does that. The [`compose.yaml`](https://github.com/sameeralam3127/ipmg/blob/main/compose.yaml) in this
 repository does that and publishes the port on the host's `127.0.0.1` only.
 Set a fixed `IPMG_WEB_TOKEN` in `.env`, then:
 
