@@ -1,17 +1,18 @@
 // App shell: hash router, theme toggle, and WebSocket bootstrap.
 
-import { connect } from "./api.js?v=20261018.2";
+import { connect } from "./api.js?v=20261118.3";
 import {
   aboutView,
   changesView,
   dashboardView,
   historyView,
+  hostView,
   inventoryView,
   monitorView,
   newScanView,
   scanDetailView,
   schedulesView,
-} from "./views.js?v=20261018.2";
+} from "./views.js?v=20261118.3";
 
 // The GitHub Pages demo opens on the seeded dashboard so visitors see data
 // immediately; a real local dashboard opens straight into a new scan.
@@ -30,6 +31,8 @@ const routes = [
   { pattern: /^#\/scan\/(\d+)$/, name: "history", view: scanDetailView },
   { pattern: /^#\/changes(?:\/(\d+))?(?:\/(\d+))?$/, name: "changes", view: changesView },
   { pattern: /^#\/inventory$/, name: "inventory", view: inventoryView },
+  // The address stays text: it is not a number, and IPv6 is percent-encoded.
+  { pattern: /^#\/host\/([^/]+)$/, name: "inventory", view: hostView, text: true },
   { pattern: /^#\/about$/, name: "about", view: aboutView },
 ];
 
@@ -47,9 +50,15 @@ async function render() {
     link.classList.toggle("active", link.dataset.route === route.name);
   });
 
-  const params = (match ? match.slice(1) : []).map((value) =>
-    value === undefined ? undefined : Number(value)
-  );
+  const params = (match ? match.slice(1) : []).map((value) => {
+    if (value === undefined) return undefined;
+    if (!route.text) return Number(value);
+    try {
+      return decodeURIComponent(value);
+    } catch {
+      return value; // a stray "%": the API will say it is not an address
+    }
+  });
 
   try {
     await route.view(root, ...params);

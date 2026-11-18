@@ -8,6 +8,7 @@ The API contract (models, errors, versioning) is described in docs/API.md.
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import re
 import secrets
 import tempfile
@@ -51,8 +52,14 @@ from ipmg.infrastructure.file_io import (
     parse_manual_targets,
     render_report,
 )
+from ipmg.reporting.availability_report import (
+    AVAILABILITY_FORMATS,
+    AVAILABILITY_MEDIA_TYPES,
+    render_availability,
+)
 from ipmg.reporting.diff_report import DIFF_FORMATS, render_diff
 from ipmg.reporting.frames import ReportTable, report_columns, results_table
+from ipmg.services.availability_service import MAX_DAYS, AvailabilityService
 from ipmg.services.history_service import HistoryService
 from ipmg.web.manager import DEFAULT_MAX_SCANS, OVERFLOW, ScanLimitError, ScanManager
 from ipmg.web.scheduler import (
@@ -66,8 +73,15 @@ from ipmg.web.scheduler import (
 from ipmg.web.schemas import (
     Asset,
     ErrorResponse,
+    HostChangeRow,
+    HostHealth,
+    HostHistoryRow,
     HostResultRow,
+    HostSnmpRow,
+    HostSummary,
     HttpCheckRow,
+    MaintenanceRequest,
+    MaintenanceRow,
     ScanCancelled,
     ScanCreated,
     ScanDiffModel,
@@ -76,6 +90,8 @@ from ipmg.web.schemas import (
     Schedule,
     SchedulePatch,
     ScheduleRequest,
+    SlaRequest,
+    SlaRow,
     SnmpDeviceRow,
     Stats,
     UploadResult,
@@ -393,6 +409,205 @@ def _register_check_routes(api: APIRouter, database: Database) -> None:
         if database.get_scan(scan_id) is None:
             raise HTTPException(status_code=404, detail="Scan not found")
         return database.get_snmp_devices(scan_id)
+
+
+def _host_address(ip: str) -> str:
+    """The canonical form of a path's IP address, or a 400 for anything else."""
+    try:
+        if "%" in ip:  # a zone id names an interface on one machine, not a host
+            raise ValueError(ip)
+        return str(ipaddress.ip_address(ip))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Not an IP address: {ip}") from exc
+
+
+def _register_host_routes(api: APIRouter, database: Database, history: HistoryService) -> None:
+    """Everything the history records about one address."""
+    limit_query = Query(100, description="Maximum rows to return (clamped to 1-1000)")
+
+    @api.get(
+        "/hosts/{ip}",
+        response_model=HostSummary,
+        responses=_errors(400, 404),
+        summary="One host, as the whole history records it",
+    )
+    def get_host(ip: str) -> dict[str, Any]:
+        summary = database.host_summary(_host_address(ip))
+        if summary is None:
+            raise HTTPException(status_code=404, detail="No scan has recorded this address")
+        return summary
+
+    @api.get(
+        "/hosts/{ip}/results",
+        response_model=list[HostHistoryRow],
+        responses=_errors(400),
+        summary="A host's result in every scan that recorded it, newest first",
+    )
+    def get_host_results(ip: str, limit: int = limit_query) -> list[dict[str, Any]]:
+        return database.host_results(_host_address(ip), limit=max(1, min(limit, 1000)))
+
+    @api.get(
+        "/hosts/{ip}/changes",
+        response_model=list[HostChangeRow],
+        responses=_errors(400),
+        summary="What changed for a host between consecutive scans of the same source",
+    )
+    def get_host_changes(
+        ip: str,
+        limit: int = Query(25, description="Scans to compare (clamped to 1-100)"),
+    ) -> list[dict[str, Any]]:
+        return history.host_changes(_host_address(ip), limit=max(1, min(limit, 100)))
+
+    @api.get(
+        "/hosts/{ip}/snmp",
+        response_model=list[HostSnmpRow],
+        responses=_errors(400),
+        summary="A host's SNMP polls (ipmg --snmp), newest first",
+    )
+    def get_host_snmp(ip: str, limit: int = limit_query) -> list[dict[str, Any]]:
+        return database.host_snmp(_host_address(ip), limit=max(1, min(limit, 1000)))
+
+
+def _register_health_routes(api: APIRouter, availability: AvailabilityService) -> None:
+    """Long-term health of a host: availability, latency percentiles, outages, report."""
+    days_query = Query(30, description=f"Days to look back (clamped to 1-{MAX_DAYS})")
+    source_query = Query(None, description="Only checks made by scans of this source")
+
+    def _health(ip: str, days: int, source: str | None) -> dict[str, Any]:
+        health = availability.health(_host_address(ip), days=days, source=source)
+        if health is None:
+            raise HTTPException(status_code=404, detail="No scan has recorded this address")
+        return health
+
+    @api.get(
+        "/hosts/{ip}/health",
+        response_model=HostHealth,
+        responses=_errors(400, 404),
+        summary="A host's availability, latency percentiles, outages, and SLA",
+    )
+    def get_host_health(
+        ip: str, days: int = days_query, source: str | None = source_query
+    ) -> dict[str, Any]:
+        return _health(ip, days, source)
+
+    @api.get(
+        "/hosts/{ip}/availability/report",
+        response_class=Response,
+        responses={
+            **_file_response(AVAILABILITY_MEDIA_TYPES, "The availability report as a download"),
+            **_errors(400, 404),
+        },
+        summary="Download a host's availability report",
+    )
+    def host_availability_report(
+        ip: str,
+        fmt: str = Query("md", description="One of: " + ", ".join(AVAILABILITY_FORMATS)),
+        days: int = days_query,
+        source: str | None = source_query,
+    ) -> Response:
+        if fmt not in AVAILABILITY_MEDIA_TYPES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported format: {fmt}. Supported: {', '.join(AVAILABILITY_FORMATS)}.",
+            )
+        health = _health(ip, days, source)
+        name = health["ip"].replace(":", "-")
+        return Response(
+            content=render_availability(health, fmt).encode("utf-8"),
+            media_type=AVAILABILITY_MEDIA_TYPES[fmt],
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="ipmg_availability_{name}_{health["window"]["days"]}d.{fmt}"'
+                )
+            },
+        )
+
+
+def _register_sla_routes(
+    api: APIRouter, database: Database, availability: AvailabilityService
+) -> None:
+    @api.get(
+        "/hosts/{ip}/sla",
+        response_model=SlaRow,
+        responses=_errors(400, 404),
+        summary="A host's SLA target",
+    )
+    def get_host_sla(ip: str) -> dict[str, Any]:
+        sla = database.get_sla(_host_address(ip))
+        if sla is None:
+            raise HTTPException(status_code=404, detail="This host has no SLA target")
+        return sla
+
+    @api.put(
+        "/hosts/{ip}/sla",
+        response_model=SlaRow,
+        responses=_errors(400),
+        summary="Set a host's SLA target",
+    )
+    def put_host_sla(ip: str, request: SlaRequest) -> dict[str, Any]:
+        try:
+            return availability.set_sla(
+                _host_address(ip), request.availability_target, request.latency_p95_ms
+            )
+        except HistoryError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @api.delete(
+        "/hosts/{ip}/sla",
+        status_code=204,
+        response_class=Response,
+        responses=_errors(400, 404),
+        summary="Remove a host's SLA target",
+    )
+    def delete_host_sla(ip: str) -> Response:
+        if not database.delete_sla(_host_address(ip)):
+            raise HTTPException(status_code=404, detail="This host has no SLA target")
+        return Response(status_code=204)
+
+
+def _register_maintenance_routes(
+    api: APIRouter, database: Database, availability: AvailabilityService
+) -> None:
+    @api.get(
+        "/maintenance",
+        response_model=list[MaintenanceRow],
+        responses=_errors(400),
+        summary="Maintenance windows, soonest first",
+    )
+    def list_maintenance(
+        ip: str | None = Query(
+            None, description="Only windows that apply to this host: its own and every-host ones"
+        ),
+    ) -> list[dict[str, Any]]:
+        return database.list_maintenance(ip=_host_address(ip) if ip is not None else None)
+
+    @api.post(
+        "/maintenance",
+        status_code=201,
+        response_model=MaintenanceRow,
+        responses=_errors(400),
+        summary="Plan a maintenance window",
+    )
+    def create_maintenance(request: MaintenanceRequest) -> dict[str, Any]:
+        ip = _host_address(request.ip) if request.ip is not None else None
+        try:
+            return availability.add_maintenance(
+                ip, request.starts_at, request.ends_at, request.reason
+            )
+        except HistoryError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @api.delete(
+        "/maintenance/{window_id}",
+        status_code=204,
+        response_class=Response,
+        responses=_errors(404),
+        summary="Delete a maintenance window",
+    )
+    def delete_maintenance(window_id: int) -> Response:
+        if not database.delete_maintenance(window_id):
+            raise HTTPException(status_code=404, detail="Maintenance window not found")
+        return Response(status_code=204)
 
 
 def _register_scan_control_routes(api: APIRouter, database: Database, manager: ScanManager) -> None:
@@ -857,6 +1072,7 @@ def create_app(
     token = token or secrets.token_urlsafe(32)
     manager = ScanManager(database, max_scans=max_scans)
     history = HistoryService(database)
+    availability = AvailabilityService(database)
     scheduler = Scheduler(database, manager, tick_s=schedule_tick_s)
 
     @asynccontextmanager
@@ -887,6 +1103,10 @@ def create_app(
     _register_overview_routes(api, database)
     _register_scan_routes(api, database, manager)
     _register_check_routes(api, database)
+    _register_host_routes(api, database, history)
+    _register_health_routes(api, availability)
+    _register_sla_routes(api, database, availability)
+    _register_maintenance_routes(api, database, availability)
     _register_scan_control_routes(api, database, manager)
     _register_schedule_routes(api, database)
     _register_schedule_control_routes(api, database, scheduler)

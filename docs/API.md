@@ -91,9 +91,9 @@ list each problem in `errors`:
 
 | Status | Meaning |
 | --- | --- |
-| `400` | The request is well-formed but can't be used, e.g. no valid targets or an unsupported report format |
+| `400` | The request is well-formed but can't be used, e.g. no valid targets, an unsupported report format, or a host path that isn't an IP address |
 | `401` | Missing or invalid access token |
-| `404` | No scan with that ID, or no earlier scan to compare with |
+| `404` | No scan with that ID, no earlier scan to compare with, or an address no scan has recorded (`/hosts/{ip}`) |
 | `409` | Cancelling a scan that isn't running, or deleting one that still is |
 | `413` | Upload larger than 5 MB |
 | `422` | A field has the wrong type, e.g. `"threads": "many"` |
@@ -105,6 +105,18 @@ list each problem in `errors`:
 | --- | --- | --- |
 | `GET` | `/stats` | Dashboard overview: counts, latest scan, running scans, trend |
 | `GET` | `/assets` | Every host ever scanned, with its latest status, and its latest SNMP `sysName` and `sysDescr` if it was polled |
+| `GET` | `/hosts/{ip}` | One host as the whole history records it: latest hostname, status, MAC and vendor, SNMP name and description, first and last seen active, and how many scans saw it. `400` if `{ip}` isn't an IP address, `404` if no scan has recorded it |
+| `GET` | `/hosts/{ip}/results?limit=100` | The host's result in every scan that recorded it, newest first, each with the scan's ID, start time, and source (`limit` 1-1000) |
+| `GET` | `/hosts/{ip}/changes?limit=25` | What changed for the host between consecutive scans of the same source, newest first, each with the scan it appeared in and the one it was compared with (`limit` 1-100 scans) |
+| `GET` | `/hosts/{ip}/snmp?limit=100` | The host's SNMP polls, newest first, each with its interfaces (`limit` 1-1000) |
+| `GET` | `/hosts/{ip}/health?days=30&source=` | Availability, latency P50/P95/P99, outages with MTTR and MTBF, a by-day breakdown, the host's SLA status, and the maintenance windows that touch the period (`days` 1-365). Figures are observed from scans ([definitions](WEB.md#host-health-and-slas)). `404` for an address no scan has recorded |
+| `GET` | `/hosts/{ip}/availability/report?fmt=md&days=30&source=` | The same figures as a download: `md`, `json`, or `csv` |
+| `GET` | `/hosts/{ip}/sla` | The host's SLA target; `404` if none |
+| `PUT` | `/hosts/{ip}/sla` | Set it: `{"availability_target": 99.9, "latency_p95_ms"?}` (target above 0 and at most 100; `422` otherwise) |
+| `DELETE` | `/hosts/{ip}/sla` | Remove it; returns `204`, or `404` if none |
+| `GET` | `/maintenance?ip=` | Maintenance windows, soonest first; with `ip`, that host's and the every-host ones |
+| `POST` | `/maintenance` | Plan one: `{"ip"?, "starts_at", "ends_at", "reason"?}` in local time (`YYYY-MM-DD HH:MM[:SS]`, no UTC offset); omit `ip` for every host. `400` if it doesn't end after it starts or a time can't be read; returns `201` |
+| `DELETE` | `/maintenance/{id}` | Delete a window; returns `204` |
 | `GET` | `/scans?limit=50` | Recent scans, newest first (`limit` 1-500) |
 | `POST` | `/scans` | Start a scan; returns `201` with `{"id", "total"}`, or `429` when `--max-scans` scans are already running |
 | `GET` | `/scans/{id}` | One scan, with status counts and average latency |

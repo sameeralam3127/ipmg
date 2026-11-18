@@ -134,7 +134,7 @@
           <article class="feature reveal">
             <div class="icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg></div>
             <h3>IPMG Web for the whole team</h3>
-            <p><code>ipmg web --lan</code> prints the link to share and the firewall step. Live scans, history, changes, inventory, and scheduled scans, fully offline.</p>
+            <p><code>ipmg web --lan</code> prints the link to share and the firewall step. Live scans, history, changes, inventory, scheduled scans, and a page for every host with its availability, latency percentiles, and SLA, fully offline.</p>
           </article>
           <article class="feature reveal">
             <div class="icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg></div>
@@ -490,7 +490,7 @@ ipmg diff --fail-on-change   # exit 2 for cron or CI</code></pre>
         <div class="section-head center reveal">
           <p class="kicker">IPMG Web</p>
           <h2>Prefer clicking? Same engine, in your browser.</h2>
-          <p><code>ipmg web</code> starts a private server with live progress, scan history, change reports, a host inventory with Wake-on-LAN, and scheduled scans. <code>ipmg web --lan</code> lets your team open it: it prints the link with this machine's address and tells you if the firewall is in the way. The demo below runs entirely in your browser with sample data.</p>
+          <p><code>ipmg web</code> starts a private server with live progress, scan history, change reports, a host inventory with Wake-on-LAN, scheduled scans, and a page for every host (click any IP) with its history, P50/P95/P99 latency, availability, outages with MTTR and MTBF, SLA targets, maintenance windows, and downloadable availability reports. <code>ipmg web --lan</code> lets your team open it: it prints the link with this machine's address and tells you if the firewall is in the way. The demo below runs entirely in your browser with sample data.</p>
           <div class="cta-row center">
             <a class="btn primary" href="demo/">Open the full demo</a>
             <a class="btn" href="https://github.com/sameeralam3127/ipmg/blob/main/docs/WEB.md" rel="noopener">IPMG Web guide</a>

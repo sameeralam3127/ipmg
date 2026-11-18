@@ -11,6 +11,7 @@ connection waits up to :data:`BUSY_TIMEOUT_S` for a lock instead of failing.
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import sqlite3
 import threading
@@ -130,6 +131,24 @@ CREATE TABLE IF NOT EXISTS snmp_interfaces (
 
 CREATE INDEX IF NOT EXISTS idx_snmp_interfaces_scan ON snmp_interfaces(scan_id, ip);
 
+CREATE TABLE IF NOT EXISTS host_sla (
+    ip TEXT PRIMARY KEY,
+    availability_target REAL NOT NULL,
+    latency_p95_ms REAL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS maintenance_windows (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ip TEXT,
+    starts_at TEXT NOT NULL,
+    ends_at TEXT NOT NULL,
+    reason TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_maintenance_ip ON maintenance_windows(ip);
+
 CREATE TABLE IF NOT EXISTS schedules (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
@@ -152,6 +171,36 @@ _SCHEDULE_SQL = (
     "LEFT JOIN scans s ON s.id = sc.last_scan_id"
 )
 
+#: One row per address, aggregated over every scan that recorded it. Callers
+#: append ``GROUP BY r.ip``, with a ``WHERE`` first to narrow it to one address.
+_ASSET_SQL = (
+    "SELECT r.ip, "
+    "  (SELECT r2.hostname FROM results r2 "
+    "   WHERE r2.ip = r.ip AND r2.hostname != '' "
+    "   ORDER BY r2.rowid DESC LIMIT 1) AS hostname, "
+    "  (SELECT r3.status FROM results r3 "
+    "   WHERE r3.ip = r.ip ORDER BY r3.rowid DESC LIMIT 1) AS status, "
+    "  (SELECT r4.mac FROM results r4 "
+    "   WHERE r4.ip = r.ip AND r4.mac != '' "
+    "   ORDER BY r4.rowid DESC LIMIT 1) AS mac, "
+    "  (SELECT r5.vendor FROM results r5 "
+    "   WHERE r5.ip = r.ip AND r5.mac != '' "
+    "   ORDER BY r5.rowid DESC LIMIT 1) AS vendor, "
+    "  (SELECT d.sys_name FROM snmp_devices d "
+    "   WHERE d.ip = r.ip AND d.ok = 1 AND d.sys_name != '' "
+    "   ORDER BY d.rowid DESC LIMIT 1) AS snmp_name, "
+    "  (SELECT d2.sys_descr FROM snmp_devices d2 "
+    "   WHERE d2.ip = r.ip AND d2.ok = 1 AND d2.sys_descr != '' "
+    "   ORDER BY d2.rowid DESC LIMIT 1) AS snmp_descr, "
+    "  AVG(CASE WHEN r.status = 'Active' THEN r.latency END) AS avg_latency, "
+    "  MIN(CASE WHEN r.status = 'Active' THEN r.checked_at END) AS first_seen, "
+    "  MAX(CASE WHEN r.status = 'Active' THEN r.checked_at END) AS last_seen, "
+    "  MAX(r.checked_at) AS last_checked, "
+    "  MAX(r.scan_id) AS last_scan_id, "
+    "  COUNT(DISTINCT r.scan_id) AS scan_count "
+    "FROM results r"
+)
+
 #: SQLite integers are signed 64-bit; a Counter64 above that is stored as unknown.
 _SQLITE_MAX_INT = 2**63 - 1
 
@@ -163,6 +212,17 @@ def _now() -> str:
     return datetime.now().isoformat(sep=" ", timespec="seconds")
 
 
+def _canonical_ip(text: str) -> str:
+    """An IP address in its one canonical form, so ``2001:0db8::1`` and ``2001:db8::1`` meet.
+
+    Anything that is not an address is returned as it was.
+    """
+    try:
+        return str(ipaddress.ip_address(text))
+    except ValueError:
+        return text
+
+
 def _counter(value: int | None) -> int | None:
     return value if value is not None and value <= _SQLITE_MAX_INT else None
 
@@ -170,7 +230,7 @@ def _counter(value: int | None) -> int | None:
 def _snmp_device_row(scan_id: int, device: Any, polled_at: str) -> tuple:
     return (
         scan_id,
-        device.ip,
+        _canonical_ip(device.ip),
         int(device.ok),
         device.version,
         device.sys_name,
@@ -189,7 +249,7 @@ def _snmp_interface_rows(scan_id: int, device: Any) -> list[tuple]:
     return [
         (
             scan_id,
-            device.ip,
+            _canonical_ip(device.ip),
             interface.index,
             interface.name,
             interface.description,
@@ -238,6 +298,33 @@ class Database:
         ):
             if column not in columns:
                 conn.execute(statement)
+        Database._canonicalise_ipv6(conn)
+
+    @staticmethod
+    def _canonicalise_ipv6(conn: sqlite3.Connection) -> None:
+        """Rewrite IPv6 addresses stored in an expanded form, so lookups find them.
+
+        A target typed as ``2001:0db8:0:0:0:0:0:1`` used to be stored as typed.
+        Only addresses that are not already canonical are touched, so on an
+        up-to-date database this reads and changes nothing.
+        """
+        for ip in {
+            row[0] for row in conn.execute("SELECT DISTINCT ip FROM results WHERE ip LIKE '%:%'")
+        }:
+            if (canonical := _canonical_ip(ip)) != ip:
+                conn.execute("UPDATE results SET ip = ? WHERE ip = ?", (canonical, ip))
+        for ip in {
+            row[0]
+            for row in conn.execute("SELECT DISTINCT ip FROM snmp_devices WHERE ip LIKE '%:%'")
+        }:
+            if (canonical := _canonical_ip(ip)) != ip:
+                conn.execute("UPDATE snmp_devices SET ip = ? WHERE ip = ?", (canonical, ip))
+        for ip in {
+            row[0]
+            for row in conn.execute("SELECT DISTINCT ip FROM snmp_interfaces WHERE ip LIKE '%:%'")
+        }:
+            if (canonical := _canonical_ip(ip)) != ip:
+                conn.execute("UPDATE snmp_interfaces SET ip = ? WHERE ip = ?", (canonical, ip))
 
     @property
     def path(self) -> str:
@@ -281,7 +368,7 @@ class Database:
         rows = [
             (
                 scan_id,
-                result.ip,
+                _canonical_ip(result.ip),
                 result.status,
                 result.latency,
                 result.hostname,
@@ -685,37 +772,191 @@ class Database:
             }
 
     def inventory(self) -> list[dict[str, Any]]:
-        query = (
-            "SELECT r.ip, "
-            "  (SELECT r2.hostname FROM results r2 "
-            "   WHERE r2.ip = r.ip AND r2.hostname != '' "
-            "   ORDER BY r2.rowid DESC LIMIT 1) AS hostname, "
-            "  (SELECT r3.status FROM results r3 "
-            "   WHERE r3.ip = r.ip ORDER BY r3.rowid DESC LIMIT 1) AS status, "
-            "  (SELECT r4.mac FROM results r4 "
-            "   WHERE r4.ip = r.ip AND r4.mac != '' "
-            "   ORDER BY r4.rowid DESC LIMIT 1) AS mac, "
-            "  (SELECT r5.vendor FROM results r5 "
-            "   WHERE r5.ip = r.ip AND r5.mac != '' "
-            "   ORDER BY r5.rowid DESC LIMIT 1) AS vendor, "
-            "  (SELECT d.sys_name FROM snmp_devices d "
-            "   WHERE d.ip = r.ip AND d.ok = 1 AND d.sys_name != '' "
-            "   ORDER BY d.rowid DESC LIMIT 1) AS snmp_name, "
-            "  (SELECT d2.sys_descr FROM snmp_devices d2 "
-            "   WHERE d2.ip = r.ip AND d2.ok = 1 AND d2.sys_descr != '' "
-            "   ORDER BY d2.rowid DESC LIMIT 1) AS snmp_descr, "
-            "  AVG(CASE WHEN r.status = 'Active' THEN r.latency END) AS avg_latency, "
-            "  MAX(CASE WHEN r.status = 'Active' THEN r.checked_at END) AS last_seen, "
-            "  MAX(r.checked_at) AS last_checked, "
-            "  MAX(r.scan_id) AS last_scan_id, "
-            "  COUNT(DISTINCT r.scan_id) AS scan_count "
-            "FROM results r GROUP BY r.ip"
-        )
         with self._session() as conn:
-            rows = [dict(row) for row in conn.execute(query).fetchall()]
+            rows = [dict(row) for row in conn.execute(_ASSET_SQL + " GROUP BY r.ip").fetchall()]
 
         rows.sort(key=lambda row: ip_sort_key(row["ip"]))
         return rows
+
+    # -------------------------------------------------------------- hosts
+
+    def host_summary(self, ip: str) -> dict[str, Any] | None:
+        """Everything the history says about one address, or ``None`` if never scanned."""
+        with self._session() as conn:
+            row = conn.execute(_ASSET_SQL + " WHERE r.ip = ? GROUP BY r.ip", (ip,)).fetchone()
+        return dict(row) if row else None
+
+    def host_results(self, ip: str, limit: int = 200) -> list[dict[str, Any]]:
+        """One row per scan that recorded ``ip``, newest first, with the scan's identity."""
+        with self._session() as conn:
+            rows = conn.execute(
+                "SELECT r.scan_id, r.ip, s.started_at, s.source, s.status AS scan_status, "
+                "r.status, r.latency, r.hostname, r.open_ports, r.checked_at, r.method, "
+                "r.mac, r.vendor "
+                "FROM results r JOIN scans s ON s.id = r.scan_id "
+                "WHERE r.ip = ? ORDER BY r.scan_id DESC, r.rowid DESC LIMIT ?",
+                (ip, max(limit, 0)),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def host_comparable_scans(self, ip: str, limit: int) -> list[dict[str, Any]]:
+        """Newest comparable scans that recorded ``ip``: ``id``, ``source``, ``started_at``."""
+        with self._session() as conn:
+            rows = conn.execute(
+                "SELECT DISTINCT s.id, s.source, s.started_at FROM results r "
+                "JOIN scans s ON s.id = r.scan_id "
+                "WHERE r.ip = ? AND s.status IN (?, ?) ORDER BY s.id DESC LIMIT ?",
+                (ip, *COMPARABLE_STATUSES, max(limit, 0)),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def host_samples(
+        self,
+        ip: str,
+        starts_at: str,
+        ends_at: str,
+        source: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """The host's checks within ``[starts_at, ends_at]``, oldest first.
+
+        Only completed and cancelled scans count: a running scan has not
+        checked everything yet and an interrupted one stopped at an unknown
+        point. Times are the ``YYYY-MM-DD HH:MM:SS`` strings results carry.
+        """
+        query = (
+            "SELECT r.scan_id, r.checked_at, r.status, r.latency FROM results r "
+            "JOIN scans s ON s.id = r.scan_id "
+            "WHERE r.ip = ? AND s.status IN (?, ?) AND r.checked_at >= ? AND r.checked_at <= ?"
+        )
+        params: list[Any] = [ip, *COMPARABLE_STATUSES, starts_at, ends_at]
+        if source:
+            query += " AND s.source = ?"
+            params.append(source)
+        query += " ORDER BY r.checked_at, r.scan_id"
+        with self._session() as conn:
+            return [dict(row) for row in conn.execute(query, params).fetchall()]
+
+    def host_sources(self, ip: str, starts_at: str, ends_at: str) -> list[str]:
+        """Sources whose comparable scans checked the host within the window."""
+        with self._session() as conn:
+            rows = conn.execute(
+                "SELECT DISTINCT s.source FROM results r JOIN scans s ON s.id = r.scan_id "
+                "WHERE r.ip = ? AND s.status IN (?, ?) AND r.checked_at >= ? "
+                "AND r.checked_at <= ? ORDER BY s.source",
+                (ip, *COMPARABLE_STATUSES, starts_at, ends_at),
+            ).fetchall()
+        return [row["source"] for row in rows]
+
+    # ---------------------------------------------------------- SLA targets
+
+    def get_sla(self, ip: str) -> dict[str, Any] | None:
+        with self._session() as conn:
+            row = conn.execute(
+                "SELECT ip, availability_target, latency_p95_ms, updated_at "
+                "FROM host_sla WHERE ip = ?",
+                (ip,),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def set_sla(
+        self, ip: str, availability_target: float, latency_p95_ms: float | None = None
+    ) -> dict[str, Any]:
+        with self._session() as conn:
+            conn.execute(
+                "INSERT INTO host_sla (ip, availability_target, latency_p95_ms, updated_at) "
+                "VALUES (?, ?, ?, ?) ON CONFLICT(ip) DO UPDATE SET "
+                "availability_target = excluded.availability_target, "
+                "latency_p95_ms = excluded.latency_p95_ms, updated_at = excluded.updated_at",
+                (ip, availability_target, latency_p95_ms, _now()),
+            )
+            row = conn.execute(
+                "SELECT ip, availability_target, latency_p95_ms, updated_at "
+                "FROM host_sla WHERE ip = ?",
+                (ip,),
+            ).fetchone()
+        return dict(row)
+
+    def delete_sla(self, ip: str) -> bool:
+        with self._session() as conn:
+            return conn.execute("DELETE FROM host_sla WHERE ip = ?", (ip,)).rowcount > 0
+
+    # ---------------------------------------------------- maintenance windows
+
+    def add_maintenance(
+        self, ip: str | None, starts_at: str, ends_at: str, reason: str = ""
+    ) -> dict[str, Any]:
+        """Record planned downtime for one host, or for every host when ``ip`` is None."""
+        with self._session() as conn:
+            cursor = conn.execute(
+                "INSERT INTO maintenance_windows (ip, starts_at, ends_at, reason, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (ip, starts_at, ends_at, reason, _now()),
+            )
+            row = conn.execute(
+                "SELECT * FROM maintenance_windows WHERE id = ?", (cursor.lastrowid,)
+            ).fetchone()
+        return dict(row)
+
+    def list_maintenance(
+        self, ip: str | None = None, overlapping: tuple[str, str] | None = None
+    ) -> list[dict[str, Any]]:
+        """Windows, soonest first. With ``ip``: that host's and the all-hosts ones.
+
+        ``overlapping`` keeps only windows that intersect ``[start, end]``.
+        """
+        query = "SELECT * FROM maintenance_windows WHERE 1 = 1"
+        params: list[Any] = []
+        if ip is not None:
+            query += " AND (ip = ? OR ip IS NULL)"
+            params.append(ip)
+        if overlapping is not None:
+            query += " AND ends_at > ? AND starts_at <= ?"
+            params.extend(overlapping)
+        query += " ORDER BY starts_at, id"
+        with self._session() as conn:
+            return [dict(row) for row in conn.execute(query, params).fetchall()]
+
+    def delete_maintenance(self, window_id: int) -> bool:
+        with self._session() as conn:
+            return (
+                conn.execute("DELETE FROM maintenance_windows WHERE id = ?", (window_id,)).rowcount
+                > 0
+            )
+
+    def comparable_scan_sequence(self, sources: Sequence[str], min_id: int) -> list[dict[str, Any]]:
+        """Comparable scans of ``sources`` from ``min_id`` on, oldest first."""
+        wanted = set(sources)
+        with self._session() as conn:
+            rows = conn.execute(
+                "SELECT id, source, started_at FROM scans "
+                "WHERE status IN (?, ?) AND id >= ? ORDER BY id",
+                (*COMPARABLE_STATUSES, min_id),
+            ).fetchall()
+        return [dict(row) for row in rows if row["source"] in wanted]
+
+    def host_snmp(self, ip: str, limit: int = 50) -> list[dict[str, Any]]:
+        """The host's SNMP polls, newest first, each with the interfaces it saw."""
+        with self._session() as conn:
+            devices = conn.execute(
+                "SELECT scan_id, ip, ok, version, sys_name, sys_descr, sys_object_id, "
+                "sys_location, uptime_s, response_ms, failure, error, polled_at "
+                "FROM snmp_devices WHERE ip = ? ORDER BY scan_id DESC, rowid DESC LIMIT ?",
+                (ip, max(limit, 0)),
+            ).fetchall()
+            interfaces = conn.execute(
+                "SELECT scan_id, if_index, name, description, alias, admin_status, "
+                "oper_status, speed_mbps, in_octets, out_octets FROM snmp_interfaces "
+                "WHERE ip = ? AND scan_id >= ? ORDER BY rowid",
+                (ip, min((row["scan_id"] for row in devices), default=0)),
+            ).fetchall()
+        by_scan: dict[int, list[dict[str, Any]]] = {}
+        for row in interfaces:
+            interface = dict(row)
+            by_scan.setdefault(interface.pop("scan_id"), []).append(interface)
+        return [
+            {**dict(row), "ok": bool(row["ok"]), "interfaces": by_scan.get(row["scan_id"], [])}
+            for row in devices
+        ]
 
     # ---------------------------------------------------------- schedules
 

@@ -66,7 +66,157 @@ let schedules = [
   { id: 1, name: "branch-office", source: "schedule:branch-office", targets: "10.24.8.0/27", interval_minutes: 15, cron: null, paused: false, created_at: "2026-08-01 09:00", next_run_at: "2026-08-07 09:55", last_run_at: "2026-08-07 09:40", last_scan_id: 24, last_status: "complete", last_skipped_at: null, last_skip_reason: null, config: {} },
 ];
 
+// What every scan recorded for one address, oldest first.
+function hostHistory(ip) {
+  return [...scans].reverse().flatMap((scan) => {
+    const row = scanRows(scan).find((candidate) => candidate.ip === ip);
+    return row ? [{ ...row, scan_id: scan.id, started_at: scan.started_at, source: scan.source, scan_status: scan.status, open_ports: "", method: "", mac: row.mac || "", vendor: row.vendor || "" }] : [];
+  });
+}
+
+function notSeen() {
+  const error = new Error("No scan has recorded this address");
+  error.status = 404;
+  return error;
+}
+
+
+// ---- host health (the demo's own small version of the server's maths)
+
+const demoTime = (text) => new Date(`${text.replace(" ", "T")}${text.length === 16 ? ":00" : ""}`);
+const demoStamp = (date) => {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+};
+const quantile = (values, q) => {
+  if (!values.length) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const pos = (sorted.length - 1) * q;
+  const low = Math.floor(pos);
+  const high = Math.ceil(pos);
+  return Number((sorted[low] + (sorted[high] - sorted[low]) * (pos - low)).toFixed(2));
+};
+
+let maintenanceWindows = [];
+let slaTargets = {};
+
+function demoHealth(ip, days) {
+  const rows = hostHistory(ip);
+  if (!rows.length) throw notSeen();
+  const end = demoTime(rows[rows.length - 1].checked_at);
+  const start = new Date(end.getTime() - days * 86400000);
+  const windows = maintenanceWindows.filter((w) => w.ip === null || w.ip === ip);
+  // Maintenance time inside [from, to), counting overlapping windows once.
+  const merged = windows.map((w) => [demoTime(w.starts_at).getTime(), demoTime(w.ends_at).getTime()]).sort((a, b) => a[0] - b[0]).reduce((out, [from, to]) => {
+    if (out.length && from <= out[out.length - 1][1]) out[out.length - 1][1] = Math.max(out[out.length - 1][1], to);
+    else out.push([from, to]);
+    return out;
+  }, []);
+  const overlapS = (from, to) => merged.reduce((n, [a, b]) => n + Math.max(0, Math.min(to.getTime(), b) - Math.max(from.getTime(), a)), 0) / 1000;
+  const inWindow = (date) => windows.some((w) => demoTime(w.starts_at) <= date && date < demoTime(w.ends_at));
+  const all = rows.map((row) => ({ ...row, at: demoTime(row.checked_at) })).filter((row) => row.at >= start && row.at <= end);
+  const counted = all.filter((row) => !inWindow(row.at));
+  const up = counted.filter((row) => row.status === "Active");
+  const outages = [];
+  let open = null;
+  let failed = 0;
+  for (const row of counted) {
+    if (row.status !== "Active") { if (!open) { open = row; failed = 0; } failed += 1; }
+    else if (open) { outages.push({ started_at: open.checked_at, ended_at: row.checked_at, duration_s: Math.max(0, (row.at - open.at) / 1000 - overlapS(open.at, row.at)), checks: failed, ongoing: false }); open = null; }
+  }
+  if (open) outages.push({ started_at: open.checked_at, ended_at: null, duration_s: Math.max(0, (counted[counted.length - 1].at - open.at) / 1000 - overlapS(open.at, counted[counted.length - 1].at)), checks: failed, ongoing: true });
+  const recovered = outages.filter((o) => !o.ongoing);
+  const downtime = outages.reduce((n, o) => n + o.duration_s, 0);
+  const span = counted.length ? (counted[counted.length - 1].at - counted[0].at) / 1000 - overlapS(counted[0].at, counted[counted.length - 1].at) : 0;
+  const latencies = up.map((row) => row.latency).filter((v) => v != null);
+  const byDay = new Map();
+  for (const row of counted) byDay.set(row.checked_at.slice(0, 10), [...(byDay.get(row.checked_at.slice(0, 10)) || []), row]);
+  const daily = [...byDay].sort(([a], [b]) => a.localeCompare(b)).map(([date, group]) => {
+    const ok = group.filter((row) => row.status === "Active");
+    return { date, checks: group.length, up: ok.length, availability_pct: Number(((ok.length * 100) / group.length).toFixed(4)), latency_p95: quantile(ok.map((row) => row.latency).filter((v) => v != null), 0.95) };
+  });
+  const availability = counted.length ? Number(((up.length * 100) / counted.length).toFixed(4)) : null;
+  const target = slaTargets[ip];
+  const sla = target && {
+    availability_target: target.availability_target,
+    latency_p95_ms: target.latency_p95_ms ?? null,
+    availability_met: availability == null ? null : availability >= target.availability_target,
+    latency_met: target.latency_p95_ms == null || quantile(latencies, 0.95) == null ? null : quantile(latencies, 0.95) <= target.latency_p95_ms,
+    violations: daily.flatMap((day) => [
+      ...(day.availability_pct < target.availability_target ? [{ date: day.date, kind: "availability", observed: day.availability_pct, target: target.availability_target }] : []),
+      ...(target.latency_p95_ms != null && day.latency_p95 > target.latency_p95_ms ? [{ date: day.date, kind: "latency", observed: day.latency_p95, target: target.latency_p95_ms }] : []),
+    ]),
+  };
+  return {
+    ip, window: { starts_at: demoStamp(start), ends_at: demoStamp(end), days }, source: null,
+    sources: [...new Set(all.map((row) => row.source))].sort(),
+    checks: counted.length, up: up.length, down: counted.length - up.length, excluded: all.length - counted.length,
+    availability_pct: availability,
+    latency: { count: latencies.length, min: latencies.length ? Math.min(...latencies) : null, mean: latencies.length ? Number((latencies.reduce((n, v) => n + v, 0) / latencies.length).toFixed(2)) : null, p50: quantile(latencies, 0.5), p95: quantile(latencies, 0.95), p99: quantile(latencies, 0.99), max: latencies.length ? Math.max(...latencies) : null },
+    outages: { count: outages.length, recovered: recovered.length, ongoing: outages.length - recovered.length, downtime_s: downtime, longest_s: Math.max(0, ...outages.map((o) => o.duration_s)), mttr_s: recovered.length ? recovered.reduce((n, o) => n + o.duration_s, 0) / recovered.length : null, mtbf_s: outages.length ? Math.max(span - downtime, 0) / outages.length : null },
+    outage_list: [...outages].reverse(), outages_truncated: false, daily, sla,
+    maintenance: windows, note: "Observed from scans, not a continuous probe: an outage between two scans is not seen, and durations have the resolution of the scan interval.",
+  };
+}
+
 export const demo = {
+  host: (ip) => {
+    const rows = hostHistory(ip);
+    if (!rows.length) throw notSeen();
+    const asset = demo.assets().find((candidate) => candidate.ip === ip);
+    const latest = rows[rows.length - 1];
+    const active = rows.filter((row) => row.status === "Active");
+    const latencies = active.map((row) => row.latency).filter((value) => value != null);
+    return {
+      ip, hostname: [...rows].reverse().find((row) => row.hostname)?.hostname || null, status: latest.status,
+      mac: null, vendor: null, snmp_name: asset?.snmp_name || null, snmp_descr: null,
+      avg_latency: latencies.length ? Number((latencies.reduce((n, v) => n + v, 0) / latencies.length).toFixed(2)) : null,
+      first_seen: active[0]?.checked_at || null, last_seen: active[active.length - 1]?.checked_at || null,
+      last_checked: latest.checked_at, last_scan_id: latest.scan_id, scan_count: rows.length,
+    };
+  },
+  health: demoHealth,
+  maintenance: (ip) => maintenanceWindows.filter((w) => w.ip === null || w.ip === ip),
+  addMaintenance: (payload) => {
+    const starts = demoTime(payload.starts_at.replace("T", " "));
+    const ends = demoTime(payload.ends_at.replace("T", " "));
+    if (Number.isNaN(starts.getTime()) || Number.isNaN(ends.getTime())) throw new Error("Not a time (use YYYY-MM-DD HH:MM)");
+    if (ends <= starts) throw new Error("A maintenance window must end after it starts.");
+    const window = { id: Math.max(0, ...maintenanceWindows.map((w) => w.id)) + 1, ip: payload.ip || null, starts_at: demoStamp(starts), ends_at: demoStamp(ends), reason: (payload.reason || "").trim(), created_at: demoStamp(new Date()) };
+    maintenanceWindows = [...maintenanceWindows, window];
+    return window;
+  },
+  deleteMaintenance: (id) => { maintenanceWindows = maintenanceWindows.filter((w) => w.id !== id); return null; },
+  setSla: (ip, payload) => { slaTargets = { ...slaTargets, [ip]: { ip, ...payload } }; return slaTargets[ip]; },
+  clearSla: (ip) => { const { [ip]: _removed, ...rest } = slaTargets; slaTargets = rest; return null; },
+  availabilityReportUrl: (ip, fmt, days) => {
+    const health = demoHealth(ip, days);
+    const rows = [["Availability", `${health.availability_pct ?? "n/a"}%`], ["Checks", health.checks], ["Latency P50 (ms)", health.latency.p50 ?? "n/a"], ["Latency P95 (ms)", health.latency.p95 ?? "n/a"], ["Latency P99 (ms)", health.latency.p99 ?? "n/a"], ["Outages", health.outages.count], ["MTTR (s)", health.outages.mttr_s ?? "n/a"], ["MTBF (s)", health.outages.mtbf_s ?? "n/a"]];
+    if (fmt === "csv") return `data:text/csv;charset=utf-8,${encodeURIComponent(["Metric,Value", ...rows.map(([name, value]) => `"${name}","${value}"`)].join("\n"))}`;
+    if (fmt === "md") return `data:text/markdown;charset=utf-8,${encodeURIComponent([`# Availability report: ${ip}`, "", `${health.window.starts_at} to ${health.window.ends_at}`, "", "| Metric | Value |", "| --- | --- |", ...rows.map(([name, value]) => `| ${name} | ${value} |`), "", `_${health.note}_`].join("\n"))}`;
+    return `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(health, null, 2))}`;
+  },
+  hostResults: (ip) => hostHistory(ip).reverse(),
+  hostChanges: (ip) => {
+    const chronological = [...scans].reverse();
+    return hostHistory(ip).flatMap((row) => {
+      // The scan just before this one from the same source, whether or not it had the host.
+      const index = chronological.findIndex((scan) => scan.id === row.scan_id);
+      const previous = chronological.slice(0, index).reverse().find((scan) => scan.source === row.source);
+      const before = previous && scanRows(previous).find((candidate) => candidate.ip === ip);
+      if (!before) return [];
+      const base = { ip, hostname: row.hostname, scan_id: row.scan_id, baseline_id: previous.id, started_at: row.started_at, source: row.source, delta: null };
+      if (before.status !== row.status) {
+        const [type, label, severity] = before.status === "Active" ? ["host_offline", "Host offline", "critical"] : row.status === "Active" ? ["host_online", "Host back online", "info"] : ["service_changed", "Status changed", "warning"];
+        return [{ ...base, type, label, severity, previous: before.status, current: row.status }];
+      }
+      if (row.latency && before.latency && Math.abs(row.latency - before.latency) >= 5) {
+        return [{ ...base, type: "latency_changed", label: "Latency changed", severity: "info", previous: `${before.latency} ms`, current: `${row.latency} ms`, delta: row.latency - before.latency }];
+      }
+      return [];
+    }).reverse();
+  },
+  hostSnmp: (ip) => [...scans].filter((scan) => scan.source === "branch-office.csv").flatMap((scan) => snmpDevices(scan).filter((device) => device.ip === ip).map((device) => ({ ...device, scan_id: scan.id }))),
   schedules: () => schedules,
   createSchedule: (payload) => {
     const schedule = { id: Math.max(0, ...schedules.map((s) => s.id)) + 1, source: `schedule:${payload.name}`, paused: false, created_at: "2026-08-07 10:05", next_run_at: payload.cron ? "2026-08-07 11:00" : "2026-08-07 10:05", last_run_at: null, last_scan_id: null, last_status: null, last_skipped_at: null, last_skip_reason: null, config: {}, cron: null, interval_minutes: null, ...payload };

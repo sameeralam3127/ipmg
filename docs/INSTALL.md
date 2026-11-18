@@ -119,9 +119,9 @@ replace `X.Y.Z` with a release number, 4.2.1 or newer (see
 **Docker (amd64 and arm64):**
 
 ```bash
-docker run --rm sameeralam3127/ipmg --input 10.0.0.0/24
-# or from GitHub Container Registry
 docker run --rm ghcr.io/sameeralam3127/ipmg --input 10.0.0.0/24
+# or from Docker Hub
+docker run --rm sameeralam3127/ipmg --input 10.0.0.0/24
 ```
 
 Then check it works, on any platform:

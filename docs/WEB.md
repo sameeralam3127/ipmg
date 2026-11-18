@@ -24,6 +24,8 @@ nothing is loaded from a CDN.
   the summary
 - **Inventory**: every host ever seen, with its last status, SNMP name, MAC
   address, and vendor, and a **Wake** button for hosts with a known MAC
+- **Host page**: click any IP address to see everything IPMG has recorded for
+  it ([details](#host-pages))
 
 IPMG Web is the optional `web` extra. The one-line installers, Homebrew, and
 the Docker image include it; after a plain `pip install ipmg`, add it with
@@ -34,6 +36,7 @@ the Docker image include it; after a plain `pip install ipmg`, add it with
 [Starting it](#starting-it) ·
 [Opening it from other machines](#opening-it-from-other-machines) ·
 [Scheduled scans](#scheduled-scans) ·
+[Host pages](#host-pages) ·
 [Limits](#limits) ·
 [Scripting IPMG Web](#scripting-ipmg-web) ·
 [Prometheus metrics](#prometheus-metrics) ·
@@ -135,6 +138,76 @@ ssh -L 8080:127.0.0.1:8080 user@server
 
 On a Linux server without a display, IPMG Web notices that no browser can be
 opened and just prints the link.
+
+---
+
+## Host pages
+
+Every IP address in IPMG Web is a link: in a scan's results, the Live Monitor,
+Changes, the Inventory, and the SNMP panel. It opens that host's page,
+`#/host/<ip>`, which answers "what has happened to 10.0.0.5?" without opening
+scans one by one. Being a real link, it opens in a new tab and Back returns you
+to where you were.
+
+- **Summary**: the latest hostname, status, MAC address and vendor, SNMP name
+  and description, when the host was first and last seen active, how many scans
+  saw it, and a **Wake** button when its MAC is known.
+- **History**: one row per scan that included the host, newest first, with the
+  scan, time, source, status, latency, probe, hostname, MAC, and open ports,
+  above a status timeline (one square per scan) and a latency trend.
+- **Changes**: what changed between consecutive scans of the same source:
+  offline and online, hostname, MAC, IP moves, latency, and, for `ipmg --snmp`
+  devices, reboots and interfaces going down or up. A different source never
+  counts as a baseline, so scanning one host from two lists does not look like
+  flapping. A host that moved to another address (same hostname or MAC) shows
+  the move on both pages; one that was simply left out of a scan shows nothing.
+- **SNMP**: for a polled device, the latest system group and interface table,
+  and its uptime across polls.
+- **Export** the host's records as CSV or JSON.
+- **Health**: long-term availability for a period you pick (7, 30, 90, or 365
+  days), described [below](#host-health-and-slas).
+
+IPv4 and IPv6 both work. An address no scan has recorded shows "Never seen". The
+same data is available under `/api/v1/hosts/{ip}` ([API reference](API.md)).
+
+### Host health and SLAs
+
+The **Health** section of a host page measures how the host has behaved over
+the last 7, 30, 90, or 365 days:
+
+| Figure | What it means |
+| --- | --- |
+| Availability | Reachable checks divided by all checks |
+| Latency P50, P95, P99 | Percentiles of the replies, by linear interpolation (the same as a spreadsheet's `PERCENTILE.INC`) |
+| Outage | A run of failed checks, from the first failed one to the next that succeeds. One still failing at the last check is *ongoing* |
+| MTTR | Mean length of the outages that recovered; blank when none did |
+| MTBF | Operating time (the span, less downtime and maintenance) divided by the number of outages; blank when there were none |
+
+These are **observed** figures. A scan is a sample, not a continuous probe, so
+an outage that begins and ends between two scans is never seen, and an outage's
+length is only as precise as your scan interval. A host scanned every 15 minutes
+cannot show a 5-minute blip. Only completed and cancelled scans count. The
+**by day** table splits the period at local midnight.
+
+**SLA targets.** Give a host an availability target (for example `99.9`%) and,
+if you like, a P95 latency limit. Every day below the target, or above the limit,
+is listed as a **violation**, and the section says whether the whole period met
+it. A target of `99.9` is met by exactly 999 reachable checks in 1,000. The
+comparison is exact, not subject to floating-point error.
+
+**Maintenance windows.** Plan downtime for one host or for every host, with an
+optional reason. Checks inside a window (its start is included, its end is not)
+count as neither up nor down, and the window's time is taken off any outage that
+spans it. Times are the server's local time, like every time IPMG stores; give
+them as `YYYY-MM-DD HH:MM`, without a UTC offset.
+
+**Reports.** Download the same figures as CSV, JSON, or Markdown, including the
+outages, violations, windows, and the by-day table. Text from users and devices
+is neutralised so a spreadsheet will not run it as a formula.
+
+If one host is scanned under several sources, the figures merge them in time
+order. The API can limit them to one source (`source=`), which is clearer when
+the sources differ in reach.
 
 ---
 

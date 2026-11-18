@@ -178,7 +178,12 @@ export function statusDonut(counts, { centerLabel = "hosts" } = {}) {
  * Single-series trend line (average active latency per completed scan).
  * One axis, hairline grid, hover dots with tooltips, last point labeled.
  */
-export function latencyTrend(points) {
+const defaultTip = (point) => [
+  `${point.avg_latency.toFixed(1)} ms avg`,
+  `Scan #${point.id} — ${point.started_at} — ${point.active}/${point.total} active`,
+];
+
+export function latencyTrend(points, { label = "Average latency per scan", empty = "Run two or more scans to see the latency trend.", axis = (count) => `Avg active latency (ms), last ${count} scans`, tip = defaultTip } = {}) {
   const data = points.filter((point) => point.avg_latency != null);
   const width = 460;
   const height = 170;
@@ -188,7 +193,7 @@ export function latencyTrend(points) {
     viewBox: `0 0 ${width} ${height}`,
     width: "100%",
     role: "img",
-    "aria-label": "Average latency per scan",
+    "aria-label": label,
     preserveAspectRatio: "xMidYMid meet",
   });
 
@@ -199,7 +204,7 @@ export function latencyTrend(points) {
       "text-anchor": "middle",
       class: "axis-label",
     });
-    note.textContent = "Run two or more scans to see the latency trend.";
+    note.textContent = empty;
     svg.appendChild(note);
     return svg;
   }
@@ -245,13 +250,7 @@ export function latencyTrend(points) {
       r: 11,
       fill: "transparent",
     });
-    hit.addEventListener("mousemove", (evt) =>
-      showTooltip(
-        evt,
-        `${point.avg_latency.toFixed(1)} ms avg`,
-        `Scan #${point.id} — ${point.started_at} — ${point.active}/${point.total} active`
-      )
-    );
+    hit.addEventListener("mousemove", (evt) => showTooltip(evt, ...tip(point)));
     hit.addEventListener("mouseleave", hideTooltip);
     svg.append(dot, hit);
   });
@@ -270,8 +269,43 @@ export function latencyTrend(points) {
     y: height - 6,
     class: "axis-label",
   });
-  axisTitle.textContent = `Avg active latency (ms), last ${data.length} scans`;
+  axisTitle.textContent = axis(data.length);
   svg.appendChild(axisTitle);
 
+  return svg;
+}
+
+/**
+ * One square per scan, oldest on the left, coloured by the host's status in it.
+ * Colour never stands alone: every square has a tooltip and the history table
+ * below the chart lists the same statuses in words.
+ */
+export function statusTimeline(rows, { limit = 60 } = {}) {
+  const shown = rows.slice(-limit);
+  const size = 14;
+  const gap = 3;
+  const width = Math.max(shown.length, 1) * (size + gap) - gap;
+  const svg = el("svg", {
+    viewBox: `0 0 ${width} ${size}`,
+    width: Math.min(width, 900),
+    role: "img",
+    "aria-label": `Status in each of the last ${shown.length} scans, oldest first`,
+  });
+  svg.classList.add("timeline");
+  shown.forEach((row, index) => {
+    const cell = el("rect", {
+      x: index * (size + gap),
+      y: 0,
+      width: size,
+      height: size,
+      rx: 3,
+      fill: STATUS_COLORS[row.status] || "var(--muted)",
+    });
+    cell.addEventListener("mousemove", (evt) =>
+      showTooltip(evt, row.status, `Scan #${row.scan_id} — ${row.started_at}`)
+    );
+    cell.addEventListener("mouseleave", hideTooltip);
+    svg.appendChild(cell);
+  });
   return svg;
 }
